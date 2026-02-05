@@ -70,8 +70,8 @@ imports/
 # Static app JSON is tracked — only ignore root-level data JSON
 /*.json
 
-# ML models
-models/
+# ML models (root-level only, not app/models/)
+/models/
 *.pkl
 *.h5
 *.pt
