@@ -13,6 +13,7 @@ from app.models.analytics import DataSyncLog
 from app.models.caprice_import import CapriceImportLog
 from app.models.google_ads_import import GoogleAdsImportLog
 from app.utils.logger import log
+from app.utils.cache import clear_cache
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
@@ -26,6 +27,7 @@ async def sync_all_sources(days: int = Query(30, description="Number of days to 
     """
     try:
         result = await data_sync.sync_all(days=days)
+        clear_cache()
         return result
     except Exception as e:
         log.error(f"Sync all error: {str(e)}")
@@ -98,6 +100,7 @@ async def sync_shopify(
     """
     try:
         result = await data_sync.sync_shopify(days=days, include_products=include_products)
+        clear_cache()
         return result
     except Exception as e:
         log.error(f"Shopify sync error: {str(e)}")
@@ -277,6 +280,7 @@ async def sync_ga4(days: int = Query(30, description="Number of days to sync")):
     """
     try:
         result = await data_sync.sync_ga4(days=days)
+        clear_cache()
         return result
     except Exception as e:
         log.error(f"GA4 sync error: {str(e)}")
@@ -374,6 +378,7 @@ async def sync_search_console(
     """
     try:
         result = await data_sync.sync_search_console(days=days, quick=quick)
+        clear_cache()
         return result
     except Exception as e:
         log.error(f"Search Console sync error: {str(e)}")

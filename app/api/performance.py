@@ -9,6 +9,7 @@ from sqlalchemy import func
 from app.models.base import get_db
 from app.models.shopify import ShopifyOrder
 from app.models.ga4_data import GA4DailySummary, GA4DailyEcommerce
+from app.utils.cache import get_cached, set_cached, _MISS
 
 router = APIRouter(prefix="/performance", tags=["performance"])
 
@@ -29,6 +30,10 @@ async def performance_summary(
     db: Session = Depends(get_db),
 ):
     """Return revenue/orders/sessions/CR for current and prior period."""
+    cached = get_cached(f"perf_summary|{days}")
+    if cached is not _MISS:
+        return cached
+
     start_date, end_date = _period_bounds(days)
     prior_start = start_date - timedelta(days=days)
     prior_end = start_date - timedelta(days=1)
@@ -87,7 +92,7 @@ async def performance_summary(
             return None
         return round(((current - previous) / previous) * 100, 1)
 
-    return {
+    result = {
         "period_days": days,
         "period_start": start_date.isoformat(),
         "period_end": end_date.isoformat(),
@@ -113,3 +118,5 @@ async def performance_summary(
             "conversion_rate": round(prev_cr, 2),
         }
     }
+    set_cached(f"perf_summary|{days}", result, 180)
+    return result

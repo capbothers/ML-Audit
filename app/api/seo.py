@@ -12,6 +12,7 @@ from app.services.seo_service import SEOService
 from app.services.llm_service import LLMService
 from app.models.base import get_db
 from app.utils.logger import log
+from app.utils.cache import get_cached, set_cached, _MISS
 
 router = APIRouter(prefix="/seo", tags=["seo"])
 
@@ -32,11 +33,15 @@ async def get_seo_dashboard(
 
     This is your SEO action plan
     """
+    cached = get_cached(f"seo_dashboard|{days}")
+    if cached is not _MISS:
+        return cached
+
     service = SEOService(db)
 
     try:
         dashboard = await service.get_seo_dashboard(days=days)
-
+        set_cached(f"seo_dashboard|{days}", dashboard, 300)
         return dashboard
 
     except Exception as e:
@@ -54,11 +59,15 @@ async def get_all_opportunities(
 
     Returns categorized opportunities with impact scores
     """
+    cached = get_cached(f"seo_opportunities|{days}")
+    if cached is not _MISS:
+        return cached
+
     service = SEOService(db)
 
     try:
         opportunities = await service.identify_all_opportunities(days=days)
-
+        set_cached(f"seo_opportunities|{days}", opportunities, 300)
         return opportunities
 
     except Exception as e:
@@ -310,13 +319,17 @@ async def get_underperformers(
     Each row includes: click gap, priority score, SERP risk badge,
     content decay badge, fix-first recommendation, and sparkline data.
     """
+    cached = get_cached(f"seo_underperformers|{days}|{limit}")
+    if cached is not _MISS:
+        return cached
+
     service = SEOService(db)
     try:
         results = service.get_underperformers(days=days, limit=limit)
         total_opp = sum(r.get("revenue_opportunity", 0) for r in results)
         serp_risks = sum(1 for r in results if r.get("serp_risk"))
         content_decays = sum(1 for r in results if r.get("content_decay"))
-        return {
+        result = {
             "period_days": days,
             "count": len(results),
             "total_revenue_opportunity": round(total_opp, 2),
@@ -324,6 +337,8 @@ async def get_underperformers(
             "content_decays": content_decays,
             "items": results,
         }
+        set_cached(f"seo_underperformers|{days}|{limit}", result, 300)
+        return result
     except Exception as e:
         log.error(f"Error getting underperformers: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -15,6 +15,7 @@ from app.services.finance_service import FinanceService
 from app.services.expense_import_service import ExpenseImportService
 from app.api.data_quality import get_stale_data_warning
 from app.utils.logger import log
+from app.utils.cache import get_cached, set_cached, _MISS
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 
@@ -34,16 +35,22 @@ async def get_pl(
     db: Session = Depends(get_db)
 ):
     """Get monthly P&L for the last N months."""
+    cached = get_cached(f"finance_pl|{months}")
+    if cached is not _MISS:
+        return cached
+
     service = FinanceService(db)
     data = service.get_pl_summary(months)
 
-    return {
+    result = {
         "success": True,
         "data": {
             "months": data,
             "count": len(data),
         }
     }
+    set_cached(f"finance_pl|{months}", result, 300)
+    return result
 
 
 @router.get("/pl/{month_str}")
@@ -219,16 +226,22 @@ async def get_overhead_trend(
     db: Session = Depends(get_db)
 ):
     """Get overhead per order trend over time."""
+    cached = get_cached(f"finance_overhead|{months}")
+    if cached is not _MISS:
+        return cached
+
     service = FinanceService(db)
     data = service.get_overhead_trend(months)
 
-    return {
+    result = {
         "success": True,
         "data": {
             "trend": data,
             "count": len(data),
         }
     }
+    set_cached(f"finance_overhead|{months}", result, 300)
+    return result
 
 
 @router.get("/summary")
@@ -236,6 +249,10 @@ async def get_finance_summary(
     db: Session = Depends(get_db)
 ):
     """High-level finance summary: current month vs prior month."""
+    cached = get_cached("finance_summary")
+    if cached is not _MISS:
+        return cached
+
     service = FinanceService(db)
     summary = service.get_finance_summary()
 
@@ -249,4 +266,5 @@ async def get_finance_summary(
     if stale_warning:
         response['data_warning'] = stale_warning
 
+    set_cached("finance_summary", response, 300)
     return response

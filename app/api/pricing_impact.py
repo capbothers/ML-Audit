@@ -21,6 +21,7 @@ from app.models.competitive_pricing import CompetitivePricing
 from app.models.product_cost import ProductCost
 from app.models.shopify import ShopifyOrder, ShopifyOrderItem
 from app.utils.logger import log
+from app.utils.cache import get_cached, set_cached, _MISS
 
 router = APIRouter(prefix="/pricing", tags=["pricing"])
 
@@ -179,6 +180,10 @@ async def get_overview(db: Session = Depends(get_db)):
     Market-wide pricing overview.
     All-brand KPIs, brand pressure table, competitor leaderboard, category pressure.
     """
+    cached = get_cached("pricing_overview")
+    if cached is not _MISS:
+        return cached
+
     try:
         latest_date = db.query(func.max(CompetitivePricing.pricing_date)).scalar()
         if not latest_date:
@@ -258,7 +263,7 @@ async def get_overview(db: Session = Depends(get_db)):
             })
         category_pressure.sort(key=lambda x: x["avg_discount_pct"], reverse=True)
 
-        return {
+        result = {
             "success": True,
             "data": {
                 "snapshot_date": str(latest_date),
@@ -274,6 +279,8 @@ async def get_overview(db: Session = Depends(get_db)):
                 "category_pressure": category_pressure,
             },
         }
+        set_cached("pricing_overview", result, 300)
+        return result
     except Exception as e:
         log.error(f"Error in /pricing/overview: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -288,6 +295,10 @@ async def get_brand_report(
     Per-brand pricing report: category breakdown, collection breakdown,
     competitor activity, monthly trends, heavily discounted SKUs.
     """
+    cached = get_cached(f"pricing_brand|{brand}")
+    if cached is not _MISS:
+        return cached
+
     try:
         latest_date = db.query(func.max(CompetitivePricing.pricing_date)).scalar()
         if not latest_date:
@@ -429,7 +440,7 @@ async def get_brand_report(
             reverse=True,
         )[:50]
 
-        return {
+        result = {
             "success": True,
             "data": {
                 "brand": brand,
@@ -460,6 +471,8 @@ async def get_brand_report(
                 } for a in heavily_discounted],
             },
         }
+        set_cached(f"pricing_brand|{brand}", result, 300)
+        return result
     except Exception as e:
         log.error(f"Error in /pricing/brand-report: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
