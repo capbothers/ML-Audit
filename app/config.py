@@ -118,6 +118,10 @@ class Settings(BaseSettings):
     initial_admin_password: str = ""
     session_duration_hours: int = 72
 
+    # Dashboard Basic Auth (gate for the whole app)
+    dash_user: str = ""
+    dash_pass: str = ""
+
     # Feature Flags
     enable_churn_prediction: bool = True
     enable_anomaly_detection: bool = True

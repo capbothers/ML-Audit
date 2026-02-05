@@ -10,6 +10,7 @@ from app.services import auth_service
 PUBLIC_PREFIXES = (
     "/auth/login",
     "/health",
+    "/robots.txt",
     "/docs",
     "/openapi.json",
     "/redoc",

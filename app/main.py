@@ -5,7 +5,7 @@ Main FastAPI application
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 from contextlib import asynccontextmanager
 import os
 
@@ -16,6 +16,7 @@ from app import __version__
 # Import routers
 from app.api import health, insights, sync, llm, monitoring, profitability, attribution, data_quality, seo, email, journey, user_behavior, ad_spend, weekly_brief, content_gap, code_health, redirect_health, ml_intelligence, pricing_impact, performance, customer_intelligence, merchant_center_intelligence, strategic_intelligence, finance, site_health, auth
 from app.middleware.auth_middleware import AuthMiddleware
+from app.middleware.security_middleware import SecurityMiddleware
 
 settings = get_settings()
 
@@ -89,7 +90,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Authentication middleware
+# Security middleware (Basic Auth gate, X-Robots-Tag, Cache-Control)
+app.add_middleware(SecurityMiddleware)
+
+# Session-based authentication middleware
 app.add_middleware(AuthMiddleware)
 
 # Include routers
@@ -119,6 +123,12 @@ app.include_router(merchant_center_intelligence.router)
 app.include_router(strategic_intelligence.router)
 app.include_router(finance.router)
 app.include_router(site_health.router)
+
+
+@app.get("/robots.txt", response_class=PlainTextResponse)
+async def robots_txt():
+    """Block all crawlers"""
+    return "User-agent: *\nDisallow: /\n"
 
 
 # Mount static files
