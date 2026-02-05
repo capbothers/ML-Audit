@@ -75,11 +75,18 @@ def migrate_table(src_engine, dst_engine, table: str) -> int:
             return -1
 
         # Get Postgres columns to find the intersection
-        pg_cols = [c["name"] for c in inspect(dst_engine).get_columns(table)]
+        pg_col_info = {c["name"]: c for c in inspect(dst_engine).get_columns(table)}
+        pg_cols = list(pg_col_info.keys())
         common_cols = [c for c in columns if c in pg_cols]
         if not common_cols:
             print(f"  SKIP {table}: no common columns")
             return -1
+
+        # Identify boolean columns (SQLite stores as 0/1, Postgres needs True/False)
+        bool_cols = {
+            c for c in common_cols
+            if str(pg_col_info[c]["type"]).upper() == "BOOLEAN"
+        }
 
         dst_conn.execute(text(f'TRUNCATE TABLE "{table}" CASCADE'))
         dst_conn.commit()
@@ -95,7 +102,13 @@ def migrate_table(src_engine, dst_engine, table: str) -> int:
 
         batch = []
         for row in result:
-            batch.append(dict(zip(common_cols, row)))
+            row_dict = dict(zip(common_cols, row))
+            # Cast SQLite integer booleans to Python bools
+            for col in bool_cols:
+                v = row_dict[col]
+                if v is not None:
+                    row_dict[col] = bool(v)
+            batch.append(row_dict)
             if len(batch) >= BATCH_SIZE:
                 with dst_engine.connect() as dst_conn:
                     dst_conn.execute(insert_sql, batch)

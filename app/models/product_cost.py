@@ -60,9 +60,9 @@ class ProductCost(Base):
     other = Column(Numeric(10, 2), nullable=True)
 
     # Margin controls
-    min_margin_pct = Column(Numeric(5, 2), nullable=True)  # Minimum margin % (alert if below)
+    min_margin_pct = Column(Numeric(10, 2), nullable=True)  # Minimum margin % (alert if below)
     minimum_price = Column(Numeric(10, 2), nullable=True)  # Floor price
-    discount_off_rrp_pct = Column(Numeric(5, 2), nullable=True)  # Max discount allowed
+    discount_off_rrp_pct = Column(Numeric(10, 2), nullable=True)  # Max discount allowed
 
     # Policy overrides
     do_not_follow = Column(Boolean, default=False)

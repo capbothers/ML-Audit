@@ -4,7 +4,7 @@ Customer Journey Intelligence Models
 Analyzes customer behavior patterns, LTV segmentation, and product impact.
 Answers: "What separates high-LTV customers from one-and-done buyers?"
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, JSON, Boolean, Text, Date, Numeric
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, JSON, Boolean, Text, Date, Numeric
 from datetime import datetime, date
 from decimal import Decimal
 
@@ -23,7 +23,7 @@ class CustomerLTV(Base):
 
     # Customer identification
     customer_id = Column(Integer, index=True, nullable=False)  # Internal customer ID
-    shopify_customer_id = Column(Integer, index=True, nullable=True)
+    shopify_customer_id = Column(BigInteger, index=True, nullable=True)
     email = Column(String, index=True, nullable=True)
 
     # LTV metrics
@@ -144,7 +144,7 @@ class GatewayProduct(Base):
 
     # Product identification
     product_id = Column(Integer, index=True, nullable=False)
-    shopify_product_id = Column(Integer, index=True, nullable=True)
+    shopify_product_id = Column(BigInteger, index=True, nullable=True)
     product_title = Column(String, nullable=False)
     product_sku = Column(String, index=True, nullable=True)
     product_category = Column(String, index=True, nullable=True)
@@ -198,7 +198,7 @@ class DeadEndProduct(Base):
 
     # Product identification
     product_id = Column(Integer, index=True, nullable=False)
-    shopify_product_id = Column(Integer, index=True, nullable=True)
+    shopify_product_id = Column(BigInteger, index=True, nullable=True)
     product_title = Column(String, nullable=False)
     product_sku = Column(String, index=True, nullable=True)
     product_category = Column(String, index=True, nullable=True)

@@ -4,7 +4,7 @@ Ad Spend Optimization Intelligence Models
 Analyzes Google Ads performance with true ROAS calculations.
 Answers: "Where am I wasting ad spend? Where should I scale?"
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, JSON, Boolean, Text, Numeric
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, JSON, Boolean, Text, Numeric
 from datetime import datetime
 from decimal import Decimal
 
@@ -250,7 +250,7 @@ class ProductAdPerformance(Base):
 
     # Product identification
     product_id = Column(Integer, index=True, nullable=False)
-    shopify_product_id = Column(Integer, index=True, nullable=True)
+    shopify_product_id = Column(BigInteger, index=True, nullable=True)
     product_title = Column(String, nullable=False)
     product_sku = Column(String, index=True, nullable=True)
 
