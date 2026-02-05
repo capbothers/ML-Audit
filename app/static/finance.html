@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance P&L - Cass Brothers</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        :root {
+            --ink: #1c1b1f; --ink-soft: #3d3a40; --slate: #6b6670;
+            --stone: #f4f2ee; --pearl: #faf9f6;
+            --cass-black: #1b1b1b; --cass-cream: #f7f3ed;
+            --cass-gold: #c49a4a; --cass-moss: #2f3d33; --cass-teal: #1f6f6b;
+            --card: #ffffff; --line: rgba(27,27,27,0.08);
+            --shadow: 0 18px 45px rgba(17,18,19,0.08);
+            --green: #16a34a; --red: #dc2626; --amber: #d97706;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: "IBM Plex Sans", sans-serif;
+            background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+            color: var(--ink); min-height: 100vh;
+        }
+        .app-shell {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr);
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+        }
+        .brand-bar {
+            grid-column: 1 / -1;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 28px; background: var(--cass-black); color: #f7f1e8;
+        }
+        .brand-mark { display: flex; align-items: center; gap: 12px; font-family: "Space Grotesk", sans-serif; }
+        .brand-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--cass-gold); }
+        .side-nav {
+            grid-row: 2; padding: 28px 20px;
+            border-right: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.4) 100%);
+        }
+        .side-nav h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--slate); margin-bottom: 12px; }
+        .nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 12px; border-radius: 12px; font-size: 14px;
+            color: var(--ink-soft); margin-bottom: 6px; cursor: pointer;
+            transition: all 0.2s ease; text-decoration: none;
+        }
+        .nav-item:hover { background: rgba(27,27,27,0.04); }
+        .nav-item.active { background: var(--cass-black); color: #f7f1e8; box-shadow: 0 12px 24px rgba(0,0,0,0.15); }
+        .nav-item span { width: 8px; height: 8px; border-radius: 50%; background: var(--cass-gold); opacity: 0.7; }
+        .nav-item.active span { opacity: 1; }
+        .main-area { grid-row: 2; padding: 28px 32px 32px; overflow-y: auto; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .page-title { font-family: "Space Grotesk", sans-serif; font-size: 28px; font-weight: 600; margin-bottom: 8px; }
+        .page-subtitle { color: var(--slate); margin-bottom: 24px; font-size: 14px; }
+
+        /* KPI Cards */
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .kpi-card {
+            background: var(--card); border-radius: 12px; padding: 20px;
+            box-shadow: var(--shadow); border: 1px solid var(--line);
+        }
+        .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--slate); margin-bottom: 8px; }
+        .kpi-value { font-family: "Space Grotesk", sans-serif; font-size: 28px; font-weight: 600; }
+        .kpi-change { font-size: 12px; margin-top: 4px; }
+        .kpi-change.positive { color: var(--green); }
+        .kpi-change.negative { color: var(--red); }
+
+        /* Cards */
+        .card {
+            background: var(--card); border-radius: 12px; padding: 24px;
+            box-shadow: var(--shadow); border: 1px solid var(--line); margin-bottom: 24px;
+        }
+        .card-title { font-family: "Space Grotesk", sans-serif; font-size: 18px; font-weight: 600; margin-bottom: 16px; }
+        .card-subtitle { color: var(--slate); font-size: 13px; margin-bottom: 16px; }
+
+        /* P&L Table */
+        .pl-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        .pl-table th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--line); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--slate); }
+        .pl-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+        .pl-table tr:hover { background: var(--stone); }
+        .pl-table .section-header td { font-weight: 600; background: var(--stone); border-bottom: 2px solid var(--line); }
+        .pl-table .total-row td { font-weight: 600; border-top: 2px solid var(--cass-black); }
+        .pl-table .indent td:first-child { padding-left: 28px; }
+        .pl-table .text-right { text-align: right; }
+        .pl-table .positive { color: var(--green); }
+        .pl-table .negative { color: var(--red); }
+
+        /* Charts grid */
+        .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+        .chart-container { position: relative; height: 300px; }
+
+        /* Upload section */
+        .upload-zone {
+            border: 2px dashed var(--line); border-radius: 12px; padding: 32px;
+            text-align: center; cursor: pointer; transition: all 0.2s;
+        }
+        .upload-zone:hover { border-color: var(--cass-gold); background: rgba(196,154,74,0.05); }
+        .upload-zone input[type=file] { display: none; }
+        .upload-btn {
+            display: inline-block; background: var(--cass-black); color: #fff;
+            padding: 10px 24px; border-radius: 8px; font-size: 14px; cursor: pointer;
+            border: none; margin-top: 12px;
+        }
+        .upload-btn:hover { background: #333; }
+        .upload-result { margin-top: 16px; padding: 12px; border-radius: 8px; font-size: 13px; }
+        .upload-result.success { background: #dcfce7; color: #166534; }
+        .upload-result.error { background: #fee2e2; color: #991b1b; }
+
+        /* Expense list */
+        .expense-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .expense-table th { text-align: left; padding: 8px 10px; border-bottom: 2px solid var(--line); font-size: 11px; text-transform: uppercase; color: var(--slate); }
+        .expense-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+        .category-badge { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+        .cat-payroll { background: #dbeafe; color: #1e40af; }
+        .cat-rent { background: #fef3c7; color: #92400e; }
+        .cat-shipping { background: #d1fae5; color: #065f46; }
+        .cat-utilities { background: #ede9fe; color: #5b21b6; }
+        .cat-insurance { background: #fee2e2; color: #991b1b; }
+        .cat-software { background: #e0e7ff; color: #3730a3; }
+        .cat-other { background: #f3f4f6; color: #374151; }
+
+        .loading { text-align: center; padding: 40px; color: var(--slate); }
+        .no-data { text-align: center; padding: 40px; color: var(--slate); font-style: italic; }
+
+        @media (max-width: 768px) {
+            .app-shell { grid-template-columns: 1fr; }
+            .side-nav { display: flex; gap: 8px; overflow-x: auto; padding: 12px 16px; border-right: none; border-bottom: 1px solid var(--line); }
+            .side-nav h2 { display: none; }
+            .nav-item { white-space: nowrap; font-size: 13px; padding: 8px 12px; margin-bottom: 0; }
+            .charts-grid { grid-template-columns: 1fr; }
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+    <div class="brand-bar">
+        <div class="brand-mark">
+            <div class="brand-dot"></div>
+            <span style="font-size:18px;font-weight:600">Cass Brothers</span>
+            <span style="opacity:0.5;font-size:13px;margin-left:8px">Finance P&L</span>
+        </div>
+    </div>
+
+    <nav class="side-nav">
+        <h2>Dashboards</h2>
+        <a class="nav-item" href="/dashboard"><span></span> Overview</a>
+        <a class="nav-item" href="/performance"><span></span> Performance</a>
+        <a class="nav-item" href="/seo-dashboard"><span></span> SEO &amp; Content</a>
+        <a class="nav-item" href="/ads-intelligence"><span></span> Ads Intelligence</a>
+        <a class="nav-item active" href="/finance-dashboard"><span></span> Finance</a>
+        <a class="nav-item" href="/inventory"><span></span> Inventory</a>
+        <a class="nav-item" href="/pricing-intel"><span></span> Pricing Intel</a>
+        <a class="nav-item" href="/customer-intelligence"><span></span> Customer Intel</a>
+        <a class="nav-item" href="/merchant-center-intel"><span></span> Merchant Center</a>
+        <a class="nav-item" href="/strategic-intelligence"><span></span> Intelligence Brief</a>
+        <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
+            <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
+        </div>
+    </nav>
+
+    <main class="main-area">
+    <div class="container">
+        <h1 class="page-title">Profit & Loss</h1>
+        <p class="page-subtitle">Monthly financial performance with full cost allocation</p>
+
+        <!-- KPI Cards -->
+        <div class="kpi-grid" id="kpi-grid">
+            <div class="kpi-card"><div class="kpi-label">Loading...</div><div class="kpi-value">--</div></div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid">
+            <div class="card">
+                <div class="card-title">Revenue vs Profit Trend</div>
+                <div class="chart-container"><canvas id="revenueChart"></canvas></div>
+            </div>
+            <div class="card">
+                <div class="card-title">Expense Breakdown</div>
+                <div class="chart-container"><canvas id="expenseChart"></canvas></div>
+            </div>
+        </div>
+
+        <!-- P&L Table -->
+        <div class="card">
+            <div class="card-title">Monthly P&L Statement</div>
+            <div class="card-subtitle">Click "Calculate All" to refresh from live data</div>
+            <div style="margin-bottom:16px">
+                <button class="upload-btn" onclick="calculateAll()" id="calcBtn">Calculate All (6 months)</button>
+            </div>
+            <div id="pl-table-container"><div class="loading">Loading P&L data...</div></div>
+        </div>
+
+        <!-- Expense Upload -->
+        <div class="card">
+            <div class="card-title">Upload Expenses</div>
+            <div class="card-subtitle">Upload a CSV with columns: month, category, description, amount</div>
+            <div class="upload-zone" id="uploadZone" onclick="document.getElementById('csvFile').click()">
+                <div style="font-size:24px;margin-bottom:8px">📄</div>
+                <div>Drop CSV here or click to browse</div>
+                <div style="font-size:12px;color:var(--slate);margin-top:4px">Supports Xero, MYOB, QuickBooks exports</div>
+                <input type="file" id="csvFile" accept=".csv" onchange="uploadCSV(this)">
+            </div>
+            <div id="uploadResult"></div>
+        </div>
+
+        <!-- Current Expenses -->
+        <div class="card">
+            <div class="card-title">Current Expenses</div>
+            <div id="expense-list"><div class="loading">Loading expenses...</div></div>
+        </div>
+    </div>
+
+    <script>
+        const API = '';
+        let plData = [];
+        let revenueChart, expenseChart;
+
+        async function fetchJSON(url) {
+            const res = await fetch(API + url);
+            return res.json();
+        }
+
+        function fmt(n) {
+            if (n == null) return '--';
+            return '$' + Math.round(n).toLocaleString();
+        }
+        function fmtPct(n) {
+            if (n == null) return '--';
+            return n.toFixed(1) + '%';
+        }
+
+        async function loadDashboard() {
+            const [plRes, summaryRes, expenseRes] = await Promise.all([
+                fetchJSON('/finance/pl?months=6'),
+                fetchJSON('/finance/summary'),
+                fetchJSON('/finance/expenses'),
+            ]);
+
+            if (plRes.success && plRes.data.months.length > 0) {
+                plData = plRes.data.months;
+                renderKPIs(plData, summaryRes.data);
+                renderPLTable(plData);
+                renderCharts(plData);
+            } else {
+                document.getElementById('kpi-grid').innerHTML = '<div class="no-data" style="grid-column:1/-1">No P&L data yet. Upload expenses and click "Calculate All" to generate.</div>';
+                document.getElementById('pl-table-container').innerHTML = '<div class="no-data">No P&L data. Click "Calculate All" above to generate from Shopify + Google Ads + expenses.</div>';
+            }
+
+            if (expenseRes.success) {
+                renderExpenses(expenseRes.data.expenses);
+            }
+        }
+
+        function renderKPIs(data, summary) {
+            const latest = data[data.length - 1];
+            const prior = data.length > 1 ? data[data.length - 2] : null;
+
+            function change(curr, prev) {
+                if (!prev || prev === 0) return '';
+                const pct = ((curr - prev) / Math.abs(prev) * 100).toFixed(1);
+                const cls = pct >= 0 ? 'positive' : 'negative';
+                const arrow = pct >= 0 ? '↑' : '↓';
+                return `<div class="kpi-change ${cls}">${arrow} ${Math.abs(pct)}% vs prior month</div>`;
+            }
+
+            const html = `
+                <div class="kpi-card">
+                    <div class="kpi-label">Net Revenue</div>
+                    <div class="kpi-value">${fmt(latest.net_revenue)}</div>
+                    ${prior ? change(latest.net_revenue, prior.net_revenue) : ''}
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Gross Margin</div>
+                    <div class="kpi-value">${fmtPct(latest.gross_margin_pct)}</div>
+                    ${prior ? change(latest.gross_margin_pct, prior.gross_margin_pct) : ''}
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Operating Profit</div>
+                    <div class="kpi-value" style="color:${latest.operating_profit >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(latest.operating_profit)}</div>
+                    ${prior ? change(latest.operating_profit, prior.operating_profit) : ''}
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Ad Spend</div>
+                    <div class="kpi-value">${fmt(latest.ad_spend)}</div>
+                    ${prior ? change(latest.ad_spend, prior.ad_spend) : ''}
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Orders</div>
+                    <div class="kpi-value">${(latest.total_orders || 0).toLocaleString()}</div>
+                    ${prior ? change(latest.total_orders, prior.total_orders) : ''}
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Overhead / Order</div>
+                    <div class="kpi-value">${latest.overhead_per_order != null ? fmt(latest.overhead_per_order) : 'N/A'}</div>
+                    ${prior && prior.overhead_per_order ? change(latest.overhead_per_order, prior.overhead_per_order) : '<div class="kpi-change">Upload expenses to calculate</div>'}
+                </div>
+            `;
+            document.getElementById('kpi-grid').innerHTML = html;
+        }
+
+        function renderPLTable(data) {
+            const months = data.map(d => d.month);
+            const headerCells = months.map(m => `<th class="text-right">${m}</th>`).join('');
+
+            function row(label, key, indent, isNeg) {
+                const cells = data.map(d => {
+                    const v = d[key] || 0;
+                    const cls = isNeg ? (v > 0 ? 'negative' : '') : (v < 0 ? 'negative' : '');
+                    return `<td class="text-right ${cls}">${fmt(v)}</td>`;
+                }).join('');
+                return `<tr class="${indent ? 'indent' : ''}"><td>${label}</td>${cells}</tr>`;
+            }
+
+            function pctRow(label, key) {
+                const cells = data.map(d => `<td class="text-right">${fmtPct(d[key])}</td>`).join('');
+                return `<tr class="indent"><td>${label}</td>${cells}</tr>`;
+            }
+
+            function totalRow(label, key) {
+                const cells = data.map(d => {
+                    const v = d[key] || 0;
+                    return `<td class="text-right" style="color:${v >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${fmt(v)}</td>`;
+                }).join('');
+                return `<tr class="total-row"><td>${label}</td>${cells}</tr>`;
+            }
+
+            const html = `<table class="pl-table">
+                <thead><tr><th>Line Item</th>${headerCells}</tr></thead>
+                <tbody>
+                    <tr class="section-header"><td colspan="${months.length+1}">Revenue</td></tr>
+                    ${row('Gross Revenue', 'gross_revenue', true)}
+                    ${row('Refunds', 'refunds', true, true)}
+                    ${totalRow('Net Revenue', 'net_revenue')}
+
+                    <tr class="section-header"><td colspan="${months.length+1}">Cost of Goods Sold</td></tr>
+                    ${row('Product Costs (COGS)', 'cogs', true, true)}
+                    ${totalRow('Gross Margin', 'gross_margin')}
+                    ${pctRow('Gross Margin %', 'gross_margin_pct')}
+
+                    <tr class="section-header"><td colspan="${months.length+1}">Operating Expenses</td></tr>
+                    ${row('Google Ads', 'ad_spend', true, true)}
+                    ${row('Payroll', 'payroll', true, true)}
+                    ${row('Rent', 'rent', true, true)}
+                    ${row('Shipping / Fulfillment', 'shipping', true, true)}
+                    ${row('Utilities', 'utilities', true, true)}
+                    ${row('Insurance', 'insurance', true, true)}
+                    ${row('Software / Tools', 'software', true, true)}
+                    ${row('Other Marketing', 'marketing_other', true, true)}
+                    ${row('Professional Services', 'professional_services', true, true)}
+                    ${row('Other', 'other_expenses', true, true)}
+                    ${totalRow('Operating Profit', 'operating_profit')}
+                    ${pctRow('Operating Margin %', 'operating_margin_pct')}
+
+                    <tr class="section-header"><td colspan="${months.length+1}">Metrics</td></tr>
+                    ${row('Total Orders', 'total_orders', true)}
+                    ${row('Avg Order Value', 'avg_order_value', true)}
+                    ${row('Overhead / Order', 'overhead_per_order', true)}
+                </tbody>
+            </table>`;
+
+            document.getElementById('pl-table-container').innerHTML = html;
+        }
+
+        function renderCharts(data) {
+            const labels = data.map(d => d.month);
+
+            // Revenue vs Profit chart
+            const ctx1 = document.getElementById('revenueChart').getContext('2d');
+            if (revenueChart) revenueChart.destroy();
+            revenueChart = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: 'Net Revenue', data: data.map(d => d.net_revenue), backgroundColor: 'rgba(31,111,107,0.7)', borderRadius: 4 },
+                        { label: 'COGS', data: data.map(d => -(d.cogs || 0)), backgroundColor: 'rgba(220,38,38,0.3)', borderRadius: 4 },
+                        { label: 'Operating Profit', data: data.map(d => d.operating_profit), backgroundColor: data.map(d => d.operating_profit >= 0 ? 'rgba(22,163,74,0.7)' : 'rgba(220,38,38,0.7)'), borderRadius: 4 },
+                    ]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top', labels: { font: { size: 11 } } } },
+                    scales: { y: { ticks: { callback: v => '$' + (v/1000).toFixed(0) + 'k' } } }
+                }
+            });
+
+            // Expense breakdown (latest month)
+            const latest = data[data.length - 1];
+            const expenseData = [
+                { label: 'Ad Spend', value: latest.ad_spend || 0, color: '#1f6f6b' },
+                { label: 'Payroll', value: latest.payroll || 0, color: '#3b82f6' },
+                { label: 'Rent', value: latest.rent || 0, color: '#f59e0b' },
+                { label: 'Shipping', value: latest.shipping || 0, color: '#10b981' },
+                { label: 'Utilities', value: latest.utilities || 0, color: '#8b5cf6' },
+                { label: 'Insurance', value: latest.insurance || 0, color: '#ef4444' },
+                { label: 'Software', value: latest.software || 0, color: '#6366f1' },
+                { label: 'Other', value: (latest.other_expenses || 0) + (latest.marketing_other || 0) + (latest.professional_services || 0), color: '#6b7280' },
+            ].filter(e => e.value > 0);
+
+            const ctx2 = document.getElementById('expenseChart').getContext('2d');
+            if (expenseChart) expenseChart.destroy();
+            expenseChart = new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: expenseData.map(e => e.label),
+                    datasets: [{ data: expenseData.map(e => e.value), backgroundColor: expenseData.map(e => e.color), borderWidth: 2, borderColor: '#fff' }]
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'right', labels: { font: { size: 11 }, padding: 12 } },
+                        tooltip: { callbacks: { label: ctx => ctx.label + ': $' + ctx.parsed.toLocaleString() } }
+                    }
+                }
+            });
+        }
+
+        function renderExpenses(expenses) {
+            if (!expenses.length) {
+                document.getElementById('expense-list').innerHTML = '<div class="no-data">No expenses uploaded yet. Use the CSV upload above to add your business expenses.</div>';
+                return;
+            }
+
+            // Group by month
+            const grouped = {};
+            expenses.forEach(e => {
+                if (!grouped[e.month]) grouped[e.month] = [];
+                grouped[e.month].push(e);
+            });
+
+            let html = '';
+            Object.keys(grouped).sort().reverse().forEach(month => {
+                const items = grouped[month];
+                const total = items.reduce((s, e) => s + e.amount, 0);
+                html += `<h4 style="margin:16px 0 8px;font-size:14px">${month} — Total: ${fmt(total)}</h4>`;
+                html += `<table class="expense-table"><thead><tr><th>Category</th><th>Description</th><th style="text-align:right">Amount</th></tr></thead><tbody>`;
+                items.forEach(e => {
+                    const catClass = 'cat-' + (e.category || 'other');
+                    html += `<tr><td><span class="category-badge ${catClass}">${e.category}</span></td><td>${e.description}</td><td style="text-align:right">${fmt(e.amount)}</td></tr>`;
+                });
+                html += `</tbody></table>`;
+            });
+
+            document.getElementById('expense-list').innerHTML = html;
+        }
+
+        async function uploadCSV(input) {
+            const file = input.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            const resultDiv = document.getElementById('uploadResult');
+            resultDiv.innerHTML = '<div class="upload-result" style="background:#f3f4f6">Uploading...</div>';
+
+            try {
+                const res = await fetch(API + '/finance/expenses/upload', { method: 'POST', body: formData });
+                const data = await res.json();
+
+                if (data.success) {
+                    const d = data.data;
+                    resultDiv.innerHTML = `<div class="upload-result success">Imported ${d.created} new, updated ${d.updated}, skipped ${d.skipped} of ${d.total_rows} rows${d.errors.length ? '. Errors: ' + d.errors.join('; ') : ''}</div>`;
+                    loadDashboard();
+                } else {
+                    resultDiv.innerHTML = `<div class="upload-result error">Error: ${data.data?.error || data.error || 'Unknown error'}</div>`;
+                }
+            } catch (e) {
+                resultDiv.innerHTML = `<div class="upload-result error">Upload failed: ${e.message}</div>`;
+            }
+            input.value = '';
+        }
+
+        async function calculateAll() {
+            const btn = document.getElementById('calcBtn');
+            btn.textContent = 'Calculating...';
+            btn.disabled = true;
+
+            try {
+                const res = await fetch(API + '/finance/pl/calculate-all?months=6', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    loadDashboard();
+                }
+            } catch(e) {
+                alert('Error: ' + e.message);
+            }
+
+            btn.textContent = 'Calculate All (6 months)';
+            btn.disabled = false;
+        }
+
+        loadDashboard();
+    </script>
+    </main><!-- .main-area -->
+    </div><!-- .app-shell -->
+</body>
+</html>

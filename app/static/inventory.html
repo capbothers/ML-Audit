@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cass Brothers · Inventory Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        :root {
+            --ink: #1c1b1f;
+            --ink-soft: #3d3a40;
+            --slate: #6b6670;
+            --card: #ffffff;
+            --line: rgba(27, 27, 27, 0.08);
+            --shadow: 0 1px 3px rgba(17,18,19,0.04), 0 8px 24px rgba(17,18,19,0.06);
+            --shadow-lg: 0 4px 12px rgba(17,18,19,0.05), 0 20px 48px rgba(17,18,19,0.08);
+            --cass-black: #1b1b1b;
+            --cass-cream: #f7f3ed;
+            --cass-gold: #c49a4a;
+            --cass-teal: #1f6f6b;
+            --cass-moss: #2f3d33;
+            --green: #1a7a3a;
+            --green-bg: rgba(26,122,58,0.08);
+            --red: #b5342a;
+            --red-bg: rgba(181,52,42,0.08);
+            --amber: #8b6b1f;
+            --amber-bg: rgba(196,154,74,0.12);
+            --radius: 14px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "IBM Plex Sans", "Space Grotesk", sans-serif;
+            background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        .app-shell {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr);
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+        }
+
+        .brand-bar {
+            grid-column: 1 / -1;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 28px;
+            background: var(--cass-black); color: #f7f1e8;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+        .brand-mark { display: flex; align-items: center; gap: 12px; font-family: "Space Grotesk", sans-serif; letter-spacing: 0.5px; }
+        .brand-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--cass-gold); box-shadow: 0 0 0 4px rgba(196,154,74,0.2); }
+        .brand-actions { display: flex; gap: 12px; font-size: 13px; }
+        .pill { padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.2); }
+
+        .side-nav {
+            padding: 28px 20px;
+            border-right: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.4) 100%);
+        }
+        .side-nav h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--slate); margin-bottom: 12px; }
+        .nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 12px; border-radius: 12px; font-size: 14px;
+            color: var(--ink-soft); margin-bottom: 6px; cursor: pointer; transition: all 0.2s ease;
+            text-decoration: none;
+        }
+        .nav-item.active { background: var(--cass-black); color: #f7f1e8; box-shadow: 0 12px 24px rgba(0,0,0,0.15); }
+        .nav-item span { width: 8px; height: 8px; border-radius: 50%; background: var(--cass-gold); opacity: 0.7; }
+
+        .main-area {
+            padding: 28px 32px 32px;
+            display: flex; flex-direction: column; gap: 18px;
+            overflow-y: auto;
+        }
+
+        /* ---- Header ---- */
+        .overview { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+        .overview h1 { font-family: "Space Grotesk", sans-serif; font-size: 26px; }
+        .time-pill { padding: 8px 14px; border-radius: 999px; background: rgba(27,27,27,0.06); font-size: 13px; color: var(--ink-soft); }
+
+        /* ---- Tabs ---- */
+        .tab-bar { display: flex; gap: 6px; border-bottom: 1px solid var(--line); padding-bottom: 0; }
+        .tab-btn {
+            padding: 10px 18px; border: none; background: none; font-size: 14px;
+            font-family: "IBM Plex Sans", sans-serif; color: var(--slate);
+            cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;
+        }
+        .tab-btn.active { color: var(--ink); border-bottom-color: var(--cass-gold); font-weight: 600; }
+        .tab-panel { display: none; flex-direction: column; gap: 18px; }
+        .tab-panel.active { display: flex; }
+
+        /* ---- Pulse Banner ---- */
+        .pulse-banner {
+            background: var(--card); border-radius: var(--radius); padding: 18px 22px;
+            box-shadow: var(--shadow); border: 1px solid var(--line);
+            display: flex; align-items: flex-start; gap: 14px;
+        }
+        .pulse-chip {
+            padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+            white-space: nowrap;
+        }
+        .pulse-chip.healthy { background: var(--green-bg); color: var(--green); }
+        .pulse-chip.warning { background: var(--amber-bg); color: var(--amber); }
+        .pulse-chip.critical { background: var(--red-bg); color: var(--red); }
+        .pulse-chip.caution { background: rgba(31,111,107,0.1); color: var(--cass-teal); }
+        .pulse-text { font-size: 14px; line-height: 1.6; color: var(--ink-soft); }
+        .tone-toggle { margin-left: auto; display: flex; gap: 4px; }
+        .tone-btn {
+            padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line);
+            background: #fff; font-size: 11px; cursor: pointer; color: var(--slate);
+        }
+        .tone-btn.active { background: var(--cass-black); color: #f7f1e8; border-color: var(--cass-black); }
+
+        /* ---- KPI Cards ---- */
+        .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+        .kpi-card {
+            background: var(--card); border-radius: var(--radius); padding: 16px 18px;
+            box-shadow: var(--shadow); border: 1px solid var(--line);
+        }
+        .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--slate); }
+        .kpi-value { font-size: 26px; font-weight: 700; margin-top: 6px; font-family: "Space Grotesk", sans-serif; }
+        .kpi-sub { font-size: 12px; color: var(--slate); margin-top: 4px; }
+
+        /* ---- Charts ---- */
+        .chart-section {
+            background: var(--card); border-radius: var(--radius); padding: 20px;
+            box-shadow: var(--shadow); border: 1px solid var(--line);
+        }
+        .chart-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
+        .stacked-bar { height: 32px; border-radius: 6px; overflow: hidden; display: flex; }
+        .stacked-bar .segment { height: 100%; transition: width 0.4s ease; position: relative; }
+        .bar-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--slate); }
+        .bar-legend .dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+
+        /* ---- Tables ---- */
+        .table-card {
+            background: var(--card); border-radius: var(--radius); padding: 18px;
+            border: 1px solid var(--line); box-shadow: var(--shadow);
+        }
+        .table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .table-header h3 { font-size: 14px; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th, td { padding: 10px 8px; border-bottom: 1px solid #ede9e2; text-align: left; }
+        th { color: var(--slate); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+        tr.clickable { cursor: pointer; transition: background 0.15s; }
+        tr.clickable:hover { background: rgba(196,154,74,0.06); }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        th.num { text-align: right; }
+
+        /* ---- Badges ---- */
+        .badge {
+            display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;
+        }
+        .badge.critical { background: var(--red-bg); color: var(--red); }
+        .badge.warning { background: var(--amber-bg); color: var(--amber); }
+        .badge.ok { background: var(--green-bg); color: var(--green); }
+        .badge.info { background: rgba(31,111,107,0.1); color: var(--cass-teal); }
+        .badge.neutral { background: rgba(0,0,0,0.06); color: var(--slate); }
+        .trend-up { color: var(--green); }
+        .trend-down { color: var(--red); }
+        .trend-flat { color: var(--slate); }
+
+        /* ---- Pagination ---- */
+        .pagination { display: flex; align-items: center; gap: 12px; justify-content: space-between; margin-top: 12px; font-size: 13px; }
+        .page-btns { display: flex; gap: 6px; }
+        .page-btn {
+            padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line);
+            background: #fff; cursor: pointer; font-size: 12px;
+        }
+        .page-btn.active { background: var(--cass-black); color: #f7f1e8; border-color: var(--cass-black); }
+        .page-btn:disabled { opacity: 0.4; cursor: default; }
+        .per-page-select { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); font-size: 12px; background: #fff; }
+
+        /* ---- Modal ---- */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(27,27,27,0.45);
+            backdrop-filter: blur(6px); z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.2s;
+        }
+        .modal-overlay.open { opacity: 1; pointer-events: auto; }
+        .modal-box {
+            background: var(--card); border-radius: 18px; width: 90%; max-width: 820px;
+            max-height: 85vh; overflow-y: auto; padding: 28px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2); position: relative;
+        }
+        .modal-close {
+            position: absolute; top: 16px; right: 16px; width: 32px; height: 32px;
+            border-radius: 50%; border: none; background: rgba(0,0,0,0.06);
+            font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .modal-header { margin-bottom: 20px; }
+        .modal-header h2 { font-family: "Space Grotesk", sans-serif; font-size: 20px; margin-bottom: 4px; }
+        .modal-header .subtitle { font-size: 13px; color: var(--slate); }
+        .modal-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .modal-stat { background: rgba(0,0,0,0.02); border-radius: 10px; padding: 12px; }
+        .modal-stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--slate); }
+        .modal-stat .val { font-size: 20px; font-weight: 700; margin-top: 4px; font-family: "Space Grotesk", sans-serif; }
+        .modal-stat .sub { font-size: 11px; color: var(--slate); margin-top: 2px; }
+        .flag-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+        .flag-pill {
+            padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600;
+        }
+        .flag-pill.critical { background: var(--red-bg); color: var(--red); }
+        .flag-pill.warning { background: var(--amber-bg); color: var(--amber); }
+        .flag-pill.info { background: rgba(31,111,107,0.1); color: var(--cass-teal); }
+        .modal-section { margin-bottom: 18px; }
+        .modal-section h3 { font-size: 13px; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--slate); }
+
+        /* ---- Search ---- */
+        .search-box {
+            display: flex; gap: 10px; align-items: center;
+        }
+        .search-input {
+            flex: 1; padding: 10px 16px; border-radius: 10px; border: 1px solid var(--line);
+            font-size: 14px; font-family: "IBM Plex Sans", sans-serif;
+            background: var(--card); outline: none; transition: border 0.2s;
+        }
+        .search-input:focus { border-color: var(--cass-gold); }
+        .search-btn {
+            padding: 10px 20px; border-radius: 10px; border: none;
+            background: var(--cass-moss); color: #f7f1e8; font-size: 14px;
+            cursor: pointer; font-family: "IBM Plex Sans", sans-serif;
+        }
+
+        /* ---- Filters ---- */
+        .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .filter-select { padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 13px; }
+        .btn {
+            padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line);
+            background: #fff; font-size: 13px; cursor: pointer;
+        }
+        .btn.primary { background: var(--cass-moss); color: #f7f1e8; border-color: var(--cass-moss); }
+
+        /* ---- Sparkline ---- */
+        .sparkline-cell { display: flex; align-items: center; gap: 6px; }
+
+        /* ---- Grid layout ---- */
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+
+        /* ---- Brand health mini bars ---- */
+        .mini-bar { height: 14px; border-radius: 4px; overflow: hidden; display: flex; min-width: 120px; }
+        .mini-bar .seg { height: 100%; }
+
+        /* ---- Decision Card ---- */
+        .decision-card {
+            background: var(--card); border-radius: var(--radius); padding: 20px 22px;
+            border: 1px solid var(--line); border-left: 4px solid var(--cass-gold);
+            box-shadow: var(--shadow);
+        }
+        .decision-card-header {
+            display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+        }
+        .decision-card-header h3 {
+            font-family: "Space Grotesk", sans-serif; font-size: 14px; font-weight: 600;
+            color: var(--amber); display: flex; align-items: center; gap: 8px; margin: 0;
+        }
+        .confidence-badge {
+            padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.4px;
+        }
+        .confidence-high { background: var(--green-bg); color: var(--green); }
+        .confidence-medium { background: var(--amber-bg); color: var(--amber); }
+        .confidence-low { background: var(--red-bg); color: var(--red); }
+        .decision-row {
+            display: grid; grid-template-columns: 120px 1fr;
+            gap: 4px 16px; padding: 8px 0; border-bottom: 1px solid var(--line);
+        }
+        .decision-row:last-child { border-bottom: none; }
+        .decision-row .dr-label {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
+            color: var(--slate); font-weight: 600; padding-top: 2px;
+        }
+        .decision-row .dr-value { font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+        .impact-badge, .effort-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 999px;
+            font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
+            margin-left: 6px; vertical-align: middle;
+        }
+        .impact-high { background: var(--red-bg); color: var(--red); }
+        .impact-medium { background: var(--amber-bg); color: var(--amber); }
+        .impact-low { background: rgba(27,27,27,0.06); color: var(--slate); }
+        .effort-low { background: var(--green-bg); color: var(--green); }
+        .effort-medium { background: var(--amber-bg); color: var(--amber); }
+        .effort-high { background: var(--red-bg); color: var(--red); }
+
+        /* ---- Trust Banner ---- */
+        .trust-banner {
+            background: rgba(196,154,74,0.08); border: 1px solid rgba(196,154,74,0.3);
+            border-radius: var(--radius); padding: 14px 18px;
+            display: flex; align-items: flex-start; gap: 10px;
+            font-size: 13px; color: var(--amber);
+        }
+        .trust-banner .tb-icon { font-size: 18px; flex-shrink: 0; line-height: 1; }
+        .trust-banner .tb-body { line-height: 1.5; }
+        .trust-banner strong { color: var(--ink); }
+
+        /* ---- Explainability Tooltips ---- */
+        .why-tip {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: rgba(27,27,27,0.08); color: var(--slate);
+            font-size: 9px; font-weight: 700; cursor: help;
+            margin-left: 4px; position: relative; vertical-align: middle;
+        }
+        .why-tip .why-tip-box {
+            display: none; position: absolute; bottom: calc(100% + 6px); left: 50%;
+            transform: translateX(-50%); width: 220px; padding: 10px 12px;
+            background: var(--cass-black); color: #e8e2d6; border-radius: 10px;
+            font-size: 11px; font-weight: 400; line-height: 1.5;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 50;
+            text-transform: none; letter-spacing: 0; pointer-events: none;
+        }
+        .why-tip:hover .why-tip-box { display: block; }
+
+        /* ---- Table Readability ---- */
+        tbody tr:nth-child(even) { background: rgba(0,0,0,0.015); }
+        th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } }
+        @media (max-width: 900px) {
+            .app-shell { grid-template-columns: 1fr; }
+            .side-nav { display: flex; gap: 12px; overflow-x: auto; padding: 12px 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <div class="brand-bar">
+            <div class="brand-mark">
+                <span class="brand-dot"></span>
+                <strong>Cass Brothers Intelligence</strong>
+            </div>
+            <div class="brand-actions">
+                <span class="pill">Inventory</span>
+                <span class="pill">ML Intelligence</span>
+            </div>
+        </div>
+
+        <aside class="side-nav">
+            <h2>Dashboards</h2>
+            <a class="nav-item" href="/dashboard"><span></span> Overview</a>
+            <a class="nav-item" href="/performance"><span></span> Performance</a>
+            <a class="nav-item" href="/seo-dashboard"><span></span> SEO &amp; Content</a>
+            <a class="nav-item" href="/ads-intelligence"><span></span> Ads Intelligence</a>
+            <a class="nav-item" href="/finance-dashboard"><span></span> Finance</a>
+            <a class="nav-item active" href="/inventory"><span></span> Inventory</a>
+            <a class="nav-item" href="/pricing-intel"><span></span> Pricing Intel</a>
+            <a class="nav-item" href="/customer-intelligence"><span></span> Customer Intel</a>
+            <a class="nav-item" href="/merchant-center-intel"><span></span> Merchant Center</a>
+            <a class="nav-item" href="/strategic-intelligence"><span></span> Intelligence Brief</a>
+            <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
+                <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
+            </div>
+        </aside>
+
+        <section class="main-area">
+            <div class="overview">
+                <div>
+                    <h1>Inventory Intelligence</h1>
+                    <p class="time-pill" id="last-run">Last run: loading…</p>
+                </div>
+                <div style="display:flex;gap:10px;">
+                    <button class="btn primary" onclick="exportCsv()">Export CSV</button>
+                </div>
+            </div>
+
+            <!-- Tab Bar -->
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="switchTab('pulse')">Inventory Pulse</button>
+                <button class="tab-btn" onclick="switchTab('reorder')">Reorder Queue</button>
+                <button class="tab-btn" onclick="switchTab('health')">Stock Health</button>
+                <button class="tab-btn" onclick="switchTab('deepdive')">SKU Deep Dive</button>
+            </div>
+
+            <!-- TAB 1: INVENTORY PULSE -->
+            <div id="tab-pulse" class="tab-panel active">
+                <div id="pulse-banner" class="pulse-banner">
+                    <span class="pulse-chip healthy">Loading…</span>
+                    <div class="pulse-text">Loading inventory data…</div>
+                    <div class="tone-toggle">
+                        <button class="tone-btn active" onclick="setTone('plain')">Plain</button>
+                        <button class="tone-btn" onclick="setTone('pro')">Pro</button>
+                    </div>
+                </div>
+
+                <!-- Trust Banner (conditional) -->
+                <div class="trust-banner" id="inv-trust-banner" style="display:none;">
+                    <div class="tb-icon">&#9888;</div>
+                    <div class="tb-body" id="inv-trust-body"></div>
+                </div>
+
+                <!-- Decision Card -->
+                <div class="decision-card" id="inv-decision-card">
+                    <div class="decision-card-header">
+                        <h3>Decision Summary</h3>
+                        <span class="confidence-badge confidence-medium" id="inv-confidence">Medium</span>
+                    </div>
+                    <div class="decision-row">
+                        <div class="dr-label">Primary Insight</div>
+                        <div class="dr-value" id="inv-dc-insight">Loading...</div>
+                    </div>
+                    <div class="decision-row">
+                        <div class="dr-label">Why It Matters</div>
+                        <div class="dr-value" id="inv-dc-why">--</div>
+                    </div>
+                    <div class="decision-row">
+                        <div class="dr-label">Do Next</div>
+                        <div class="dr-value" id="inv-dc-next">--</div>
+                    </div>
+                </div>
+
+                <div class="kpi-row" id="pulse-kpis"></div>
+
+                <div class="chart-section">
+                    <div class="chart-title">Stock Health Distribution</div>
+                    <div id="stock-distribution-bar" class="stacked-bar"></div>
+                    <div id="stock-distribution-legend" class="bar-legend"></div>
+                </div>
+
+                <div class="two-col">
+                    <div class="chart-section">
+                        <div class="chart-title">Top 10 Brands by Inventory Value</div>
+                        <div id="brand-value-chart"></div>
+                    </div>
+                    <div class="chart-section">
+                        <div class="chart-title">Velocity Trend Distribution</div>
+                        <div id="velocity-dist-chart"></div>
+                    </div>
+                </div>
+
+                <div class="table-card">
+                    <div class="table-header">
+                        <h3>Brand Summary</h3>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Brand</th>
+                                <th class="num">SKUs</th>
+                                <th class="num">Units</th>
+                                <th class="num">Avg Velocity</th>
+                                <th class="num">Avg Days Cover</th>
+                                <th class="num">Critical</th>
+                                <th class="num">Warning</th>
+                                <th class="num">Overstock</th>
+                            </tr>
+                        </thead>
+                        <tbody id="brand-summary-table">
+                            <tr><td colspan="8">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 2: REORDER QUEUE -->
+            <div id="tab-reorder" class="tab-panel">
+                <div class="kpi-row" id="reorder-kpis"></div>
+                <div class="filters" id="reorder-filters">
+                    <select class="filter-select" id="reorder-brand-filter">
+                        <option value="">All Brands</option>
+                    </select>
+                </div>
+                <div class="table-card">
+                    <div class="table-header">
+                        <h3>Reorder Action Queue</h3>
+                        <div class="filters">
+                            <span style="font-size:12px;color:var(--slate);" id="reorder-count-label">- items</span>
+                        </div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Brand</th>
+                                <th>Title</th>
+                                <th class="num">On Hand</th>
+                                <th class="num">Velocity</th>
+                                <th>Trend</th>
+                                <th class="num">Days Cover</th>
+                                <th class="num">Reorder Qty</th>
+                                <th class="num">Est. Cost</th>
+                                <th>Urgency</th>
+                                <th>Flags</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reorder-table">
+                            <tr><td colspan="10">Select this tab to load…</td></tr>
+                        </tbody>
+                    </table>
+                    <div class="pagination" id="reorder-pagination"></div>
+                </div>
+            </div>
+
+            <!-- TAB 3: STOCK HEALTH -->
+            <div id="tab-health" class="tab-panel">
+                <div class="kpi-row" id="health-kpis"></div>
+
+                <div class="table-card" id="oversold-section" style="display:none;">
+                    <div class="table-header">
+                        <h3>Oversold Products</h3>
+                        <span style="font-size:12px;color:var(--slate);" id="oversold-count">-</span>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Brand</th>
+                                <th>Title</th>
+                                <th class="num">Units</th>
+                                <th class="num">Velocity</th>
+                                <th>Urgency</th>
+                            </tr>
+                        </thead>
+                        <tbody id="oversold-table">
+                            <tr><td colspan="6">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="table-card" id="not-stocked-section" style="display:none;">
+                    <div class="table-header">
+                        <h3>Not Stocked Products</h3>
+                        <span style="font-size:12px;color:var(--slate);" id="not-stocked-count">-</span>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Vendor</th>
+                                <th>Title</th>
+                            </tr>
+                        </thead>
+                        <tbody id="not-stocked-table">
+                            <tr><td colspan="3">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="table-card">
+                    <div class="table-header">
+                        <h3>Overstock Items</h3>
+                        <span style="font-size:12px;color:var(--slate);" id="overstock-count">-</span>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Brand</th>
+                                <th>Title</th>
+                                <th class="num">On Hand</th>
+                                <th class="num">Velocity</th>
+                                <th class="num">Days Cover</th>
+                                <th class="num">Unit Cost</th>
+                                <th class="num">Value Tied Up</th>
+                            </tr>
+                        </thead>
+                        <tbody id="overstock-table">
+                            <tr><td colspan="8">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="table-card">
+                    <div class="table-header">
+                        <h3>Dead Stock (No Sales)</h3>
+                        <span style="font-size:12px;color:var(--slate);" id="nosales-count">-</span>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Brand</th>
+                                <th>Title</th>
+                                <th class="num">On Hand</th>
+                                <th class="num">Unit Cost</th>
+                                <th class="num">Value Tied Up</th>
+                            </tr>
+                        </thead>
+                        <tbody id="nosales-table">
+                            <tr><td colspan="6">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="table-card">
+                    <div class="table-header">
+                        <h3>Brand Health Breakdown</h3>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Brand</th>
+                                <th class="num">Total SKUs</th>
+                                <th>Distribution</th>
+                                <th class="num">Reorder Now</th>
+                                <th class="num">Reorder Soon</th>
+                                <th class="num">Adequate</th>
+                                <th class="num">Overstock</th>
+                                <th class="num">No Sales</th>
+                            </tr>
+                        </thead>
+                        <tbody id="brand-health-table">
+                            <tr><td colspan="8">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB 4: SKU DEEP DIVE -->
+            <div id="tab-deepdive" class="tab-panel">
+                <div class="search-box">
+                    <input type="text" class="search-input" id="sku-search" placeholder="Search by SKU, brand, or product name…" onkeydown="if(event.key==='Enter')doSkuSearch()">
+                    <button class="search-btn" onclick="doSkuSearch()">Search</button>
+                </div>
+                <div class="table-card" id="search-results-card" style="display:none;">
+                    <div class="table-header">
+                        <h3>Search Results</h3>
+                        <span style="font-size:12px;color:var(--slate);" id="search-count">-</span>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Brand</th>
+                                <th>Title</th>
+                                <th class="num">On Hand</th>
+                                <th class="num">Velocity</th>
+                                <th class="num">Days Cover</th>
+                                <th>Status</th>
+                                <th>Urgency</th>
+                            </tr>
+                        </thead>
+                        <tbody id="search-table"></tbody>
+                    </table>
+                </div>
+                <div class="pulse-banner" style="margin-top:8px;">
+                    <div class="pulse-text" style="color:var(--slate);font-size:13px;">
+                        Search for a SKU above, or click any row in the Reorder Queue / Stock Health tabs to open the SKU drill-down modal.
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- MODAL -->
+    <div class="modal-overlay" id="sku-modal" onclick="if(event.target===this)closeModal()">
+        <div class="modal-box">
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <div id="modal-content">Loading…</div>
+        </div>
+    </div>
+
+    <script>
+    /* ──────────────────────────────────────────
+       STATE
+    ────────────────────────────────────────── */
+    let dashData = null;
+    let reorderData = null;
+    let healthData = null;
+    let currentTone = 'plain';
+    let reorderPage = 1;
+    let reorderPerPage = 25;
+    let reorderBrand = '';
+    let tabsLoaded = { pulse: false, reorder: false, health: false, deepdive: false };
+    let allItems = []; // for CSV export
+
+    /* ──────────────────────────────────────────
+       TAB SWITCHING
+    ────────────────────────────────────────── */
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach((b, i) => {
+            b.classList.toggle('active', ['pulse','reorder','health','deepdive'][i] === tab);
+        });
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        document.getElementById('tab-' + tab).classList.add('active');
+
+        if (tab === 'reorder' && !tabsLoaded.reorder) loadReorderQueue();
+        if (tab === 'health' && !tabsLoaded.health) loadStockHealth();
+    }
+
+    /* ──────────────────────────────────────────
+       TONE TOGGLE
+    ────────────────────────────────────────── */
+    function setTone(tone) {
+        currentTone = tone;
+        document.querySelectorAll('.tone-btn').forEach(b => b.classList.toggle('active', b.textContent.toLowerCase() === tone));
+        if (dashData) renderPulseBanner(dashData.pulse);
+    }
+
+    /* ──────────────────────────────────────────
+       TAB 1: INVENTORY PULSE
+    ────────────────────────────────────────── */
+    async function loadDashboard() {
+        try {
+            const res = await fetch('/ml/inventory-dashboard');
+            const json = await res.json();
+            dashData = json.data;
+            tabsLoaded.pulse = true;
+
+            const snap = dashData.snapshot;
+            if (snap.last_generated) {
+                document.getElementById('last-run').textContent = 'Last run: ' + new Date(snap.last_generated).toLocaleString();
+            }
+
+            renderPulseBanner(dashData.pulse);
+            renderInventoryDecision(snap);
+            renderPulseKPIs(snap);
+            renderStockDistribution(dashData.distribution);
+            renderBrandValueChart(dashData.brand_value_chart);
+            renderVelocityDist(dashData.velocity_summary);
+            renderBrandSummaryTable(dashData.brand_summary);
+
+            // Populate reorder brand filter
+            const brands = dashData.brand_summary.map(b => b.brand).filter(Boolean).sort();
+            const sel = document.getElementById('reorder-brand-filter');
+            sel.innerHTML = '<option value="">All Brands</option>' + brands.map(b => `<option value="${b}">${b}</option>`).join('');
+            sel.onchange = () => { reorderBrand = sel.value; reorderPage = 1; loadReorderQueue(); };
+
+            // Load all items for CSV
+            loadAllItemsForCsv();
+        } catch (e) {
+            console.error('Dashboard load error:', e);
+        }
+    }
+
+    async function loadAllItemsForCsv() {
+        try {
+            const res = await fetch('/ml/inventory-suggestions');
+            const json = await res.json();
+            allItems = json.data || [];
+        } catch(e) { console.error(e); }
+    }
+
+    function renderPulseBanner(pulse) {
+        if (!pulse) return;
+        const el = document.getElementById('pulse-banner');
+        const chipEl = el.querySelector('.pulse-chip');
+        const textEl = el.querySelector('.pulse-text');
+        chipEl.textContent = pulse.chip;
+        chipEl.className = 'pulse-chip ' + pulse.status;
+        textEl.textContent = currentTone === 'pro' ? pulse.pro : pulse.plain;
+    }
+
+    function renderInventoryDecision(snap) {
+        const critCount = snap.reorder_now || 0;
+        const oversold = snap.oversold_count || 0;
+        const coveragePct = snap.inventory_value_coverage_pct || 0;
+
+        // Trust banner
+        const trustBanner = document.getElementById('inv-trust-banner');
+        const trustBody = document.getElementById('inv-trust-body');
+        if (!snap.offline_data_available) {
+            trustBanner.style.display = 'flex';
+            trustBody.innerHTML = '<strong>DATA QUALITY:</strong> Offline sales data unavailable — only 1 inventory sync captured. Velocity calculations are based on online orders only. Run the ML pipeline daily to build showroom sales estimates.';
+        }
+
+        // Primary insight
+        let insight, why, doNext;
+        let impactLevel = 'Medium', effortLevel = 'Medium';
+
+        if (oversold > 0) {
+            insight = `${oversold} SKUs are oversold (negative inventory). Customers may have ordered products you don't have.`;
+        } else if (critCount > 50) {
+            insight = `${critCount} SKUs need reordering now — stock is critically low or depleted.`;
+        } else if (critCount > 0) {
+            insight = `${critCount} SKUs flagged for reorder. Inventory health is manageable but needs attention.`;
+        } else {
+            insight = 'Inventory is well-stocked. No critical reorder needs detected.';
+        }
+
+        // Why it matters
+        if (oversold > 0) {
+            why = 'Oversold products risk cancellations, refunds, and negative customer reviews.';
+        } else if (critCount > 20) {
+            why = 'Stock-outs on high-velocity items directly reduce revenue. Each day without stock is lost sales.';
+        } else {
+            why = 'Maintaining healthy stock levels prevents lost sales and keeps customer satisfaction high.';
+        }
+
+        // Do next
+        if (oversold > 0) {
+            doNext = `Resolve ${oversold} oversold SKUs immediately — contact suppliers or update stock counts.`;
+            impactLevel = 'High'; effortLevel = 'Low';
+        } else if (critCount > 0) {
+            doNext = `Review the reorder queue and submit purchase orders for the ${critCount} critical SKUs.`;
+            impactLevel = 'High'; effortLevel = 'Medium';
+        } else {
+            doNext = 'Review overstock items and consider markdowns for slow-moving inventory.';
+            impactLevel = 'Medium'; effortLevel = 'Low';
+        }
+
+        // Confidence
+        const confidence = coveragePct >= 80 ? 'High' : coveragePct >= 50 ? 'Medium' : 'Low';
+        const confEl = document.getElementById('inv-confidence');
+        confEl.textContent = confidence;
+        confEl.className = 'confidence-badge confidence-' + confidence.toLowerCase();
+
+        document.getElementById('inv-dc-insight').textContent = insight;
+        document.getElementById('inv-dc-why').textContent = why;
+        document.getElementById('inv-dc-next').innerHTML = doNext
+            + ` <span class="impact-badge impact-${impactLevel.toLowerCase()}">Impact: ${impactLevel}</span>`
+            + ` <span class="effort-badge effort-${effortLevel.toLowerCase()}">Effort: ${effortLevel}</span>`;
+    }
+
+    function renderPulseKPIs(snap) {
+        const tip = (text) => `<span class="why-tip">?<span class="why-tip-box">${text}</span></span>`;
+        const kpis = [
+            { label: 'Total SKUs', value: snap.total_skus.toLocaleString(), sub: '' },
+            { label: 'Units on Hand', value: snap.total_units.toLocaleString(), sub: '' },
+            { label: 'Inventory Value', value: '$' + Math.round(snap.inventory_value).toLocaleString(), sub: snap.inventory_value_coverage_pct + '% cost coverage' },
+            { label: 'Avg Days Cover' + tip('How many days current stock will last at current sales velocity. Under 14 = critical. Over 90 = potential overstock.'), value: snap.avg_days_of_cover.toFixed(0), sub: 'active SKUs' },
+            { label: 'Reorder Now', value: snap.reorder_now, sub: 'critical', cls: snap.reorder_now > 0 ? 'color:var(--red)' : '' },
+            { label: 'Reorder Soon', value: snap.reorder_soon, sub: 'warning', cls: snap.reorder_soon > 0 ? 'color:var(--amber)' : '' },
+            { label: 'Oversold SKUs' + tip('Products with negative inventory (sold more than stocked). Customers may have ordered items you cannot fulfil.'), value: snap.oversold_count || 0, sub: 'ML tracked · negative inv', cls: (snap.oversold_count || 0) > 0 ? 'color:var(--red)' : '' },
+            { label: 'Oversold (All Inv)', value: snap.oversold_all_inventory || 0, sub: 'all active products', cls: (snap.oversold_all_inventory || 0) > 0 ? 'color:var(--red)' : '' },
+            { label: 'Not Stocked', value: snap.not_stocked_count || 0, sub: 'active · zero quantity', cls: (snap.not_stocked_count || 0) > 0 ? 'color:var(--amber)' : '' },
+            { label: 'Overstock', value: snap.overstock, sub: 'excess cover', cls: snap.overstock > 0 ? 'color:var(--cass-teal)' : '' },
+            { label: 'Turnover Rate' + tip('Percentage of inventory sold in 30 days. Higher = healthier. Under 5% may indicate dead stock or overbuying.'), value: (snap.turnover_rate * 100).toFixed(1) + '%', sub: '30-day' },
+            { label: 'Offline Units (30d)', value: snap.offline_data_available ? Math.round(snap.offline_units_estimated_30d || 0).toLocaleString() : '-', sub: snap.offline_data_available ? 'showroom sales inferred' : 'awaiting daily snapshots' },
+        ];
+        document.getElementById('pulse-kpis').innerHTML = kpis.map(k =>
+            `<div class="kpi-card">
+                <div class="kpi-label">${k.label}</div>
+                <div class="kpi-value" style="${k.cls || ''}">${k.value}</div>
+                ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
+            </div>`
+        ).join('');
+    }
+
+    function renderStockDistribution(dist) {
+        if (!dist || !dist.length) return;
+        const total = dist.reduce((s, d) => s + d.count, 0);
+        const bar = document.getElementById('stock-distribution-bar');
+        const legend = document.getElementById('stock-distribution-legend');
+
+        bar.innerHTML = dist.map(d => {
+            const pct = total > 0 ? (d.count / total * 100) : 0;
+            return pct > 0 ? `<div class="segment" style="width:${pct}%;background:${d.color}" title="${d.label}: ${d.count} SKUs ($${Math.round(d.value).toLocaleString()})"></div>` : '';
+        }).join('');
+
+        legend.innerHTML = dist.map(d =>
+            `<span><span class="dot" style="background:${d.color}"></span>${d.label}: ${d.count} ($${Math.round(d.value).toLocaleString()})</span>`
+        ).join('');
+    }
+
+    function renderBrandValueChart(brands) {
+        const container = document.getElementById('brand-value-chart');
+        if (!brands || !brands.length) { container.innerHTML = '<div style="color:var(--slate);font-size:13px;">No cost data available</div>'; return; }
+        const maxVal = Math.max(...brands.map(b => b.value));
+        container.innerHTML = brands.map(b => {
+            const pct = maxVal > 0 ? (b.value / maxVal * 100) : 0;
+            return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                <div style="width:100px;font-size:12px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${b.brand}">${b.brand}</div>
+                <div style="flex:1;height:20px;background:rgba(0,0,0,0.04);border-radius:4px;overflow:hidden;">
+                    <div style="height:100%;width:${pct}%;background:var(--cass-teal);border-radius:4px;transition:width 0.4s;"></div>
+                </div>
+                <div style="width:90px;font-size:12px;font-variant-numeric:tabular-nums;">$${Math.round(b.value).toLocaleString()}</div>
+            </div>`;
+        }).join('');
+    }
+
+    function renderVelocityDist(vel) {
+        const container = document.getElementById('velocity-dist-chart');
+        if (!vel || !Object.keys(vel).length) { container.innerHTML = '<div style="color:var(--slate);font-size:13px;">No velocity data</div>'; return; }
+        const items = [
+            { key: 'increasing', label: 'Accelerating', color: 'var(--green)', icon: '&#9650;' },
+            { key: 'stable', label: 'Stable', color: 'var(--slate)', icon: '&#9644;' },
+            { key: 'decreasing', label: 'Slowing', color: 'var(--red)', icon: '&#9660;' },
+            { key: 'none', label: 'No Trend', color: '#bbb', icon: '&#9679;' },
+        ];
+        const total = Object.values(vel).reduce((s, v) => s + v.count, 0);
+        container.innerHTML = items.map(i => {
+            const data = vel[i.key];
+            if (!data) return '';
+            const pct = total > 0 ? (data.count / total * 100) : 0;
+            return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <div style="width:100px;font-size:12px;text-align:right;">${i.icon} ${i.label}</div>
+                <div style="flex:1;height:20px;background:rgba(0,0,0,0.04);border-radius:4px;overflow:hidden;">
+                    <div style="height:100%;width:${pct}%;background:${i.color};border-radius:4px;opacity:0.7;transition:width 0.4s;"></div>
+                </div>
+                <div style="width:80px;font-size:12px;">${data.count} (${pct.toFixed(0)}%)</div>
+            </div>`;
+        }).join('');
+    }
+
+    function renderBrandSummaryTable(brands) {
+        const tbody = document.getElementById('brand-summary-table');
+        if (!brands || !brands.length) { tbody.innerHTML = '<tr><td colspan="8">No brand data</td></tr>'; return; }
+        tbody.innerHTML = brands.map(b =>
+            `<tr>
+                <td><strong>${b.brand || '-'}</strong></td>
+                <td class="num">${b.sku_count}</td>
+                <td class="num">${b.total_units.toLocaleString()}</td>
+                <td class="num">${b.avg_velocity.toFixed(2)}</td>
+                <td class="num">${b.avg_days_cover != null ? b.avg_days_cover.toFixed(0) : '-'}</td>
+                <td class="num">${b.critical_count > 0 ? `<span class="badge critical">${b.critical_count}</span>` : '0'}</td>
+                <td class="num">${b.warning_count > 0 ? `<span class="badge warning">${b.warning_count}</span>` : '0'}</td>
+                <td class="num">${b.overstock_count > 0 ? `<span class="badge info">${b.overstock_count}</span>` : '0'}</td>
+            </tr>`
+        ).join('');
+    }
+
+    /* ──────────────────────────────────────────
+       TAB 2: REORDER QUEUE
+    ────────────────────────────────────────── */
+    async function loadReorderQueue() {
+        try {
+            const brandParam = reorderBrand ? `&brand=${encodeURIComponent(reorderBrand)}` : '';
+            const res = await fetch(`/ml/inventory-reorder-queue?page=${reorderPage}&per_page=${reorderPerPage}${brandParam}`);
+            const json = await res.json();
+            reorderData = json.data;
+            tabsLoaded.reorder = true;
+
+            renderReorderKPIs(reorderData.kpis);
+            renderReorderTable(reorderData.items);
+            renderReorderPagination(reorderData.pagination);
+            document.getElementById('reorder-count-label').textContent = reorderData.pagination.total + ' items';
+        } catch (e) {
+            console.error('Reorder queue error:', e);
+        }
+    }
+
+    function renderReorderKPIs(kpis) {
+        const data = [
+            { label: 'Critical SKUs', value: kpis.critical_skus, cls: 'color:var(--red)' },
+            { label: 'Warning SKUs', value: kpis.warning_skus, cls: 'color:var(--amber)' },
+            { label: 'Oversold', value: kpis.oversold_count || 0, cls: (kpis.oversold_count || 0) > 0 ? 'color:var(--red)' : '' },
+            { label: 'Cost Missing', value: kpis.cost_missing_count || 0, cls: (kpis.cost_missing_count || 0) > 0 ? 'color:var(--amber)' : '', sub: kpis.critical_skus + kpis.warning_skus > 0 ? Math.round((kpis.cost_missing_count || 0) / (kpis.critical_skus + kpis.warning_skus) * 100) + '% of reorder SKUs' : '' },
+            { label: 'Total Reorder Qty', value: (kpis.total_reorder_qty || 0).toLocaleString(), cls: '' },
+            { label: 'Est. Reorder Cost', value: '$' + Math.round(kpis.estimated_reorder_cost || 0).toLocaleString(), cls: '' },
+        ];
+        document.getElementById('reorder-kpis').innerHTML = data.map(k =>
+            `<div class="kpi-card">
+                <div class="kpi-label">${k.label}</div>
+                <div class="kpi-value" style="${k.cls}">${k.value}</div>
+                ${k.sub ? `<div class="kpi-sub">${k.sub}</div>` : ''}
+            </div>`
+        ).join('');
+    }
+
+    function renderReorderTable(items) {
+        const tbody = document.getElementById('reorder-table');
+        if (!items || !items.length) { tbody.innerHTML = '<tr><td colspan="11">No reorder items</td></tr>'; return; }
+        tbody.innerHTML = items.map(r => {
+            let flagsHtml = '';
+            if (r.oversold) flagsHtml += '<span class="badge critical" style="margin-right:4px;">OVERSOLD</span>';
+            if (r.cost_missing) flagsHtml += '<span class="badge warning" style="margin-right:4px;">No Cost</span>';
+            if ((r.offline_units_30d || 0) > 0) flagsHtml += `<span class="badge info" title="Est. offline sales">${r.offline_units_30d} offline</span>`;
+            return `<tr class="clickable" onclick="openSkuModal('${esc(r.sku)}')">
+                <td><strong>${esc(r.sku)}</strong></td>
+                <td>${esc(r.brand || '-')}</td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.title || '')}">${esc(r.title || '-')}</td>
+                <td class="num">${r.units_on_hand}</td>
+                <td class="num">${r.velocity.toFixed(2)}</td>
+                <td>${trendBadge(r.velocity_trend)}</td>
+                <td class="num">${r.days_of_cover.toFixed(0)}</td>
+                <td class="num">${r.reorder_quantity || '-'}</td>
+                <td class="num">${r.est_reorder_cost != null ? '$' + Math.round(r.est_reorder_cost).toLocaleString() : '-'}</td>
+                <td>${urgencyBadge(r.urgency)}</td>
+                <td>${flagsHtml || '-'}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderReorderPagination(pg) {
+        if (!pg) return;
+        const container = document.getElementById('reorder-pagination');
+        const totalPages = pg.pages;
+        let html = '<div class="page-btns">';
+        html += `<button class="page-btn" ${pg.page <= 1 ? 'disabled' : ''} onclick="reorderPage=${pg.page-1};loadReorderQueue()">Prev</button>`;
+        for (let i = 1; i <= Math.min(totalPages, 7); i++) {
+            html += `<button class="page-btn ${i === pg.page ? 'active' : ''}" onclick="reorderPage=${i};loadReorderQueue()">${i}</button>`;
+        }
+        if (totalPages > 7) html += `<span style="padding:6px;">…</span><button class="page-btn ${totalPages === pg.page ? 'active' : ''}" onclick="reorderPage=${totalPages};loadReorderQueue()">${totalPages}</button>`;
+        html += `<button class="page-btn" ${pg.page >= totalPages ? 'disabled' : ''} onclick="reorderPage=${pg.page+1};loadReorderQueue()">Next</button>`;
+        html += '</div>';
+        html += `<div class="filters"><select class="per-page-select" onchange="reorderPerPage=+this.value;reorderPage=1;loadReorderQueue()">
+            <option value="10" ${reorderPerPage===10?'selected':''}>10 / page</option>
+            <option value="25" ${reorderPerPage===25?'selected':''}>25 / page</option>
+            <option value="50" ${reorderPerPage===50?'selected':''}>50 / page</option>
+        </select></div>`;
+        container.innerHTML = html;
+    }
+
+    /* ──────────────────────────────────────────
+       TAB 3: STOCK HEALTH
+    ────────────────────────────────────────── */
+    async function loadStockHealth() {
+        try {
+            const res = await fetch('/ml/inventory-stock-health');
+            const json = await res.json();
+            healthData = json.data;
+            tabsLoaded.health = true;
+
+            renderHealthKPIs(healthData.kpis);
+            renderOversoldTable(healthData.oversold);
+            renderNotStockedTable(healthData.not_stocked);
+            renderOverstockTable(healthData.overstock);
+            renderNoSalesTable(healthData.no_sales);
+            renderBrandHealthTable(healthData.brand_health);
+        } catch (e) {
+            console.error('Stock health error:', e);
+        }
+    }
+
+    function renderNotStockedTable(items) {
+        const section = document.getElementById('not-stocked-section');
+        const tbody = document.getElementById('not-stocked-table');
+        const countEl = document.getElementById('not-stocked-count');
+        if (!items || !items.length) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = 'block';
+        countEl.textContent = items.length + ' items (top 20)';
+        tbody.innerHTML = items.map(r =>
+            `<tr>
+                <td><strong>${esc(r.sku)}</strong></td>
+                <td>${esc(r.vendor || '-')}</td>
+                <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.title || '')}">${esc(r.title || '-')}</td>
+            </tr>`
+        ).join('');
+    }
+
+    function renderOversoldTable(items) {
+        const section = document.getElementById('oversold-section');
+        const tbody = document.getElementById('oversold-table');
+        const countEl = document.getElementById('oversold-count');
+        if (!items || !items.length) {
+            section.style.display = 'none';
+            return;
+        }
+        section.style.display = 'block';
+        countEl.textContent = items.length + ' items';
+        tbody.innerHTML = items.map(r =>
+            `<tr class="clickable" onclick="openSkuModal('${esc(r.sku)}')">
+                <td><strong>${esc(r.sku)}</strong></td>
+                <td>${esc(r.brand || '-')}</td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.title || '')}">${esc(r.title || '-')}</td>
+                <td class="num" style="color:var(--red)">${r.units_on_hand}</td>
+                <td class="num">${r.velocity != null ? r.velocity.toFixed(2) : '-'}</td>
+                <td>${urgencyBadge(r.urgency)}</td>
+            </tr>`
+        ).join('');
+    }
+
+    function renderHealthKPIs(kpis) {
+        const data = [
+            { label: 'Oversold SKUs', value: kpis.oversold_count || 0, cls: (kpis.oversold_count || 0) > 0 ? 'color:var(--red)' : '' },
+            { label: 'Oversold (All Inv)', value: kpis.oversold_all_inventory || 0, cls: (kpis.oversold_all_inventory || 0) > 0 ? 'color:var(--red)' : '' },
+            { label: 'Not Stocked', value: kpis.not_stocked_count || 0, cls: (kpis.not_stocked_count || 0) > 0 ? 'color:var(--amber)' : '' },
+            { label: 'Overstock SKUs', value: kpis.overstock_skus, cls: 'color:var(--cass-teal)' },
+            { label: 'Overstock Value', value: '$' + Math.round(kpis.overstock_value).toLocaleString(), cls: '' },
+            { label: 'Dead Stock SKUs', value: kpis.no_sales_skus, cls: 'color:var(--slate)' },
+            { label: 'Total Capital Tied Up', value: '$' + Math.round(kpis.total_tied_up).toLocaleString(), cls: 'color:var(--red)' },
+        ];
+        document.getElementById('health-kpis').innerHTML = data.map(k =>
+            `<div class="kpi-card">
+                <div class="kpi-label">${k.label}</div>
+                <div class="kpi-value" style="${k.cls}">${k.value}</div>
+            </div>`
+        ).join('');
+    }
+
+    function renderOverstockTable(items) {
+        const tbody = document.getElementById('overstock-table');
+        document.getElementById('overstock-count').textContent = (items || []).length + ' items';
+        if (!items || !items.length) { tbody.innerHTML = '<tr><td colspan="8">No overstock items</td></tr>'; return; }
+        tbody.innerHTML = items.slice(0, 50).map(r =>
+            `<tr class="clickable" onclick="openSkuModal('${esc(r.sku)}')">
+                <td><strong>${esc(r.sku)}</strong></td>
+                <td>${esc(r.brand || '-')}</td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.title || '')}">${esc(r.title || '-')}</td>
+                <td class="num">${r.units_on_hand}</td>
+                <td class="num">${r.velocity != null ? r.velocity.toFixed(2) : '-'}</td>
+                <td class="num">${r.days_of_cover != null ? r.days_of_cover.toFixed(0) : '-'}</td>
+                <td class="num">${r.unit_cost != null ? '$' + r.unit_cost.toFixed(2) : '-'}</td>
+                <td class="num">${r.value_tied_up != null ? '$' + Math.round(r.value_tied_up).toLocaleString() : '-'}</td>
+            </tr>`
+        ).join('');
+    }
+
+    function renderNoSalesTable(items) {
+        const tbody = document.getElementById('nosales-table');
+        document.getElementById('nosales-count').textContent = (items || []).length + ' items';
+        if (!items || !items.length) { tbody.innerHTML = '<tr><td colspan="6">No dead stock items</td></tr>'; return; }
+        tbody.innerHTML = items.slice(0, 50).map(r =>
+            `<tr class="clickable" onclick="openSkuModal('${esc(r.sku)}')">
+                <td><strong>${esc(r.sku)}</strong></td>
+                <td>${esc(r.brand || '-')}</td>
+                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.title || '')}">${esc(r.title || '-')}</td>
+                <td class="num">${r.units_on_hand}</td>
+                <td class="num">${r.unit_cost != null ? '$' + r.unit_cost.toFixed(2) : '-'}</td>
+                <td class="num">${r.value_tied_up != null ? '$' + Math.round(r.value_tied_up).toLocaleString() : '-'}</td>
+            </tr>`
+        ).join('');
+    }
+
+    function renderBrandHealthTable(brands) {
+        const tbody = document.getElementById('brand-health-table');
+        if (!brands || !brands.length) { tbody.innerHTML = '<tr><td colspan="8">No data</td></tr>'; return; }
+        tbody.innerHTML = brands.map(b => {
+            const total = b.total || 1;
+            return `<tr>
+                <td><strong>${esc(b.brand)}</strong></td>
+                <td class="num">${b.total}</td>
+                <td>${miniBar(b)}</td>
+                <td class="num">${b.reorder_now > 0 ? `<span class="badge critical">${b.reorder_now}</span>` : '0'}</td>
+                <td class="num">${b.reorder_soon > 0 ? `<span class="badge warning">${b.reorder_soon}</span>` : '0'}</td>
+                <td class="num">${b.adequate}</td>
+                <td class="num">${b.overstock > 0 ? `<span class="badge info">${b.overstock}</span>` : '0'}</td>
+                <td class="num">${b.no_sales}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function miniBar(b) {
+        const t = b.total || 1;
+        const segs = [
+            { pct: b.reorder_now / t * 100, color: '#b5342a' },
+            { pct: b.reorder_soon / t * 100, color: '#c49a4a' },
+            { pct: b.adequate / t * 100, color: '#1a7a3a' },
+            { pct: b.overstock / t * 100, color: '#1f6f6b' },
+            { pct: b.no_sales / t * 100, color: '#9e9e9e' },
+        ];
+        return `<div class="mini-bar">${segs.map(s => s.pct > 0 ? `<div class="seg" style="width:${s.pct}%;background:${s.color}"></div>` : '').join('')}</div>`;
+    }
+
+    /* ──────────────────────────────────────────
+       TAB 4: SKU SEARCH
+    ────────────────────────────────────────── */
+    async function doSkuSearch() {
+        const q = document.getElementById('sku-search').value.trim();
+        if (!q) return;
+        try {
+            const res = await fetch('/ml/inventory-sku-search?q=' + encodeURIComponent(q) + '&limit=20');
+            const json = await res.json();
+            const items = json.data || [];
+            document.getElementById('search-results-card').style.display = 'block';
+            document.getElementById('search-count').textContent = items.length + ' results';
+            const tbody = document.getElementById('search-table');
+            if (!items.length) { tbody.innerHTML = '<tr><td colspan="8">No results found</td></tr>'; return; }
+            tbody.innerHTML = items.map(r =>
+                `<tr class="clickable" onclick="openSkuModal('${esc(r.sku)}')">
+                    <td><strong>${esc(r.sku)}</strong></td>
+                    <td>${esc(r.brand || '-')}</td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.title || '')}">${esc(r.title || '-')}</td>
+                    <td class="num">${r.units_on_hand}</td>
+                    <td class="num">${r.velocity.toFixed(2)}</td>
+                    <td class="num">${r.days_of_cover.toFixed(0)}</td>
+                    <td>${suggestionBadge(r.suggestion)}</td>
+                    <td>${urgencyBadge(r.urgency)}</td>
+                </tr>`
+            ).join('');
+        } catch (e) {
+            console.error('Search error:', e);
+        }
+    }
+
+    /* ──────────────────────────────────────────
+       SKU MODAL
+    ────────────────────────────────────────── */
+    async function openSkuModal(sku) {
+        document.getElementById('sku-modal').classList.add('open');
+        document.getElementById('modal-content').innerHTML = '<div style="text-align:center;padding:40px;color:var(--slate)">Loading SKU details…</div>';
+        try {
+            const res = await fetch('/ml/inventory-sku-detail?sku=' + encodeURIComponent(sku));
+            const json = await res.json();
+            const d = json.data;
+            if (!d || !d.found) {
+                document.getElementById('modal-content').innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">SKU not found</div>';
+                return;
+            }
+            renderModal(d);
+        } catch (e) {
+            document.getElementById('modal-content').innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">Error loading SKU</div>';
+        }
+    }
+
+    function renderModal(d) {
+        const sug = d.suggestion || {};
+        const inv = d.inventory || {};
+        const cost = d.cost_data || {};
+        const flags = d.flags || [];
+
+        let html = `<div class="modal-header">
+            <h2>${esc(d.sku)}</h2>
+            <div class="subtitle">${esc(sug.brand || inv.vendor || '-')} · ${esc(sug.title || '-')}</div>
+        </div>`;
+
+        // ML flags
+        if (flags.length) {
+            html += '<div class="flag-pills">';
+            flags.forEach(f => { html += `<span class="flag-pill ${f.type}" title="${esc(f.detail)}">${esc(f.label)}</span>`; });
+            html += '</div>';
+        }
+
+        // Stats
+        html += '<div class="modal-stats">';
+        html += modalStat('On Hand', sug.units_on_hand ?? inv.quantity ?? '-');
+        html += modalStat('Velocity (30d)', sug.velocity != null ? sug.velocity.toFixed(2) + '/day' : '-');
+        html += modalStat('Days Cover', sug.days_of_cover != null ? sug.days_of_cover.toFixed(0) + ' days' : '-');
+        html += modalStat('Unit Cost', d.unit_cost != null ? '$' + d.unit_cost.toFixed(2) : '-');
+        html += modalStat('Inventory Value', d.inventory_value != null ? '$' + Math.round(d.inventory_value).toLocaleString() : '-');
+        html += modalStat('Revenue (30d)', '$' + Math.round(d.revenue_30d || 0).toLocaleString(), d.units_sold_30d + ' units');
+        html += '</div>';
+
+        // Status row
+        if (sug.suggestion) {
+            html += `<div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;">
+                <strong>Status:</strong> ${suggestionBadge(sug.suggestion)}
+                ${urgencyBadge(sug.urgency)}
+                ${trendBadge(sug.velocity_trend)}
+                ${sug.reorder_quantity ? `<span style="font-size:13px;color:var(--ink-soft);">Reorder: <strong>${sug.reorder_quantity} units</strong></span>` : ''}
+            </div>`;
+        }
+
+        // Sparkline
+        if (d.spark_data && d.spark_data.length) {
+            html += '<div class="modal-section"><h3>Daily Sales (30 days)</h3>';
+            html += renderSparklineSVG(d.spark_data, 700, 60);
+            html += '</div>';
+        }
+
+        // Cost breakdown
+        if (cost.nett_nett_cost || cost.rrp || cost.invoice_price) {
+            html += '<div class="modal-section"><h3>Cost Breakdown</h3><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;">';
+            if (cost.rrp) html += modalStat('RRP', '$' + cost.rrp.toFixed(2));
+            if (cost.invoice_price) html += modalStat('Invoice', '$' + cost.invoice_price.toFixed(2));
+            if (cost.nett_nett_cost) html += modalStat('Nett Nett', '$' + cost.nett_nett_cost.toFixed(2));
+            if (cost.active_cost) html += modalStat('Active Cost', '$' + cost.active_cost.toFixed(2));
+            if (cost.margin_pct != null) html += modalStat('Margin', cost.margin_pct.toFixed(1) + '%', cost.min_margin_pct ? 'Min: ' + cost.min_margin_pct + '%' : '');
+            if (cost.has_special) html += modalStat('Special', '$' + (cost.special_cost || 0).toFixed(2), cost.special_end_date ? 'Ends: ' + cost.special_end_date : '');
+            html += '</div></div>';
+        }
+
+        // Recent orders
+        if (d.recent_orders && d.recent_orders.length) {
+            html += '<div class="modal-section"><h3>Recent Orders (90 days)</h3>';
+            html += '<table><thead><tr><th>Date</th><th>Order #</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Total</th></tr></thead><tbody>';
+            d.recent_orders.forEach(o => {
+                html += `<tr>
+                    <td>${o.date || '-'}</td>
+                    <td>${o.order_number || '-'}</td>
+                    <td class="num">${o.quantity}</td>
+                    <td class="num">$${o.price.toFixed(2)}</td>
+                    <td class="num">$${o.total.toFixed(2)}</td>
+                </tr>`;
+            });
+            html += '</tbody></table></div>';
+        }
+
+        document.getElementById('modal-content').innerHTML = html;
+    }
+
+    function closeModal() {
+        document.getElementById('sku-modal').classList.remove('open');
+    }
+
+    /* ──────────────────────────────────────────
+       HELPERS
+    ────────────────────────────────────────── */
+    function modalStat(label, value, sub) {
+        return `<div class="modal-stat">
+            <div class="label">${label}</div>
+            <div class="val">${value}</div>
+            ${sub ? `<div class="sub">${sub}</div>` : ''}
+        </div>`;
+    }
+
+    function trendBadge(trend) {
+        if (trend === 'increasing') return '<span class="badge ok" title="7d velocity > 125% of 30d">&#9650; Increasing</span>';
+        if (trend === 'decreasing') return '<span class="badge critical" title="7d velocity < 75% of 30d">&#9660; Decreasing</span>';
+        if (trend === 'stable') return '<span class="badge neutral">&#9644; Stable</span>';
+        return '<span class="badge neutral">-</span>';
+    }
+
+    function urgencyBadge(urgency) {
+        if (urgency === 'critical') return '<span class="badge critical">Critical</span>';
+        if (urgency === 'warning') return '<span class="badge warning">Warning</span>';
+        return '<span class="badge ok">OK</span>';
+    }
+
+    function suggestionBadge(s) {
+        const map = {
+            reorder_now: ['critical', 'Reorder Now'],
+            reorder_soon: ['warning', 'Reorder Soon'],
+            adequate: ['ok', 'Adequate'],
+            overstock: ['info', 'Overstock'],
+            no_sales: ['neutral', 'No Sales'],
+        };
+        const [cls, label] = map[s] || ['neutral', s || '-'];
+        return `<span class="badge ${cls}">${label}</span>`;
+    }
+
+    function esc(s) {
+        if (s == null) return '';
+        const d = document.createElement('div');
+        d.textContent = String(s);
+        return d.innerHTML;
+    }
+
+    function renderSparklineSVG(data, width, height) {
+        if (!data || !data.length) return '';
+        const max = Math.max(...data, 1);
+        const stepX = width / (data.length - 1 || 1);
+        const points = data.map((v, i) => `${i * stepX},${height - (v / max) * (height - 4)}`).join(' ');
+        const fillPoints = `0,${height} ${points} ${(data.length - 1) * stepX},${height}`;
+        const trending = data[data.length - 1] >= data[0];
+        const stroke = trending ? 'var(--green)' : 'var(--red)';
+        const fill = trending ? 'rgba(26,122,58,0.08)' : 'rgba(181,52,42,0.08)';
+        return `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" style="display:block;">
+            <polygon points="${fillPoints}" fill="${fill}"/>
+            <polyline points="${points}" fill="none" stroke="${stroke}" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>`;
+    }
+
+    /* ──────────────────────────────────────────
+       CSV EXPORT
+    ────────────────────────────────────────── */
+    function exportCsv() {
+        if (!allItems.length) { alert('No data to export'); return; }
+        const rows = [['SKU','Brand','Title','On Hand','Velocity','Trend','Days Cover','Suggestion','Reorder Qty','Urgency']];
+        allItems.forEach(item => {
+            rows.push([
+                item.sku || '', item.brand || '', item.title || '',
+                item.units_on_hand ?? '', item.daily_sales_velocity ?? '',
+                item.velocity_trend || '', item.days_of_cover ?? '',
+                item.suggestion || '', item.reorder_quantity ?? '', item.urgency || ''
+            ]);
+        });
+        const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'inventory_intelligence.csv';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    /* ──────────────────────────────────────────
+       KEYBOARD
+    ────────────────────────────────────────── */
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape') closeModal();
+    });
+
+    /* ──────────────────────────────────────────
+       INIT
+    ────────────────────────────────────────── */
+    loadDashboard();
+    </script>
+</body>
+</html>

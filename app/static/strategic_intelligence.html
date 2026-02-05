@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Strategic Intelligence | Cass Brothers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+    --ink: #1c1b1f;
+    --ink-soft: #3d3a40;
+    --slate: #6b6670;
+    --card: #ffffff;
+    --line: rgba(27,27,27,0.08);
+    --shadow: 0 1px 3px rgba(17,18,19,0.04), 0 8px 24px rgba(17,18,19,0.06);
+    --shadow-lg: 0 4px 12px rgba(17,18,19,0.05), 0 20px 48px rgba(17,18,19,0.08);
+    --cass-black: #1b1b1b;
+    --cass-cream: #f7f3ed;
+    --cass-gold: #c49a4a;
+    --cass-teal: #1f6f6b;
+    --cass-moss: #2f3d33;
+    --green: #1a7a3a;
+    --green-bg: rgba(26,122,58,0.08);
+    --red: #b5342a;
+    --red-bg: rgba(181,52,42,0.08);
+    --amber: #8b6b1f;
+    --amber-bg: rgba(196,154,74,0.12);
+    --radius: 14px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: "IBM Plex Sans", "Space Grotesk", sans-serif;
+    background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+    color: var(--ink);
+    min-height: 100vh;
+}
+
+/* ── App Shell ── */
+.app-shell {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    min-height: 100vh;
+}
+.brand-bar {
+    grid-column: 1 / -1;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px;
+    background: var(--cass-black);
+    color: #f7f1e8;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+}
+.brand-bar h1 {
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 18px; font-weight: 700; letter-spacing: -0.3px;
+}
+.brand-bar h1 span { color: var(--cass-gold); }
+.brand-meta { font-size: 12px; color: rgba(255,255,255,0.5); }
+.side-nav {
+    padding: 24px 16px;
+    border-right: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.35) 100%);
+    overflow-y: auto;
+}
+.side-nav h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--slate); margin-bottom: 14px; padding-left: 12px;
+}
+.nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 10px;
+    font-size: 13px; color: var(--ink-soft);
+    margin-bottom: 4px; cursor: pointer;
+    transition: all 0.15s ease; text-decoration: none;
+}
+.nav-item:hover { background: rgba(27,27,27,0.04); }
+.nav-item.active {
+    background: var(--cass-black); color: #f7f1e8;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+}
+.nav-item span {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--cass-gold); opacity: 0.6; flex-shrink: 0;
+}
+.nav-item.active span { opacity: 1; }
+
+/* ── Main Area ── */
+.main-area {
+    padding: 28px 32px 48px;
+    display: flex; flex-direction: column; gap: 20px;
+    overflow-y: auto;
+}
+.page-header {
+    display: flex; align-items: center; justify-content: space-between;
+}
+.page-title {
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 24px; font-weight: 700; letter-spacing: -0.5px;
+}
+.header-actions { display: flex; gap: 10px; align-items: center; }
+.gen-btn {
+    padding: 8px 18px; border-radius: 10px; border: none;
+    background: var(--cass-gold); color: #fff;
+    font-family: "Space Grotesk"; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+}
+.gen-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+.gen-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.last-updated { font-size: 12px; color: var(--slate); }
+
+/* ── Tab Bar ── */
+.tab-bar {
+    display: flex; gap: 4px;
+    background: rgba(0,0,0,0.04);
+    border-radius: 14px; padding: 4px;
+    align-self: flex-start;
+}
+.tab-btn {
+    padding: 9px 20px; border: none; background: none;
+    border-radius: 12px; font-size: 13px; font-weight: 600;
+    color: var(--slate); cursor: pointer;
+    transition: all 0.2s; font-family: "Space Grotesk", sans-serif;
+    white-space: nowrap;
+}
+.tab-btn:hover { color: var(--ink); background: rgba(255,255,255,0.5); }
+.tab-btn.active {
+    background: var(--cass-black); color: #f7f1e8;
+    box-shadow: var(--shadow);
+}
+.tab-panel { display: none; flex-direction: column; gap: 20px; }
+.tab-panel.active { display: flex; }
+
+/* ── Pulse Banner ── */
+.pulse-banner {
+    display: flex; align-items: center; gap: 14px;
+    padding: 20px 24px;
+    background: linear-gradient(135deg, var(--cass-black) 0%, #2a2a2a 100%);
+    color: #f7f1e8; border-radius: var(--radius);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+}
+.pulse-text { flex: 1; font-size: 15px; line-height: 1.65; }
+.status-chip {
+    padding: 5px 14px; border-radius: 999px;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.5px;
+    text-transform: uppercase; white-space: nowrap;
+}
+.status-thriving { background: rgba(26,122,58,0.25); color: #5cdb8a; }
+.status-stable { background: rgba(31,111,107,0.25); color: #5ecec8; }
+.status-at_risk { background: rgba(196,154,74,0.25); color: #e8c75e; }
+.status-critical { background: rgba(181,52,42,0.25); color: #f57272; }
+
+/* ── KPI Cards ── */
+.kpi-grid {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px;
+}
+.kpi-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 16px 18px; box-shadow: var(--shadow);
+    border: 1px solid var(--line);
+    display: flex; flex-direction: column; gap: 4px;
+}
+.kpi-label {
+    font-size: 11px; color: var(--slate);
+    text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;
+}
+.kpi-value {
+    font-family: "Space Grotesk"; font-size: 24px; font-weight: 700;
+    letter-spacing: -0.3px;
+}
+.kpi-delta { font-size: 12px; font-weight: 500; }
+.kpi-delta.up { color: var(--green); }
+.kpi-delta.down { color: var(--red); }
+
+/* ── Section Card ── */
+.section-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 22px; box-shadow: var(--shadow);
+    border: 1px solid var(--line);
+}
+.section-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+}
+.section-header h3 {
+    font-family: "Space Grotesk"; font-size: 15px; font-weight: 600;
+}
+.section-badge {
+    font-size: 11px; padding: 3px 10px; border-radius: 999px;
+    background: rgba(27,27,27,0.05); color: var(--slate); font-weight: 500;
+}
+.section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.full-width { grid-column: 1 / -1; }
+
+/* ── Priority Cards ── */
+.priority-list { display: flex; flex-direction: column; gap: 14px; }
+.priority-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 18px 20px; box-shadow: var(--shadow);
+    border: 1px solid var(--line);
+    display: flex; gap: 16px; align-items: flex-start;
+    transition: transform 0.15s; cursor: default;
+}
+.priority-card:hover { transform: translateY(-1px); }
+.priority-num {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--cass-gold); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Space Grotesk"; font-size: 16px; font-weight: 700;
+    flex-shrink: 0;
+}
+.priority-body { flex: 1; }
+.priority-title {
+    font-family: "Space Grotesk"; font-size: 15px; font-weight: 700;
+    margin-bottom: 6px;
+}
+.priority-why {
+    font-size: 13px; color: var(--ink-soft); line-height: 1.5;
+    margin-bottom: 8px;
+}
+.priority-action {
+    background: rgba(31,111,107,0.06); border-left: 3px solid var(--cass-teal);
+    padding: 10px 14px; border-radius: 0 8px 8px 0;
+    font-size: 13px; color: var(--cass-teal); line-height: 1.5;
+    margin-bottom: 10px;
+}
+.priority-meta {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.meta-badge {
+    font-size: 11px; padding: 3px 10px; border-radius: 999px;
+    font-weight: 600;
+}
+.meta-impact { background: rgba(26,122,58,0.1); color: var(--green); }
+.meta-effort { background: rgba(27,27,27,0.06); color: var(--slate); }
+.meta-urgency-today { background: var(--red-bg); color: var(--red); }
+.meta-urgency-this_week { background: var(--amber-bg); color: var(--amber); }
+.meta-urgency-this_month { background: rgba(31,111,107,0.1); color: var(--cass-teal); }
+.status-toggle {
+    display: inline-flex; gap: 4px; margin-left: auto;
+}
+.status-toggle button {
+    font-size: 10px; padding: 3px 8px; border-radius: 999px;
+    border: 1px solid var(--line); background: none;
+    color: var(--slate); cursor: pointer; font-weight: 600;
+    transition: all 0.12s;
+}
+.status-toggle button.active-status {
+    background: var(--cass-teal); color: #fff; border-color: var(--cass-teal);
+}
+
+/* ── Markdown Renderer ── */
+.md-content h2 {
+    font-family: "Space Grotesk"; font-size: 17px; font-weight: 700;
+    margin: 20px 0 10px; color: var(--ink);
+    border-bottom: 2px solid var(--cass-gold); padding-bottom: 6px;
+}
+.md-content h3 {
+    font-family: "Space Grotesk"; font-size: 14px; font-weight: 700;
+    margin: 16px 0 8px; color: var(--cass-teal);
+}
+.md-content p { font-size: 13.5px; line-height: 1.6; margin-bottom: 8px; color: var(--ink-soft); }
+.md-content strong { color: var(--ink); font-weight: 600; }
+.md-content ul, .md-content ol { padding-left: 20px; margin-bottom: 10px; }
+.md-content li { font-size: 13px; line-height: 1.6; margin-bottom: 4px; color: var(--ink-soft); }
+.md-content table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
+.md-content th {
+    text-align: left; padding: 8px 10px;
+    background: rgba(27,27,27,0.03); border-bottom: 2px solid var(--line);
+    font-weight: 600; text-transform: uppercase; font-size: 10.5px;
+    letter-spacing: 0.5px; color: var(--slate);
+}
+.md-content td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+
+/* ── Correlation Chain ── */
+.correlation-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 18px 20px; box-shadow: var(--shadow);
+    border: 1px solid var(--line); margin-bottom: 14px;
+}
+.corr-chain {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+.corr-node {
+    padding: 6px 14px; border-radius: 999px;
+    font-size: 12px; font-weight: 600;
+    background: rgba(31,111,107,0.1); color: var(--cass-teal);
+}
+.corr-arrow { color: var(--cass-gold); font-weight: 700; font-size: 16px; }
+.corr-narrative { font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+.corr-meta {
+    display: flex; gap: 12px; margin-top: 8px; font-size: 11px; color: var(--slate);
+}
+
+/* ── Issue Card ── */
+.issue-card {
+    background: var(--card); border-radius: var(--radius);
+    padding: 16px 18px; box-shadow: var(--shadow);
+    border: 1px solid var(--line); margin-bottom: 12px;
+}
+.issue-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+}
+.severity-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 999px;
+    font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+}
+.sev-critical { background: var(--red-bg); color: var(--red); }
+.sev-high { background: var(--amber-bg); color: var(--amber); }
+.sev-medium { background: rgba(31,111,107,0.1); color: var(--cass-teal); }
+.sev-low { background: rgba(27,27,27,0.05); color: var(--slate); }
+.issue-title {
+    font-family: "Space Grotesk"; font-size: 13.5px; font-weight: 600;
+}
+.issue-module {
+    font-size: 11px; color: var(--slate); margin-left: auto;
+    padding: 2px 8px; border-radius: 999px;
+    background: rgba(27,27,27,0.05);
+}
+.issue-desc { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 6px; line-height: 1.5; }
+.issue-fix {
+    background: rgba(31,111,107,0.05); padding: 8px 12px;
+    border-radius: 8px; font-size: 12px; color: var(--cass-teal);
+    line-height: 1.5; margin-bottom: 6px;
+}
+.issue-meta { font-size: 11px; color: var(--slate); display: flex; gap: 14px; }
+
+/* ── Filter Bar ── */
+.filter-bar {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.filter-bar select {
+    padding: 7px 12px; border-radius: 8px;
+    border: 1px solid var(--line); font-size: 12px;
+    font-family: "IBM Plex Sans"; background: var(--card);
+    color: var(--ink);
+}
+
+/* ── Summary Bar ── */
+.summary-bar {
+    display: flex; gap: 16px; padding: 12px 18px;
+    background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow); border: 1px solid var(--line);
+}
+.summary-item { font-size: 13px; font-weight: 600; }
+.summary-item .count {
+    font-family: "Space Grotesk"; font-size: 18px; font-weight: 700;
+}
+
+/* ── Week Sparkline ── */
+.sparkline-row {
+    display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap;
+}
+.metric-trend {
+    background: var(--card); border-radius: var(--radius);
+    padding: 14px 16px; box-shadow: var(--shadow);
+    border: 1px solid var(--line); flex: 1; min-width: 140px;
+}
+.trend-label { font-size: 11px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+.trend-value { font-family: "Space Grotesk"; font-size: 20px; font-weight: 700; }
+.trend-delta { font-size: 12px; font-weight: 500; }
+
+/* ── Loading Overlay ── */
+.loading-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(6px); z-index: 2000;
+    display: none; justify-content: center; align-items: center;
+}
+.loading-overlay.show { display: flex; }
+.loading-box {
+    background: var(--card); border-radius: 18px;
+    padding: 40px 50px; text-align: center;
+    box-shadow: var(--shadow-lg);
+}
+.loading-spinner {
+    width: 48px; height: 48px; border: 4px solid var(--line);
+    border-top: 4px solid var(--cass-gold);
+    border-radius: 50%; animation: spin 1s linear infinite;
+    margin: 0 auto 16px;
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.loading-text {
+    font-family: "Space Grotesk"; font-size: 15px; font-weight: 600;
+    color: var(--ink);
+}
+.loading-sub { font-size: 12px; color: var(--slate); margin-top: 6px; }
+
+/* ── Data Quality Bar ── */
+.dq-bar {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 12px; color: var(--slate);
+}
+.dq-score {
+    font-family: "Space Grotesk"; font-weight: 700;
+    font-size: 14px;
+}
+.dq-modules { font-size: 11px; }
+
+/* ── Responsive ── */
+@media (max-width: 1100px) {
+    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+    .section-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 800px) {
+    .app-shell { grid-template-columns: 1fr; }
+    .side-nav { display: none; }
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+    <!-- Brand Bar -->
+    <header class="brand-bar">
+        <h1><span>&#9670;</span> Cass Brothers &mdash; Strategic Intelligence</h1>
+        <div class="brand-meta">AI-Powered Intelligence Brief &middot; <span id="lastUpdated">--</span></div>
+    </header>
+
+    <!-- Side Navigation -->
+    <nav class="side-nav">
+        <h2>Dashboards</h2>
+        <a class="nav-item" href="/dashboard"><span></span> Overview</a>
+        <a class="nav-item" href="/performance"><span></span> Performance</a>
+        <a class="nav-item" href="/seo-dashboard"><span></span> SEO &amp; Content</a>
+        <a class="nav-item" href="/ads-intelligence"><span></span> Ads Intelligence</a>
+        <a class="nav-item" href="/finance-dashboard"><span></span> Finance</a>
+        <a class="nav-item" href="/inventory"><span></span> Inventory</a>
+        <a class="nav-item" href="/pricing-intel"><span></span> Pricing Intel</a>
+        <a class="nav-item" href="/customer-intelligence"><span></span> Customer Intel</a>
+        <a class="nav-item" href="/merchant-center-intel"><span></span> Merchant Center</a>
+        <a class="nav-item active" href="/strategic-intelligence"><span></span> Intelligence Brief</a>
+        <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
+            <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-area">
+        <!-- Page Header -->
+        <div class="page-header">
+            <div>
+                <div class="page-title">Strategic Intelligence Brief</div>
+                <div class="dq-bar">
+                    <span>Data Quality: <span class="dq-score" id="dqScore">--</span>/100</span>
+                    <span class="dq-modules" id="dqModules">0/16 modules reporting</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="gen-btn" id="btnGenDaily" onclick="generateBrief('daily')">Generate Daily Brief</button>
+                <button class="gen-btn" id="btnGenWeekly" onclick="generateBrief('weekly')" style="background:var(--cass-teal)">Generate Weekly Brief</button>
+            </div>
+        </div>
+
+        <!-- Tab Bar -->
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="daily">Today's Brief</button>
+            <button class="tab-btn" data-tab="weekly">Weekly Strategy</button>
+            <button class="tab-btn" data-tab="growth">Growth Engine</button>
+            <button class="tab-btn" data-tab="issues">Issue Center</button>
+            <button class="tab-btn" data-tab="insights">AI Insights</button>
+        </div>
+
+        <!-- ═══════════ TAB 1: Today's Brief ═══════════ -->
+        <div class="tab-panel active" id="tab-daily">
+            <div class="pulse-banner" id="pulseBanner">
+                <div class="pulse-text" id="pulseText">Generate a daily brief to see your AI-powered intelligence briefing.</div>
+                <div class="status-chip status-stable" id="statusChip">Stable</div>
+            </div>
+
+            <div class="kpi-grid" id="kpiGrid">
+                <div class="kpi-card"><div class="kpi-label">Revenue (7d)</div><div class="kpi-value" id="kpiRev7d">--</div><div class="kpi-delta" id="kpiRev7dD"></div></div>
+                <div class="kpi-card"><div class="kpi-label">Orders (7d)</div><div class="kpi-value" id="kpiOrd7d">--</div><div class="kpi-delta" id="kpiOrd7dD"></div></div>
+                <div class="kpi-card"><div class="kpi-label">Conversion Rate</div><div class="kpi-value" id="kpiCvr">--</div><div class="kpi-delta" id="kpiCvrD"></div></div>
+                <div class="kpi-card"><div class="kpi-label">AOV (7d)</div><div class="kpi-value" id="kpiAov">--</div><div class="kpi-delta" id="kpiAovD"></div></div>
+                <div class="kpi-card"><div class="kpi-label">Sessions (7d)</div><div class="kpi-value" id="kpiSess">--</div><div class="kpi-delta" id="kpiSessD"></div></div>
+                <div class="kpi-card"><div class="kpi-label">Cart Abandon</div><div class="kpi-value" id="kpiCart">--</div><div class="kpi-delta" id="kpiCartD"></div></div>
+            </div>
+
+            <div class="section-card full-width">
+                <div class="section-header">
+                    <h3>Today's Top Priorities</h3>
+                    <div class="section-badge" id="priorityCount">0 priorities</div>
+                </div>
+                <div class="priority-list" id="priorityList">
+                    <div style="color:var(--slate);text-align:center;padding:20px;">No priorities yet. Generate a daily brief to get AI-powered recommendations.</div>
+                </div>
+            </div>
+
+            <div class="section-grid">
+                <div class="section-card">
+                    <div class="section-header">
+                        <h3>What's Working</h3>
+                        <div class="section-badge" style="background:var(--green-bg);color:var(--green)">Protect</div>
+                    </div>
+                    <div id="whatsWorking" style="font-size:13px;color:var(--ink-soft);">Generate a brief to see high performers.</div>
+                </div>
+                <div class="section-card">
+                    <div class="section-header">
+                        <h3>Watch List</h3>
+                        <div class="section-badge" style="background:var(--amber-bg);color:var(--amber)">Monitor</div>
+                    </div>
+                    <div id="watchList" style="font-size:13px;color:var(--ink-soft);">Generate a brief to see emerging concerns.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════ TAB 2: Weekly Strategy ═══════════ -->
+        <div class="tab-panel" id="tab-weekly">
+            <div class="pulse-banner" id="weeklyPulse">
+                <div class="pulse-text" id="weeklyPulseText">Generate a weekly brief for your strategic analysis.</div>
+                <div class="status-chip status-stable" id="weeklyStatusChip">Stable</div>
+            </div>
+
+            <div class="sparkline-row" id="weeklyMetrics">
+                <div class="metric-trend"><div class="trend-label">Revenue (7d)</div><div class="trend-value" id="wRev">--</div><div class="trend-delta" id="wRevD"></div></div>
+                <div class="metric-trend"><div class="trend-label">Orders (7d)</div><div class="trend-value" id="wOrd">--</div><div class="trend-delta" id="wOrdD"></div></div>
+                <div class="metric-trend"><div class="trend-label">CVR</div><div class="trend-value" id="wCvr">--</div><div class="trend-delta" id="wCvrD"></div></div>
+                <div class="metric-trend"><div class="trend-label">AOV</div><div class="trend-value" id="wAov">--</div><div class="trend-delta" id="wAovD"></div></div>
+                <div class="metric-trend"><div class="trend-label">Sessions</div><div class="trend-value" id="wSess">--</div><div class="trend-delta" id="wSessD"></div></div>
+                <div class="metric-trend"><div class="trend-label">Customers At Risk</div><div class="trend-value" id="wRisk">--</div><div class="trend-delta" id="wRiskD"></div></div>
+            </div>
+
+            <div class="section-card full-width">
+                <div class="section-header">
+                    <h3>This Week's Strategic Priorities</h3>
+                    <div class="section-badge" id="weeklyPriorityCount">0 priorities</div>
+                </div>
+                <div class="priority-list" id="weeklyPriorityList">
+                    <div style="color:var(--slate);text-align:center;padding:20px;">Generate a weekly brief to see strategic priorities.</div>
+                </div>
+            </div>
+
+            <div class="section-card full-width">
+                <div class="section-header"><h3>Cross-Module Correlations</h3></div>
+                <div id="weeklyCorrelations">
+                    <div style="color:var(--slate);font-size:13px;">No correlations detected yet.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════ TAB 3: Growth Engine ═══════════ -->
+        <div class="tab-panel" id="tab-growth">
+            <div class="section-card full-width">
+                <div class="section-header">
+                    <h3>Conversion Funnel</h3>
+                    <div class="section-badge" id="funnelGrade">--</div>
+                </div>
+                <div id="funnelChart" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 0;">
+                    <div style="color:var(--slate);font-size:13px;">Generate a brief to see the conversion funnel.</div>
+                </div>
+            </div>
+
+            <div class="section-card full-width">
+                <div class="section-header"><h3>CRO Analysis</h3></div>
+                <div class="md-content" id="croContent">
+                    <p style="color:var(--slate);">Generate a daily or weekly brief to get your AI-powered CRO deep-dive.</p>
+                </div>
+            </div>
+
+            <div class="section-card full-width" id="growthPlaybookSection" style="display:none;">
+                <div class="section-header"><h3>Growth Playbook</h3><div class="section-badge" style="background:rgba(31,111,107,0.1);color:var(--cass-teal);">Weekly</div></div>
+                <div class="md-content" id="growthContent">
+                    <p style="color:var(--slate);">Generate a weekly brief to get the growth playbook.</p>
+                </div>
+            </div>
+
+            <div class="section-card full-width">
+                <div class="section-header"><h3>Quick Wins (Fix in Under 1 Hour)</h3></div>
+                <div id="quickWinsList" style="font-size:13px;color:var(--slate);">Generate a brief to see quick wins.</div>
+            </div>
+        </div>
+
+        <!-- ═══════════ TAB 4: Issue Command Center ═══════════ -->
+        <div class="tab-panel" id="tab-issues">
+            <div class="summary-bar" id="issueSummary">
+                <div class="summary-item"><div class="count" style="color:var(--red);" id="issCritical">0</div>Critical</div>
+                <div class="summary-item"><div class="count" style="color:var(--amber);" id="issHigh">0</div>High</div>
+                <div class="summary-item"><div class="count" style="color:var(--cass-teal);" id="issMedium">0</div>Medium</div>
+                <div class="summary-item"><div class="count" style="color:var(--green);" id="issResolved">0</div>Resolved</div>
+                <div class="summary-item" style="margin-left:auto;"><div class="count" id="issTotalOpp">$0</div>Total Opportunity</div>
+            </div>
+
+            <div class="section-card full-width">
+                <div class="section-header"><h3>Issue Triage (AI-Powered)</h3></div>
+                <div class="md-content" id="issueTriageContent">
+                    <p style="color:var(--slate);">Generate a brief to see the AI-powered issue triage.</p>
+                </div>
+            </div>
+
+            <div class="section-card full-width">
+                <div class="section-header"><h3>All Detected Issues</h3><div class="section-badge" id="issueCount">0 issues</div></div>
+                <div id="issueList">
+                    <div style="color:var(--slate);text-align:center;padding:20px;font-size:13px;">No issues detected yet.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════ TAB 5: AI Insights ═══════════ -->
+        <div class="tab-panel" id="tab-insights">
+            <div class="section-card full-width">
+                <div class="section-header"><h3>Cross-Module Correlations</h3></div>
+                <div id="correlationChains">
+                    <div style="color:var(--slate);font-size:13px;">Generate a brief to detect cross-module patterns.</div>
+                </div>
+            </div>
+
+            <div class="section-card full-width">
+                <div class="section-header"><h3>AI Strategic Insights</h3><div class="section-badge" style="background:rgba(196,154,74,0.12);color:var(--cass-gold);">LLM-Powered</div></div>
+                <div class="md-content" id="strategicInsightsContent">
+                    <p style="color:var(--slate);">Generate a brief for AI-powered strategic analysis.</p>
+                </div>
+            </div>
+
+            <div class="section-grid">
+                <div class="section-card">
+                    <div class="section-header"><h3>What's Working</h3></div>
+                    <div id="insightsWorking" style="font-size:13px;color:var(--slate);">No data yet.</div>
+                </div>
+                <div class="section-card">
+                    <div class="section-header"><h3>Watch List</h3></div>
+                    <div id="insightsWatch" style="font-size:13px;color:var(--slate);">No data yet.</div>
+                </div>
+            </div>
+
+            <div class="section-card full-width">
+                <div class="section-header"><h3>Data Confidence</h3></div>
+                <div id="dataConfidence" style="font-size:13px;color:var(--slate);">
+                    Generate a brief to see data quality and module coverage.
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-box">
+        <div class="loading-spinner"></div>
+        <div class="loading-text" id="loadingText">Generating Intelligence Brief...</div>
+        <div class="loading-sub">Collecting data from 16 modules + running AI analysis</div>
+    </div>
+</div>
+
+<script>
+// ── State ──
+let DAILY = null;
+let WEEKLY = null;
+
+// ── Helpers ──
+function fmt(n) { return (n || 0).toLocaleString('en-AU'); }
+function fmtD(n) { return '$' + (n || 0).toLocaleString('en-AU', {minimumFractionDigits: 0, maximumFractionDigits: 0}); }
+function fmtPct(n) { return (n || 0).toFixed(2) + '%'; }
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function delta(curr, prev) {
+    if (!prev || prev === 0) return '';
+    const pct = ((curr - prev) / prev * 100);
+    const cls = pct >= 0 ? 'up' : 'down';
+    const arrow = pct >= 0 ? '&#9650;' : '&#9660;';
+    return `<span class="kpi-delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</span>`;
+}
+
+// Simple markdown renderer
+function renderMd(md) {
+    if (!md) return '<p style="color:var(--slate);">No analysis available.</p>';
+    return md
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^# (.+)$/gm, '<h2>$1</h2>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^\- (.+)$/gm, '<li>$1</li>')
+        .replace(/^\d+\. (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+        .replace(/\n{2,}/g, '</p><p>')
+        .replace(/\n/g, '<br>')
+        .replace(/^(?!<[hup])/gm, '<p>')
+        .replace(/(<p><\/p>)/g, '');
+}
+
+// ── Tab Switching ──
+const tabBtns = document.querySelectorAll('.tab-btn');
+const tabPanels = document.querySelectorAll('.tab-panel');
+tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        tabPanels.forEach(p => p.classList.toggle('active', p.id === 'tab-' + tab));
+        // Load data for tab if needed
+        if (tab === 'weekly' && !WEEKLY) loadBrief('weekly');
+        if (tab === 'growth' && !DAILY && !WEEKLY) loadBrief('daily');
+        if (tab === 'issues' && !DAILY && !WEEKLY) loadBrief('daily');
+        if (tab === 'insights' && !DAILY && !WEEKLY) loadBrief('daily');
+    });
+});
+
+// ── Data Loading ──
+async function loadBrief(cadence) {
+    try {
+        const resp = await fetch(`/intelligence/${cadence}/current`);
+        const json = await resp.json();
+        if (!json.success || !json.data) return;
+        if (cadence === 'daily') {
+            DAILY = json.data;
+            renderDaily();
+        } else {
+            WEEKLY = json.data;
+            renderWeekly();
+        }
+        updateSharedSections();
+    } catch (err) {
+        console.error('Load error:', err);
+    }
+}
+
+async function generateBrief(cadence) {
+    const overlay = document.getElementById('loadingOverlay');
+    const text = document.getElementById('loadingText');
+    text.textContent = `Generating ${cadence} intelligence brief...`;
+    overlay.classList.add('show');
+
+    document.getElementById('btnGenDaily').disabled = true;
+    document.getElementById('btnGenWeekly').disabled = true;
+
+    try {
+        const resp = await fetch(`/intelligence/${cadence}/generate`, { method: 'POST' });
+        const json = await resp.json();
+        if (json.success && json.data) {
+            if (cadence === 'daily') {
+                DAILY = json.data;
+                renderDaily();
+            } else {
+                WEEKLY = json.data;
+                renderWeekly();
+            }
+            updateSharedSections();
+        }
+    } catch (err) {
+        console.error('Generate error:', err);
+    } finally {
+        overlay.classList.remove('show');
+        document.getElementById('btnGenDaily').disabled = false;
+        document.getElementById('btnGenWeekly').disabled = false;
+    }
+}
+
+// ── Render: Daily Tab ──
+function renderDaily() {
+    if (!DAILY) return;
+    const d = DAILY;
+    const kpi = d.kpi_snapshot || {};
+
+    // Updated timestamp
+    document.getElementById('lastUpdated').textContent = d.generated_at
+        ? new Date(d.generated_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    // Data quality
+    document.getElementById('dqScore').textContent = d.data_quality_score || 0;
+    const succeeded = (d.modules_succeeded || []).length;
+    document.getElementById('dqModules').textContent = `${succeeded}/16 modules reporting`;
+
+    // Pulse
+    document.getElementById('pulseText').innerHTML = esc(d.executive_pulse || 'Brief generated. Review priorities below.');
+    const status = d.health_status || 'stable';
+    const chip = document.getElementById('statusChip');
+    chip.textContent = status.replace('_', ' ').toUpperCase();
+    chip.className = 'status-chip status-' + status;
+
+    // KPIs
+    document.getElementById('kpiRev7d').textContent = fmtD(kpi.revenue_7d);
+    document.getElementById('kpiRev7dD').innerHTML = delta(kpi.revenue_7d, kpi.revenue_prev_7d);
+    document.getElementById('kpiOrd7d').textContent = fmt(kpi.orders_7d);
+    document.getElementById('kpiCvr').textContent = fmtPct(kpi.conversion_rate_7d);
+    document.getElementById('kpiAov').textContent = fmtD(kpi.aov_7d);
+    document.getElementById('kpiSess').textContent = fmt(kpi.sessions_7d);
+    document.getElementById('kpiSessD').innerHTML = delta(kpi.sessions_7d, kpi.sessions_prev_7d);
+    document.getElementById('kpiCart').textContent = (kpi.cart_abandonment_rate || 0).toFixed(1) + '%';
+
+    // Priorities
+    const priorities = d.todays_priorities || [];
+    document.getElementById('priorityCount').textContent = priorities.length + ' priorities';
+    if (priorities.length) {
+        document.getElementById('priorityList').innerHTML = priorities.map((p, i) => `
+            <div class="priority-card">
+                <div class="priority-num">${p.rank || (i + 1)}</div>
+                <div class="priority-body">
+                    <div class="priority-title">${esc(p.title)}</div>
+                    <div class="priority-why">${esc(p.why || p.description || '')}</div>
+                    <div class="priority-action">${esc(p.action || p.specific_solution || '')}</div>
+                    <div class="priority-meta">
+                        ${p.estimated_impact ? `<span class="meta-badge meta-impact">${esc(p.estimated_impact)}</span>` : ''}
+                        ${p.effort ? `<span class="meta-badge meta-effort">${esc(p.effort)}</span>` : ''}
+                        ${p.urgency ? `<span class="meta-badge meta-urgency-${p.urgency}">${esc(p.urgency)}</span>` : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // What's Working
+    renderList('whatsWorking', d.whats_working, 'positive');
+    renderList('watchList', d.watch_list, 'risk');
+}
+
+// ── Render: Weekly Tab ──
+function renderWeekly() {
+    if (!WEEKLY) return;
+    const d = WEEKLY;
+    const kpi = d.kpi_snapshot || {};
+
+    // Pulse
+    document.getElementById('weeklyPulseText').innerHTML = esc(d.executive_pulse || 'Weekly brief generated.');
+    const status = d.health_status || 'stable';
+    const chip = document.getElementById('weeklyStatusChip');
+    chip.textContent = status.replace('_', ' ').toUpperCase();
+    chip.className = 'status-chip status-' + status;
+
+    // Metrics
+    document.getElementById('wRev').textContent = fmtD(kpi.revenue_7d);
+    document.getElementById('wRevD').innerHTML = delta(kpi.revenue_7d, kpi.revenue_prev_7d);
+    document.getElementById('wOrd').textContent = fmt(kpi.orders_7d);
+    document.getElementById('wCvr').textContent = fmtPct(kpi.conversion_rate_7d);
+    document.getElementById('wAov').textContent = fmtD(kpi.aov_7d);
+    document.getElementById('wSess').textContent = fmt(kpi.sessions_7d);
+    document.getElementById('wSessD').innerHTML = delta(kpi.sessions_7d, kpi.sessions_prev_7d);
+    document.getElementById('wRisk').textContent = fmt(kpi.at_risk_customers);
+
+    // Priorities
+    const priorities = d.todays_priorities || [];
+    document.getElementById('weeklyPriorityCount').textContent = priorities.length + ' priorities';
+    if (priorities.length) {
+        document.getElementById('weeklyPriorityList').innerHTML = priorities.map((p, i) => `
+            <div class="priority-card">
+                <div class="priority-num">${p.rank || (i + 1)}</div>
+                <div class="priority-body">
+                    <div class="priority-title">${esc(p.title)}</div>
+                    <div class="priority-why">${esc(p.why || '')}</div>
+                    <div class="priority-action">${esc(p.action || '')}</div>
+                    <div class="priority-meta">
+                        ${p.estimated_impact ? `<span class="meta-badge meta-impact">${esc(p.estimated_impact)}</span>` : ''}
+                        ${p.effort ? `<span class="meta-badge meta-effort">${esc(p.effort)}</span>` : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Correlations
+    renderCorrelations('weeklyCorrelations', d.cross_module_correlations);
+}
+
+// ── Render: Shared sections ──
+function updateSharedSections() {
+    const d = DAILY || WEEKLY;
+    if (!d) return;
+    const kpi = d.kpi_snapshot || {};
+
+    // Growth Engine — Funnel
+    const views = kpi.items_viewed_7d || 0;
+    const atc = kpi.add_to_carts_7d || 0;
+    const co = kpi.checkouts_7d || 0;
+    const pur = kpi.purchases_7d || 0;
+    const sess = kpi.sessions_7d || 0;
+
+    if (sess > 0) {
+        const stages = [
+            { label: 'Sessions', val: sess, color: 'var(--cass-black)' },
+            { label: 'Product Views', val: views, color: 'var(--cass-moss)' },
+            { label: 'Add to Cart', val: atc, color: 'var(--cass-teal)' },
+            { label: 'Checkout', val: co, color: 'var(--cass-gold)' },
+            { label: 'Purchase', val: pur, color: 'var(--green)' },
+        ];
+        const maxVal = Math.max(...stages.map(s => s.val), 1);
+        document.getElementById('funnelChart').innerHTML = stages.map((s, i) => {
+            const pct = (s.val / maxVal * 100).toFixed(0);
+            const dropoff = i > 0 && stages[i-1].val > 0
+                ? ((1 - s.val / stages[i-1].val) * 100).toFixed(1)
+                : null;
+            return `
+                <div style="flex:1;min-width:100px;text-align:center;">
+                    <div style="font-size:11px;color:var(--slate);font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">${s.label}</div>
+                    <div style="height:120px;display:flex;align-items:flex-end;justify-content:center;">
+                        <div style="width:60%;height:${pct}%;background:${s.color};border-radius:6px 6px 0 0;min-height:4px;"></div>
+                    </div>
+                    <div style="font-family:'Space Grotesk';font-size:18px;font-weight:700;margin-top:6px;">${fmt(s.val)}</div>
+                    ${dropoff !== null ? `<div style="font-size:11px;color:var(--red);margin-top:2px;">&darr; ${dropoff}% drop</div>` : ''}
+                </div>
+            `;
+        }).join('<div style="color:var(--cass-gold);font-size:20px;font-weight:700;align-self:center;">&#8594;</div>');
+    }
+
+    // CRO Analysis
+    document.getElementById('croContent').innerHTML = renderMd(d.conversion_analysis);
+
+    // Growth Playbook (weekly only)
+    if (WEEKLY && WEEKLY.growth_playbook) {
+        document.getElementById('growthPlaybookSection').style.display = 'block';
+        document.getElementById('growthContent').innerHTML = renderMd(WEEKLY.growth_playbook);
+    }
+
+    // Quick Wins
+    const qw = d.quick_wins || [];
+    if (qw.length) {
+        document.getElementById('quickWinsList').innerHTML = qw.map(q => `
+            <div style="padding:10px 0;border-bottom:1px solid var(--line);">
+                <div style="font-weight:600;font-size:13px;margin-bottom:3px;">${esc(q.title)}</div>
+                <div style="font-size:12px;color:var(--ink-soft);">${esc(q.suggested_action || '')}</div>
+                <div style="font-size:11px;color:var(--slate);margin-top:4px;">
+                    ${q.revenue_impact ? `<span style="color:var(--green);">+${fmtD(q.revenue_impact)}</span> &middot; ` : ''}
+                    ${q.effort_hours ? `${q.effort_hours}h effort` : ''}
+                    &middot; ${esc(q.source_module || '')}
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // Issues tab
+    const issues = d.issue_command_center || [];
+    const allInsights = (d.all_insights_count || 0);
+    document.getElementById('issCritical').textContent = issues.filter(i => i.urgency === 'immediate').length;
+    document.getElementById('issHigh').textContent = issues.filter(i => i.urgency === 'this_week').length;
+    document.getElementById('issMedium').textContent = issues.filter(i => i.urgency === 'this_month').length;
+    document.getElementById('issTotalOpp').textContent = fmtD(d.total_opportunity_value);
+    document.getElementById('issueCount').textContent = issues.length + ' issues';
+
+    // Issue triage content (LLM)
+    const triageData = DAILY || WEEKLY;
+    if (triageData) {
+        // Try to get the LLM-generated triage from the daily brief first
+        const triage = (DAILY && DAILY.issue_command_center_triage) || null;
+        // The issue triage is stored in the brief generation
+        // We need to fetch it from the issues endpoint or use what we have
+    }
+
+    if (issues.length) {
+        document.getElementById('issueList').innerHTML = issues.slice(0, 20).map(iss => {
+            const urgencyClass = iss.urgency === 'immediate' ? 'critical' : iss.urgency === 'this_week' ? 'high' : 'medium';
+            return `
+                <div class="issue-card">
+                    <div class="issue-header">
+                        <span class="severity-badge sev-${urgencyClass}">${iss.urgency || 'medium'}</span>
+                        <span class="issue-title">${esc(iss.title)}</span>
+                        <span class="issue-module">${esc(iss.source_module)}</span>
+                    </div>
+                    <div class="issue-desc">${esc(iss.description)}</div>
+                    ${iss.suggested_action ? `<div class="issue-fix">${esc(iss.suggested_action)}</div>` : ''}
+                    <div class="issue-meta">
+                        ${iss.revenue_impact ? `<span style="color:var(--green);">Impact: ${fmtD(iss.revenue_impact)}</span>` : ''}
+                        ${iss.effort_hours ? `<span>Effort: ${iss.effort_hours}h</span>` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    // AI Insights tab
+    document.getElementById('strategicInsightsContent').innerHTML = renderMd(d.ai_strategic_insights);
+    renderCorrelations('correlationChains', d.cross_module_correlations);
+    renderList('insightsWorking', d.whats_working, 'positive');
+    renderList('insightsWatch', d.watch_list, 'risk');
+
+    // Data confidence
+    const succeeded = (d.modules_succeeded || []).length;
+    const failed = d.modules_failed || [];
+    document.getElementById('dataConfidence').innerHTML = `
+        <div style="margin-bottom:8px;">
+            <strong>Data Quality Score:</strong> ${d.data_quality_score || 0}/100
+            &middot; <strong>Modules:</strong> ${succeeded}/16 reporting
+            ${d.generation_time_seconds ? `&middot; <strong>Generated in:</strong> ${d.generation_time_seconds}s` : ''}
+            ${d.llm_calls_made ? `&middot; <strong>LLM Calls:</strong> ${d.llm_calls_made}` : ''}
+        </div>
+        ${failed.length ? `<div style="color:var(--amber);">
+            <strong>Failed modules:</strong> ${failed.map(f => typeof f === 'string' ? f : (f.module || 'unknown')).join(', ')}
+        </div>` : '<div style="color:var(--green);">All modules reporting successfully.</div>'}
+    `;
+
+    // Issue triage (LLM markdown)
+    // The LLM issue triage is generated during brief creation but stored differently
+    // Let's fetch it from the issues endpoint
+    fetchIssueTriage();
+}
+
+async function fetchIssueTriage() {
+    // The issue triage LLM content is embedded in the brief generation
+    // We render the structured issues above; the LLM triage is in the CRO-like markdown
+    // For now, show a note
+    const d = DAILY || WEEKLY;
+    if (d && d.issue_command_center && d.issue_command_center.length > 0) {
+        // Build a summary from the issues
+        const issues = d.issue_command_center;
+        const critical = issues.filter(i => i.urgency === 'immediate');
+        const high = issues.filter(i => i.urgency === 'this_week');
+        let html = '<h2>Issue Overview</h2>';
+        html += `<p><strong>${issues.length}</strong> issues detected across <strong>${[...new Set(issues.map(i => i.source_module))].length}</strong> modules.</p>`;
+        if (critical.length) {
+            html += '<h3>Critical (Fix Today)</h3><ul>';
+            critical.forEach(c => { html += `<li><strong>${esc(c.title)}</strong> — ${esc(c.suggested_action || c.description)}</li>`; });
+            html += '</ul>';
+        }
+        if (high.length) {
+            html += '<h3>High Priority (Fix This Week)</h3><ul>';
+            high.slice(0, 5).forEach(h => { html += `<li><strong>${esc(h.title)}</strong> — ${esc(h.suggested_action || h.description)}</li>`; });
+            html += '</ul>';
+        }
+        document.getElementById('issueTriageContent').innerHTML = html;
+    }
+}
+
+// ── Render: Helpers ──
+function renderList(elId, items, type) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!items || !items.length) {
+        el.innerHTML = '<div style="color:var(--slate);font-size:13px;">No items detected.</div>';
+        return;
+    }
+    el.innerHTML = items.map(item => {
+        const borderColor = type === 'positive' ? 'var(--green)' : 'var(--amber)';
+        return `
+            <div style="padding:10px 0;border-bottom:1px solid var(--line);border-left:3px solid ${borderColor};padding-left:12px;margin-bottom:6px;">
+                <div style="font-weight:600;font-size:13px;">${esc(item.title)}</div>
+                <div style="font-size:12px;color:var(--ink-soft);margin-top:3px;">${esc(item.description || item.suggested_action || '')}</div>
+                <div style="font-size:11px;color:var(--slate);margin-top:3px;">${esc(item.source_module || '')}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+function renderCorrelations(elId, correlations) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!correlations || !correlations.length) {
+        el.innerHTML = '<div style="color:var(--slate);font-size:13px;">No cross-module correlations detected.</div>';
+        return;
+    }
+    el.innerHTML = correlations.map(c => {
+        const modules = c.modules_involved || [];
+        return `
+            <div class="correlation-card">
+                <div class="corr-chain">
+                    ${modules.map((m, i) =>
+                        `<span class="corr-node">${esc(m)}</span>${i < modules.length - 1 ? '<span class="corr-arrow">&rarr;</span>' : ''}`
+                    ).join('')}
+                </div>
+                <div style="font-family:'Space Grotesk';font-size:14px;font-weight:700;margin-bottom:6px;">${esc(c.title)}</div>
+                <div class="corr-narrative">${esc(c.narrative)}</div>
+                <div class="corr-meta">
+                    <span>Confidence: ${((c.confidence || 0) * 100).toFixed(0)}%</span>
+                    ${c.revenue_impact ? `<span>Revenue Impact: ${fmtD(c.revenue_impact)}</span>` : ''}
+                    <span>Type: ${esc(c.correlation_type || '')}</span>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// ── Initialize ──
+document.addEventListener('DOMContentLoaded', () => {
+    loadBrief('daily');
+    loadBrief('weekly');
+});
+</script>
+</body>
+</html>

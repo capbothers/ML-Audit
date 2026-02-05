@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ml_audit
+      POSTGRES_USER: ml_audit_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ml_audit_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ML-Audit Application
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://ml_audit_user:${DB_PASSWORD:-changeme}@db:5432/ml_audit
+      REDIS_URL: redis://redis:6379/0
+    env_file:
+      - .env
+    volumes:
+      - ./credentials:/app/credentials:ro
+      - ./models:/app/models
+      - ./logs:/app/logs
+      - ./data:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    restart: unless-stopped
+
+  # Celery Worker (for background tasks)
+  celery_worker:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://ml_audit_user:${DB_PASSWORD:-changeme}@db:5432/ml_audit
+      REDIS_URL: redis://redis:6379/0
+    env_file:
+      - .env
+    volumes:
+      - ./credentials:/app/credentials:ro
+      - ./models:/app/models
+      - ./logs:/app/logs
+    depends_on:
+      - db
+      - redis
+    command: celery -A app.celery worker --loglevel=info
+    restart: unless-stopped
+
+  # Celery Beat (scheduler)
+  celery_beat:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://ml_audit_user:${DB_PASSWORD:-changeme}@db:5432/ml_audit
+      REDIS_URL: redis://redis:6379/0
+    env_file:
+      - .env
+    volumes:
+      - ./credentials:/app/credentials:ro
+    depends_on:
+      - db
+      - redis
+    command: celery -A app.celery beat --loglevel=info
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cass Brothers · Performance Hub</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        :root {
+            --ink: #1c1b1f;
+            --ink-soft: #3d3a40;
+            --slate: #6b6670;
+            --card: #ffffff;
+            --line: rgba(27, 27, 27, 0.08);
+            --shadow: 0 1px 3px rgba(17,18,19,0.04), 0 8px 24px rgba(17,18,19,0.06);
+            --shadow-lg: 0 4px 12px rgba(17,18,19,0.05), 0 20px 48px rgba(17,18,19,0.08);
+            --cass-black: #1b1b1b;
+            --cass-cream: #f7f3ed;
+            --cass-gold: #c49a4a;
+            --cass-teal: #1f6f6b;
+            --cass-moss: #2f3d33;
+            --green: #1a7a3a;
+            --green-bg: rgba(26,122,58,0.08);
+            --red: #b5342a;
+            --red-bg: rgba(181,52,42,0.08);
+            --amber: #8b6b1f;
+            --amber-bg: rgba(196,154,74,0.12);
+            --radius: 14px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "IBM Plex Sans", "Space Grotesk", sans-serif;
+            background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        /* ---- Shell ---- */
+        .app-shell {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr);
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+        }
+
+        .brand-bar {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 28px;
+            background: var(--cass-black);
+            color: #f7f1e8;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-family: "Space Grotesk", sans-serif;
+            letter-spacing: 0.5px;
+        }
+
+        .brand-dot {
+            width: 12px; height: 12px;
+            border-radius: 50%;
+            background: var(--cass-gold);
+            box-shadow: 0 0 0 3px rgba(196,154,74,0.2);
+        }
+
+        .brand-actions {
+            display: flex; gap: 10px; font-size: 13px;
+        }
+
+        .pill {
+            padding: 5px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.18);
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .pill:hover { border-color: rgba(255,255,255,0.4); }
+
+        /* ---- Side Nav ---- */
+        .side-nav {
+            padding: 24px 16px;
+            border-right: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.35) 100%);
+        }
+
+        .side-nav h2 {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--slate);
+            margin-bottom: 14px;
+            padding-left: 12px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: 10px;
+            font-size: 13.5px;
+            color: var(--ink-soft);
+            margin-bottom: 4px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            text-decoration: none;
+        }
+        .nav-item:hover { background: rgba(27,27,27,0.04); }
+        .nav-item.active {
+            background: var(--cass-black);
+            color: #f7f1e8;
+            box-shadow: 0 6px 16px rgba(0,0,0,0.12);
+        }
+        .nav-item span {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--cass-gold);
+            opacity: 0.6;
+            flex-shrink: 0;
+        }
+        .nav-item.active span { opacity: 1; }
+
+        /* ---- Main Content ---- */
+        .main-area {
+            padding: 28px 32px 48px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+            overflow-y: auto;
+        }
+
+        /* ---- Page Header ---- */
+        .page-header {
+            display: flex;
+            align-items: flex-end;
+            justify-content: space-between;
+        }
+
+        .page-header h1 {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 24px;
+            font-weight: 600;
+            letter-spacing: -0.3px;
+        }
+
+        .page-header .subtitle {
+            font-size: 13px;
+            color: var(--slate);
+            margin-top: 2px;
+        }
+
+        .header-badges {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .meta-badge {
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 500;
+            background: rgba(27,27,27,0.05);
+            color: var(--ink-soft);
+        }
+
+        .meta-badge.trust-healthy { background: var(--green-bg); color: var(--green); }
+        .meta-badge.trust-warning { background: var(--amber-bg); color: var(--amber); }
+        .meta-badge.trust-critical { background: var(--red-bg); color: var(--red); }
+
+        /* ---- Pulse Banner ---- */
+        .pulse-banner {
+            background: var(--cass-moss);
+            color: #e8e2d6;
+            border-radius: var(--radius);
+            padding: 20px 24px;
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 16px;
+            align-items: start;
+            box-shadow: var(--shadow-lg);
+        }
+
+        .pulse-banner h2 {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--cass-gold);
+            letter-spacing: 0.3px;
+        }
+
+        .pulse-body {
+            font-size: 14px;
+            line-height: 1.55;
+            color: #c8c1b4;
+        }
+
+        .pulse-meta {
+            display: flex;
+            gap: 20px;
+            margin-top: 12px;
+            font-size: 12px;
+        }
+
+        .pulse-meta-item {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .pulse-meta-item .pm-label {
+            color: #8a8276;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-size: 10px;
+        }
+
+        .pulse-meta-item .pm-value {
+            color: #e8e2d6;
+            font-weight: 500;
+        }
+
+        .pulse-status-chip {
+            padding: 5px 14px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .pulse-status-chip.growing { background: rgba(26,122,58,0.2); color: #6cd992; }
+        .pulse-status-chip.stable { background: rgba(196,154,74,0.2); color: var(--cass-gold); }
+        .pulse-status-chip.declining { background: rgba(181,52,42,0.2); color: #f08c84; }
+        .pulse-status-chip.unreliable { background: rgba(181,52,42,0.3); color: #f08c84; }
+
+        /* ---- KPI Row ---- */
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 14px;
+        }
+
+        .kpi-card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 16px 18px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--line);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .kpi-card .kpi-label {
+            font-size: 11px;
+            color: var(--slate);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            font-weight: 500;
+        }
+
+        .kpi-card .kpi-value {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        .kpi-card .kpi-delta {
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .kpi-delta.up { color: var(--green); }
+        .kpi-delta.down { color: var(--red); }
+        .kpi-delta.neutral { color: var(--slate); }
+
+        /* (Decision panel styles moved to Decision Card section below) */
+
+        /* ---- Section Grid ---- */
+        .section-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+
+        .section-grid .full-width {
+            grid-column: 1 / -1;
+        }
+
+        /* ---- Card ---- */
+        .card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 20px 22px;
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+
+        .card-header h3 {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .card-header .card-badge {
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 999px;
+            background: rgba(27,27,27,0.05);
+            color: var(--slate);
+            font-weight: 500;
+        }
+
+        .card .narrative {
+            font-size: 13px;
+            color: var(--slate);
+            line-height: 1.45;
+            margin-bottom: 12px;
+        }
+
+        /* ---- Tables ---- */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12.5px;
+        }
+
+        th, td {
+            padding: 8px 8px;
+            text-align: left;
+            border-bottom: 1px solid #f0ece5;
+        }
+
+        th {
+            color: var(--slate);
+            font-weight: 600;
+            font-size: 10.5px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding-bottom: 10px;
+        }
+
+        tr:last-child td { border-bottom: none; }
+
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        th.num { text-align: right; }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .badge.info { background: rgba(31,111,107,0.1); color: var(--cass-teal); }
+        .badge.warning { background: var(--amber-bg); color: var(--amber); }
+        .badge.critical { background: var(--red-bg); color: var(--red); }
+
+        .delta-positive { color: var(--green); font-weight: 500; }
+        .delta-negative { color: var(--red); font-weight: 500; }
+
+        .wrap { white-space: normal; word-break: break-word; }
+
+        /* ---- Pricing Sub-sections ---- */
+        .pricing-subsection {
+            margin-top: 16px;
+            padding-top: 14px;
+            border-top: 1px solid #f0ece5;
+        }
+
+        .pricing-subsection .sub-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--slate);
+            margin-bottom: 8px;
+        }
+
+        /* ---- Pricing KPI mini row ---- */
+        .pricing-kpis {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+
+        .pricing-kpi {
+            background: #faf8f4;
+            border-radius: 10px;
+            padding: 12px 14px;
+            text-align: center;
+        }
+
+        .pricing-kpi .pk-value {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .pricing-kpi .pk-label {
+            font-size: 10.5px;
+            color: var(--slate);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 2px;
+        }
+
+        /* ---- Decision Card (restyled) ---- */
+        .decision-panel {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 20px 22px;
+            border: 1px solid var(--line);
+            border-left: 4px solid var(--cass-gold);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+        }
+        .decision-panel-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 14px;
+        }
+        .decision-panel-header h3 {
+            font-family: "Space Grotesk", sans-serif; font-size: 14px; font-weight: 600;
+            color: var(--amber); display: flex; align-items: center; gap: 8px;
+            margin: 0;
+        }
+        .confidence-badge {
+            padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.4px;
+        }
+        .confidence-high { background: var(--green-bg); color: var(--green); }
+        .confidence-medium { background: var(--amber-bg); color: var(--amber); }
+        .confidence-low { background: var(--red-bg); color: var(--red); }
+        .decision-row {
+            display: grid; grid-template-columns: 120px 1fr;
+            gap: 4px 16px; padding: 8px 0;
+            border-bottom: 1px solid var(--line);
+        }
+        .decision-row:last-child { border-bottom: none; }
+        .decision-row .dr-label {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
+            color: var(--slate); font-weight: 600; padding-top: 2px;
+        }
+        .decision-row .dr-value {
+            font-size: 13.5px; line-height: 1.5; color: var(--ink-soft);
+        }
+        .impact-badge, .effort-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 999px;
+            font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
+            margin-left: 6px; vertical-align: middle;
+        }
+        .impact-high { background: var(--red-bg); color: var(--red); }
+        .impact-medium { background: var(--amber-bg); color: var(--amber); }
+        .impact-low { background: rgba(27,27,27,0.06); color: var(--slate); }
+        .effort-low { background: var(--green-bg); color: var(--green); }
+        .effort-medium { background: var(--amber-bg); color: var(--amber); }
+        .effort-high { background: var(--red-bg); color: var(--red); }
+
+        /* ---- Trust Banner ---- */
+        .trust-banner {
+            background: rgba(196,154,74,0.08);
+            border: 1px solid rgba(196,154,74,0.3);
+            border-radius: var(--radius);
+            padding: 14px 18px;
+            display: flex; align-items: flex-start; gap: 10px;
+            font-size: 13px; color: var(--amber);
+        }
+        .trust-banner .tb-icon { font-size: 18px; flex-shrink: 0; line-height: 1; }
+        .trust-banner .tb-body { line-height: 1.5; }
+        .trust-banner strong { color: var(--ink); }
+
+        /* ---- Explainability Tooltips ---- */
+        .why-tip {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: rgba(27,27,27,0.08); color: var(--slate);
+            font-size: 9px; font-weight: 700; cursor: help;
+            margin-left: 4px; position: relative; vertical-align: middle;
+        }
+        .why-tip .why-tip-box {
+            display: none; position: absolute; bottom: calc(100% + 6px); left: 50%;
+            transform: translateX(-50%); width: 220px; padding: 10px 12px;
+            background: var(--cass-black); color: #e8e2d6; border-radius: 10px;
+            font-size: 11px; font-weight: 400; line-height: 1.5;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 50;
+            text-transform: none; letter-spacing: 0;
+            pointer-events: none;
+        }
+        .why-tip:hover .why-tip-box { display: block; }
+
+        /* ---- Table Readability ---- */
+        tbody tr:nth-child(even) { background: rgba(0,0,0,0.015); }
+        th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 1100px) {
+            .kpi-row { grid-template-columns: repeat(2, 1fr); }
+            .decision-panel { flex-direction: column; }
+        }
+
+        @media (max-width: 900px) {
+            .app-shell { grid-template-columns: 1fr; }
+            .side-nav {
+                display: flex; gap: 8px; overflow-x: auto;
+                padding: 12px 16px; border-right: none; border-bottom: 1px solid var(--line);
+            }
+            .side-nav h2 { display: none; }
+            .section-grid { grid-template-columns: 1fr; }
+            .kpi-row { grid-template-columns: 1fr 1fr; }
+            .pulse-banner { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <!-- Brand Bar -->
+        <div class="brand-bar">
+            <div class="brand-mark">
+                <span class="brand-dot"></span>
+                <strong>Cass Brothers Intelligence</strong>
+            </div>
+            <div class="brand-actions">
+                <span class="pill" id="tone-toggle">Plain</span>
+                <span class="pill" id="perf-refresh">Loading...</span>
+            </div>
+        </div>
+
+        <!-- Side Nav -->
+        <aside class="side-nav">
+            <h2>Dashboards</h2>
+            <a class="nav-item" href="/dashboard"><span></span> Overview</a>
+            <a class="nav-item active" href="/performance"><span></span> Performance</a>
+            <a class="nav-item" href="/seo-dashboard"><span></span> SEO &amp; Content</a>
+            <a class="nav-item" href="/ads-intelligence"><span></span> Ads Intelligence</a>
+            <a class="nav-item" href="/finance-dashboard"><span></span> Finance</a>
+            <a class="nav-item" href="/inventory"><span></span> Inventory</a>
+            <a class="nav-item" href="/pricing-intel"><span></span> Pricing Intel</a>
+            <a class="nav-item" href="/customer-intelligence"><span></span> Customer Intel</a>
+            <a class="nav-item" href="/merchant-center-intel"><span></span> Merchant Center</a>
+            <a class="nav-item" href="/strategic-intelligence"><span></span> Intelligence Brief</a>
+            <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
+                <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <section class="main-area">
+
+            <!-- Page Header -->
+            <div class="page-header">
+                <div>
+                    <h1>Performance Hub</h1>
+                    <p class="subtitle">Last 7 days vs prior 7 days</p>
+                </div>
+                <div class="header-badges">
+                    <div class="meta-badge" id="trust-badge">Trust: loading...</div>
+                    <div class="meta-badge" id="snapshot-time">--</div>
+                </div>
+            </div>
+
+            <!-- Business Pulse Banner -->
+            <div class="pulse-banner">
+                <div>
+                    <h2>Business Pulse</h2>
+                    <div class="pulse-body" id="pulse-summary">Loading...</div>
+                    <div class="pulse-meta">
+                        <div class="pulse-meta-item">
+                            <span class="pm-label">Drivers</span>
+                            <span class="pm-value" id="pulse-drivers">--</span>
+                        </div>
+                        <div class="pulse-meta-item">
+                            <span class="pm-label">Risks</span>
+                            <span class="pm-value" id="pulse-risks">--</span>
+                        </div>
+                        <div class="pulse-meta-item">
+                            <span class="pm-label">Next Moves</span>
+                            <span class="pm-value" id="pulse-actions">--</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="pulse-status-chip stable" id="pulse-status">Stable</div>
+            </div>
+
+            <!-- KPI Row -->
+            <div class="kpi-row">
+                <div class="kpi-card">
+                    <div class="kpi-label">Revenue <span class="why-tip">?<span class="why-tip-box">Total Shopify revenue for the period. Compared week-over-week to identify growth or decline trends.</span></span></div>
+                    <div class="kpi-value" id="revenue-7d">--</div>
+                    <div class="kpi-delta neutral" id="revenue-7d-delta"></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Orders <span class="why-tip">?<span class="why-tip-box">Total completed orders from Shopify. A drop signals checkout friction or reduced traffic quality.</span></span></div>
+                    <div class="kpi-value" id="orders-7d">--</div>
+                    <div class="kpi-delta neutral" id="orders-7d-delta"></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Sessions <span class="why-tip">?<span class="why-tip-box">GA4 sessions for the period. Cross-checked against Shopify for tracking reliability. Good: GA4 within 10% of Shopify.</span></span></div>
+                    <div class="kpi-value" id="sessions-7d">--</div>
+                    <div class="kpi-delta neutral" id="sessions-7d-delta"></div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Conversion Rate <span class="why-tip">?<span class="why-tip-box">Orders / Sessions. Measures checkout effectiveness. Good: above 1.5% for bathroom retail.</span></span></div>
+                    <div class="kpi-value" id="cr-7d">--</div>
+                    <div class="kpi-delta neutral" id="cr-7d-delta"></div>
+                </div>
+            </div>
+
+            <!-- Trust Banner (shown when tracking is critical) -->
+            <div class="trust-banner" id="trust-banner-bar" style="display:none;">
+                <div class="tb-icon">&#9888;</div>
+                <div class="tb-body" id="trust-banner-body"></div>
+            </div>
+
+            <!-- Decision Panel (restyled as decision card) -->
+            <div class="decision-panel">
+                <div class="decision-panel-header">
+                    <h3>Decision Summary</h3>
+                    <span class="confidence-badge confidence-medium" id="confidence-badge">Medium</span>
+                </div>
+                <div class="decision-row">
+                    <div class="dr-label">Primary Insight</div>
+                    <div class="dr-value" id="decision-summary">Loading...</div>
+                </div>
+                <div class="decision-row">
+                    <div class="dr-label">Why It Matters</div>
+                    <div class="dr-value" id="decision-why">--</div>
+                </div>
+                <div class="decision-row">
+                    <div class="dr-label">Do Next</div>
+                    <div class="dr-value" id="decision-next">--</div>
+                </div>
+                <div class="decision-row">
+                    <div class="dr-label">Impact</div>
+                    <div class="dr-value" id="decision-impact">--</div>
+                </div>
+            </div>
+
+            <!-- Detail Grid -->
+            <div class="section-grid">
+
+                <!-- Revenue Drivers -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Revenue Drivers</h3>
+                        <div class="card-badge">7d vs prior</div>
+                    </div>
+                    <div class="narrative" id="drivers-narrative">Loading...</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Driver</th>
+                                <th class="num">Change</th>
+                                <th class="num">Impact</th>
+                            </tr>
+                        </thead>
+                        <tbody id="drivers-table">
+                            <tr><td colspan="3">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Tracking Health -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Tracking Health</h3>
+                        <div class="card-badge">GA4 vs Shopify</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th class="num">GA4</th>
+                                <th class="num">Shopify</th>
+                                <th class="num">Gap</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tracking-table">
+                            <tr><td colspan="4">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pricing Impact (full width) -->
+                <div class="card full-width">
+                    <div class="card-header">
+                        <h3>Pricing Impact</h3>
+                        <div class="card-badge">Last 30 days</div>
+                    </div>
+                    <div class="pricing-kpis">
+                        <div class="pricing-kpi">
+                            <div class="pk-value" id="pk-unmatchable">--</div>
+                            <div class="pk-label">Unmatchable SKUs</div>
+                        </div>
+                        <div class="pricing-kpi">
+                            <div class="pk-value" id="pk-revenue-risk">--</div>
+                            <div class="pk-label">Revenue at Risk</div>
+                        </div>
+                        <div class="pricing-kpi">
+                            <div class="pk-value" id="pk-orders-affected">--</div>
+                            <div class="pk-label">Orders Affected</div>
+                        </div>
+                    </div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:20px;">
+                        <div>
+                            <div class="pricing-subsection" style="margin-top:0; padding-top:0; border-top:none;">
+                                <div class="sub-label">Top Unmatchable SKUs</div>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>SKU</th>
+                                            <th class="num">Gap Below Floor</th>
+                                            <th>Competitor</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="pricing-unmatchable">
+                                        <tr><td colspan="3">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="pricing-subsection" style="margin-top:0; padding-top:0; border-top:none;">
+                                <div class="sub-label">Top Brands by Revenue at Risk</div>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Brand</th>
+                                            <th class="num">Revenue at Risk</th>
+                                            <th class="num">Undercut SKUs</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="pricing-brands">
+                                        <tr><td colspan="3">Loading...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Alerts -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Alerts &amp; Next Actions</h3>
+                        <div class="card-badge" id="alert-count">--</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Alert</th>
+                                <th>Severity</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="alerts-table">
+                            <tr><td colspan="3">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Forecast -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Revenue Forecast</h3>
+                        <div class="card-badge">Next 7 days</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th class="num">Predicted</th>
+                                <th class="num">Low</th>
+                                <th class="num">High</th>
+                            </tr>
+                        </thead>
+                        <tbody id="forecast-table">
+                            <tr><td colspan="4">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+            </div>
+        </section>
+    </div>
+
+    <script>
+        /* ============================================================
+           Data Loading
+           ============================================================ */
+        async function loadPerformance() {
+            try {
+                const [healthRes, driversRes, trackingRes, anomaliesRes, forecastRes, pricingUnmatchableRes, pricingBrandsRes] = await Promise.all([
+                    fetch('/performance/summary?days=7'),
+                    fetch('/ml/drivers?days=7'),
+                    fetch('/ml/tracking-health?days=7'),
+                    fetch('/ml/anomalies?days=30&unacknowledged_only=true'),
+                    fetch('/ml/forecast?metric=revenue&days=7'),
+                    fetch('/pricing/unmatchable'),
+                    fetch('/pricing/brand-summary')
+                ]);
+
+                const health = await healthRes.json();
+                const drivers = await driversRes.json();
+                const tracking = await trackingRes.json();
+                const anomalies = await anomaliesRes.json();
+                const forecast = await forecastRes.json();
+                const pricingUnmatchable = await pricingUnmatchableRes.json();
+                const pricingBrands = await pricingBrandsRes.json();
+
+                renderKPIs(health);
+                renderPulse(health, drivers, tracking, pricingUnmatchable);
+                renderDecision(health, drivers, tracking, pricingUnmatchable);
+                renderDrivers(drivers);
+                renderTracking(tracking);
+                renderPricing(pricingUnmatchable, pricingBrands);
+                renderAlerts(anomalies);
+                renderForecast(forecast);
+
+                // Trust badge
+                const trust = tracking.data?.overall_status || 'unknown';
+                const trustEl = document.getElementById('trust-badge');
+                trustEl.textContent = `Trust: ${trust}`;
+                trustEl.className = 'meta-badge';
+                if (trust === 'healthy') trustEl.classList.add('trust-healthy');
+                else if (trust === 'critical') trustEl.classList.add('trust-critical');
+                else trustEl.classList.add('trust-warning');
+
+                // Timestamp
+                document.getElementById('snapshot-time').textContent = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+                document.getElementById('perf-refresh').textContent = 'Updated just now';
+
+            } catch (err) {
+                console.error('Failed to load performance data:', err);
+                document.getElementById('perf-refresh').textContent = 'Load failed';
+            }
+        }
+
+        /* ============================================================
+           KPI Cards
+           ============================================================ */
+        function renderKPIs(summary) {
+            const kpis = summary.kpis || {};
+            const deltas = summary.deltas || {};
+
+            setKPI('revenue-7d', kpis.revenue != null ? `$${kpis.revenue.toLocaleString()}` : '--');
+            setKPI('orders-7d', kpis.orders ?? '--');
+            setKPI('sessions-7d', kpis.sessions != null ? kpis.sessions.toLocaleString() : '--');
+            setKPI('cr-7d', kpis.conversion_rate != null ? `${kpis.conversion_rate.toFixed(2)}%` : '--');
+
+            setDelta('revenue-7d-delta', deltas.revenue_pct);
+            setDelta('orders-7d-delta', deltas.orders_pct);
+            setDelta('sessions-7d-delta', deltas.sessions_pct);
+            setDelta('cr-7d-delta', deltas.conversion_rate_pct);
+        }
+
+        function setKPI(id, value) {
+            const el = document.getElementById(id);
+            if (el) el.textContent = value;
+        }
+
+        function setDelta(id, pct) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (pct == null) { el.textContent = ''; return; }
+            const sign = pct >= 0 ? '+' : '';
+            el.textContent = `${sign}${pct}% vs prior`;
+            el.className = 'kpi-delta ' + (pct > 0 ? 'up' : pct < 0 ? 'down' : 'neutral');
+        }
+
+        /* ============================================================
+           Business Pulse
+           ============================================================ */
+        function renderPulse(summary, drivers, tracking, pricing) {
+            const revDelta = summary?.deltas?.revenue_pct;
+            const sessionsDelta = summary?.deltas?.sessions_pct;
+            const trust = tracking?.data?.overall_status || 'unknown';
+            const trackingBreaks = tracking?.data?.tracking_break_count || 0;
+
+            // Status chip
+            let status = 'Stable';
+            let statusClass = 'stable';
+            if (trust === 'critical') { status = 'Unreliable'; statusClass = 'unreliable'; }
+            else if (revDelta != null) {
+                if (revDelta >= 5) { status = 'Growing'; statusClass = 'growing'; }
+                else if (revDelta <= -5) { status = 'Declining'; statusClass = 'declining'; }
+            }
+            const chip = document.getElementById('pulse-status');
+            chip.textContent = status;
+            chip.className = 'pulse-status-chip ' + statusClass;
+
+            // Summary
+            let summaryText = 'Overall performance is stable.';
+            if (trackingBreaks > 0) {
+                summaryText = `Tracking is broken for ${trackingBreaks} day(s). Fix tracking before acting on channel shifts.`;
+            } else if (revDelta != null) {
+                summaryText = revDelta >= 0
+                    ? `Revenue is up ${revDelta}% vs prior week.` + (sessionsDelta != null ? ` Sessions ${sessionsDelta >= 0 ? 'up' : 'down'} ${Math.abs(sessionsDelta)}%.` : '')
+                    : `Revenue is down ${Math.abs(revDelta)}% vs prior week, driven by lower sessions.`;
+            }
+            document.getElementById('pulse-summary').textContent = summaryText;
+
+            // Meta items
+            const driverList = (drivers?.data?.drivers || []).slice(0, 3).map(d => `${d.driver} (${d.change_pct > 0 ? '+' : ''}${d.change_pct}%)`).join(', ');
+            document.getElementById('pulse-drivers').textContent = driverList || 'No driver data';
+
+            const risks = [];
+            if (trackingBreaks > 0) risks.push('Tracking gap');
+            if (pricing?.data?.total_revenue_at_risk) risks.push(`$${pricing.data.total_revenue_at_risk.toLocaleString()} pricing risk`);
+            document.getElementById('pulse-risks').textContent = risks.length ? risks.join(', ') : 'None detected';
+
+            const actions = [];
+            if (trackingBreaks > 0) actions.push('Fix GA4 tracking');
+            if (sessionsDelta != null && sessionsDelta < -10) actions.push('Investigate traffic decline');
+            if (pricing?.data?.total_unmatchable_skus) actions.push('Review unmatchable SKUs');
+            document.getElementById('pulse-actions').textContent = actions.length ? actions.join(', ') : 'Monitor trends';
+        }
+
+        /* ============================================================
+           Decision Panel
+           ============================================================ */
+        function renderDecision(summary, drivers, tracking, pricing) {
+            const revDelta = summary?.deltas?.revenue_pct;
+            const sessionsDelta = summary?.deltas?.sessions_pct;
+            const crDelta = summary?.deltas?.conversion_rate_pct;
+            const trust = tracking?.data?.overall_status || 'unknown';
+            const trackingBreaks = tracking?.data?.tracking_break_count || 0;
+
+            // Confidence
+            const confidence = trust === 'healthy' ? 'High' : trust === 'critical' ? 'Low' : 'Medium';
+            const confEl = document.getElementById('confidence-badge');
+            confEl.textContent = confidence;
+            confEl.className = 'confidence-badge confidence-' + confidence.toLowerCase();
+
+            // Trust banner
+            const trustBanner = document.getElementById('trust-banner-bar');
+            const trustBody = document.getElementById('trust-banner-body');
+            if (trust === 'critical' || trackingBreaks > 0) {
+                trustBanner.style.display = 'flex';
+                trustBody.innerHTML = `<strong>DATA QUALITY:</strong> Tracking broken for ${trackingBreaks || '?'} day(s). Revenue and session data may be unreliable. <strong>Action:</strong> Fix GA4 purchase event tracking.`;
+            } else {
+                trustBanner.style.display = 'none';
+            }
+
+            // Primary insight
+            let summaryText = 'Performance is stable.';
+            if (revDelta != null) {
+                summaryText = revDelta >= 0
+                    ? `Revenue is up ${revDelta}% vs prior 7 days.`
+                    : `Revenue is down ${Math.abs(revDelta)}% vs prior 7 days — ${sessionsDelta != null && sessionsDelta < -5 ? 'traffic decline is the root cause.' : crDelta != null && crDelta < -5 ? 'conversion rate drop is the root cause.' : 'investigate drivers below.'}`;
+            }
+
+            // Why it matters
+            let why = 'Primary drivers are balanced.';
+            if (trackingBreaks > 0) {
+                why = `Tracking broken on ${trackingBreaks} day(s). All KPI deltas are unreliable — fix GA4 purchase events before acting on any data.`;
+            } else if (sessionsDelta != null && sessionsDelta < -10) {
+                const weeklyRev = summary?.kpis?.revenue || 0;
+                const lostEst = Math.round(weeklyRev * Math.abs(sessionsDelta) / 100);
+                why = `Traffic dropped ${Math.abs(sessionsDelta)}%, dragging revenue. If this continues, you'll lose ~$${lostEst.toLocaleString()}/week.`;
+            } else if (crDelta != null && crDelta < -10) {
+                why = `Conversion rate dropped ${Math.abs(crDelta)}%, indicating checkout or UX friction. Each 0.1% CR = meaningful revenue.`;
+            }
+
+            // Do next + impact/effort
+            let next = 'Review top alerts and act on highest-impact item.';
+            let impactLevel = 'Medium', effortLevel = 'Medium';
+            if (trackingBreaks > 0) {
+                next = 'Fix GA4 purchase tracking and re-validate data.';
+                impactLevel = 'High'; effortLevel = 'Low';
+            } else if (sessionsDelta != null && sessionsDelta < -10) {
+                next = 'Investigate GA4 channel dropoffs and relaunch traffic drivers.';
+                impactLevel = 'High'; effortLevel = 'Medium';
+            } else if (crDelta != null && crDelta < -10) {
+                next = 'Optimize checkout flow and fix conversion leaks.';
+                impactLevel = 'High'; effortLevel = 'High';
+            }
+
+            let impact = 'No major pricing risk detected.';
+            if (pricing?.data?.total_revenue_at_risk) {
+                impact = `$${pricing.data.total_revenue_at_risk.toLocaleString()} at risk from unmatchable SKUs.`;
+            }
+
+            document.getElementById('decision-summary').textContent = summaryText;
+            document.getElementById('decision-why').textContent = why;
+            document.getElementById('decision-next').innerHTML = next
+                + ` <span class="impact-badge impact-${impactLevel.toLowerCase()}">Impact: ${impactLevel}</span>`
+                + ` <span class="effort-badge effort-${effortLevel.toLowerCase()}">Effort: ${effortLevel}</span>`;
+            document.getElementById('decision-impact').textContent = impact;
+        }
+
+        /* ============================================================
+           Revenue Drivers
+           ============================================================ */
+        function renderDrivers(drivers) {
+            const data = drivers.data || {};
+            document.getElementById('drivers-narrative').textContent = data.narrative || 'No narrative available.';
+            renderTable('drivers-table', data.drivers || [], row => `
+                <tr>
+                    <td>${row.driver || '-'}</td>
+                    <td class="num ${row.change_pct > 0 ? 'delta-positive' : row.change_pct < 0 ? 'delta-negative' : ''}">${row.change_pct != null ? (row.change_pct > 0 ? '+' : '') + row.change_pct.toFixed(1) + '%' : '-'}</td>
+                    <td class="num">${row.revenue_impact != null ? '$' + row.revenue_impact.toLocaleString() : '-'}</td>
+                </tr>
+            `, 6);
+        }
+
+        /* ============================================================
+           Tracking Health
+           ============================================================ */
+        function renderTracking(tracking) {
+            const t = tracking.data?.summary || {};
+            renderTable('tracking-table', [
+                {metric:'Orders', ga4:t.ga4_total_orders, shopify:t.shopify_total_orders, gap:t.order_gap_pct},
+                {metric:'Revenue', ga4:t.ga4_total_revenue, shopify:t.shopify_total_revenue, gap:t.revenue_gap_pct}
+            ], row => `
+                <tr>
+                    <td>${row.metric}</td>
+                    <td class="num">${row.ga4 != null ? row.ga4.toLocaleString() : '-'}</td>
+                    <td class="num">${row.shopify != null ? row.shopify.toLocaleString() : '-'}</td>
+                    <td class="num ${Math.abs(row.gap || 0) > 10 ? 'delta-negative' : ''}">${row.gap != null ? row.gap.toFixed(1) + '%' : '-'}</td>
+                </tr>
+            `, 2);
+        }
+
+        /* ============================================================
+           Pricing Impact
+           ============================================================ */
+        function renderPricing(unmatchableRes, brandsRes) {
+            const unmatch = unmatchableRes.data || {};
+
+            document.getElementById('pk-unmatchable').textContent = unmatch.total_unmatchable_skus ?? '--';
+            document.getElementById('pk-revenue-risk').textContent = unmatch.total_revenue_at_risk != null
+                ? '$' + unmatch.total_revenue_at_risk.toLocaleString() : '--';
+            document.getElementById('pk-orders-affected').textContent = unmatch.total_orders_affected ?? '--';
+
+            renderTable('pricing-unmatchable', (unmatch.skus || []).slice(0, 5), row => `
+                <tr>
+                    <td class="wrap">${row.sku || '-'}</td>
+                    <td class="num delta-negative">${row.gap_below_floor != null ? '$' + row.gap_below_floor.toLocaleString() : '-'}</td>
+                    <td>${row.cheapest_competitor || '-'}</td>
+                </tr>
+            `, 5);
+
+            const brands = brandsRes.data?.brands || [];
+            renderTable('pricing-brands', brands.slice(0, 5), row => `
+                <tr>
+                    <td>${row.brand || '-'}</td>
+                    <td class="num">${row.revenue_at_risk != null ? '$' + row.revenue_at_risk.toLocaleString() : '$0'}</td>
+                    <td class="num">${row.undercut_skus ?? '-'}</td>
+                </tr>
+            `, 5);
+        }
+
+        /* ============================================================
+           Alerts
+           ============================================================ */
+        function renderAlerts(anomalies) {
+            const data = anomalies.data || [];
+            document.getElementById('alert-count').textContent = data.length ? `${data.length} active` : 'None';
+            renderTable('alerts-table', data, row => {
+                const sev = row.severity || 'info';
+                return `
+                    <tr>
+                        <td class="wrap">${row.title || row.metric || '-'}</td>
+                        <td><span class="badge ${sev}">${sev}</span></td>
+                        <td class="wrap">${actionForAnomaly(row)}</td>
+                    </tr>`;
+            }, 6);
+        }
+
+        function actionForAnomaly(row) {
+            if (row.recommended_action) return row.recommended_action;
+            const metric = (row.metric || row.title || '').toString().toLowerCase();
+            if (metric.includes('conversion')) return 'Check GA4 purchase event + checkout flow.';
+            if (metric.includes('revenue')) return 'Verify Shopify revenue + refund anomalies.';
+            if (metric.includes('sessions') || metric.includes('traffic')) return 'Check GA4 tracking + campaign changes.';
+            if (metric.includes('orders')) return 'Check Shopify order sync + payment status.';
+            return 'Review data source + validate recent changes.';
+        }
+
+        /* ============================================================
+           Forecast
+           ============================================================ */
+        function renderForecast(forecast) {
+            renderTable('forecast-table', forecast.data || [], row => `
+                <tr>
+                    <td>${row.forecast_date || row.date || '-'}</td>
+                    <td class="num">${row.predicted_value != null ? '$' + Math.round(row.predicted_value).toLocaleString() : '-'}</td>
+                    <td class="num">${(row.lower_bound ?? row.lower) != null ? '$' + Math.round(row.lower_bound ?? row.lower).toLocaleString() : '-'}</td>
+                    <td class="num">${(row.upper_bound ?? row.upper) != null ? '$' + Math.round(row.upper_bound ?? row.upper).toLocaleString() : '-'}</td>
+                </tr>
+            `, 7);
+        }
+
+        /* ============================================================
+           Utilities
+           ============================================================ */
+        function renderTable(targetId, rows, rowTemplate, limit) {
+            const tbody = document.getElementById(targetId);
+            if (!tbody) return;
+            const list = (rows || []).slice(0, limit);
+            if (!list.length) {
+                const colspan = tbody.closest('table')?.querySelectorAll('th')?.length || 4;
+                tbody.innerHTML = `<tr><td colspan="${colspan}" style="color:var(--slate);text-align:center;padding:16px 0;">No data</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = list.map(rowTemplate).join('');
+        }
+
+        function setupToneToggle() {
+            const toggle = document.getElementById('tone-toggle');
+            if (!toggle) return;
+            document.documentElement.setAttribute('data-tone', 'plain');
+            toggle.addEventListener('click', () => {
+                const current = document.documentElement.getAttribute('data-tone') || 'plain';
+                const next = current === 'plain' ? 'pro' : 'plain';
+                document.documentElement.setAttribute('data-tone', next);
+                toggle.textContent = next === 'plain' ? 'Plain' : 'Pro';
+            });
+        }
+
+        setupToneToggle();
+        loadPerformance();
+    </script>
+</body>
+</html>

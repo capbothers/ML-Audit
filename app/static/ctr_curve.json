@@ -1,0 +1,12 @@
+{
+    "bands": [
+        {"min": 0.0, "max": 1.5, "expected_ctr": 0.30, "label": "Position 1"},
+        {"min": 1.5, "max": 2.5, "expected_ctr": 0.15, "label": "Position 2"},
+        {"min": 2.5, "max": 3.5, "expected_ctr": 0.10, "label": "Position 3"},
+        {"min": 3.5, "max": 5.0, "expected_ctr": 0.07, "label": "Positions 4-5"},
+        {"min": 5.0, "max": 7.0, "expected_ctr": 0.05, "label": "Positions 6-7"},
+        {"min": 7.0, "max": 10.0, "expected_ctr": 0.03, "label": "Positions 8-10"},
+        {"min": 10.0, "max": 20.0, "expected_ctr": 0.015, "label": "Positions 11-20"},
+        {"min": 20.0, "max": 999.0, "expected_ctr": 0.005, "label": "Position 20+"}
+    ]
+}

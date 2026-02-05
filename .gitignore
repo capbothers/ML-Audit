@@ -1,0 +1,95 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Data files
+data/
+*.csv
+*.parquet
+*.db
+*.sqlite
+
+# Credentials (never commit secrets)
+credentials/
+
+# Binary reports
+*.xlsx
+*.pdf
+
+# Token/OAuth scripts with hardcoded secrets
+get_google_ads_token.py
+scripts/generate_google_ads_token.py
+
+# Scratch / temp files
+ask.py
+chat.py
+q
+=
+plan.md
+update_nav_test.py
+
+# Imports directory
+imports/
+
+# Static app JSON is tracked — only ignore root-level data JSON
+/*.json
+
+# ML models
+models/
+*.pkl
+*.h5
+*.pt
+*.pth
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/

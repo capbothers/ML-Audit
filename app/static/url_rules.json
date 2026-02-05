@@ -1,0 +1,21 @@
+{
+    "patterns": [
+        {"match": "/products/", "category": "product", "template": "Product Page", "effort_weight": 1.0},
+        {"match": "/collections/", "category": "collection", "template": "Collection Page", "effort_weight": 0.8},
+        {"match": "/blogs/", "category": "blog", "template": "Blog Post", "effort_weight": 0.6},
+        {"match": "/blog/", "category": "blog", "template": "Blog Post", "effort_weight": 0.6},
+        {"match": "/pages/", "category": "page", "template": "Info Page", "effort_weight": 0.5},
+        {"match": "/brands/", "category": "brand", "template": "Brand Page", "effort_weight": 0.7},
+        {"match": "/categories/", "category": "category", "template": "Category Page", "effort_weight": 0.8}
+    ],
+    "homepage": {
+        "category": "homepage",
+        "template": "Homepage",
+        "effort_weight": 0.3
+    },
+    "default": {
+        "category": "unknown",
+        "template": "Other",
+        "effort_weight": 0.7
+    }
+}

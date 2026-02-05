@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cass Brothers Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        :root {
+            --ink: #1c1b1f;
+            --ink-soft: #3d3a40;
+            --slate: #6b6670;
+            --stone: #f4f2ee;
+            --pearl: #faf9f6;
+            --cass-black: #1b1b1b;
+            --cass-cream: #f7f3ed;
+            --cass-gold: #c49a4a;
+            --cass-moss: #2f3d33;
+            --cass-teal: #1f6f6b;
+            --card: #ffffff;
+            --line: rgba(27, 27, 27, 0.08);
+            --shadow: 0 18px 45px rgba(17, 18, 19, 0.08);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "IBM Plex Sans", "Space Grotesk", sans-serif;
+            background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        .app-shell {
+            display: grid;
+            grid-template-columns: 240px minmax(0, 1fr) 360px;
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+        }
+
+        .brand-bar {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 28px;
+            background: var(--cass-black);
+            color: #f7f1e8;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-family: "Space Grotesk", sans-serif;
+            letter-spacing: 0.5px;
+        }
+
+        .brand-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--cass-gold);
+            box-shadow: 0 0 0 4px rgba(196, 154, 74, 0.2);
+        }
+
+        .brand-bar input {
+            width: min(520px, 50vw);
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 999px;
+            padding: 10px 16px;
+            color: #f7f1e8;
+            outline: none;
+            font-size: 14px;
+        }
+
+        .brand-bar input::placeholder {
+            color: rgba(247, 241, 232, 0.6);
+        }
+
+        .brand-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 13px;
+        }
+
+        .pill {
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .side-nav {
+            grid-row: 2 / span 1;
+            padding: 28px 20px;
+            border-right: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.4) 100%);
+        }
+
+        .side-nav h2 {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--slate);
+            margin-bottom: 12px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            font-size: 14px;
+            color: var(--ink-soft);
+            margin-bottom: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+        }
+
+        .nav-item.active {
+            background: var(--cass-black);
+            color: #f7f1e8;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+        }
+
+        .nav-item span {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--cass-gold);
+            opacity: 0.7;
+        }
+
+        .main-area {
+            grid-row: 2;
+            padding: 28px 32px 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        .overview {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .overview h1 {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 26px;
+        }
+
+        .time-pill {
+            padding: 8px 14px;
+            border-radius: 999px;
+            background: rgba(27,27,27,0.06);
+            font-size: 13px;
+            color: var(--ink-soft);
+        }
+
+        .stat-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+
+        .stat-card {
+            background: var(--card);
+            border-radius: 18px;
+            padding: 16px 18px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--line);
+        }
+
+        .stat-card .label {
+            font-size: 12px;
+            color: var(--slate);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .stat-card .value {
+            font-size: 22px;
+            margin-top: 8px;
+            font-weight: 600;
+        }
+
+        .stat-card .delta {
+            font-size: 12px;
+            color: var(--cass-teal);
+            margin-top: 6px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .insights-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .insight-card {
+            background: var(--card);
+            border-radius: 18px;
+            padding: 18px;
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 160px;
+        }
+
+        .insight-card h3 {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 16px;
+        }
+
+        .insight-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--ink-soft);
+        }
+
+        .insight-item {
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: rgba(31, 111, 107, 0.08);
+            border: 1px solid rgba(31, 111, 107, 0.15);
+        }
+
+        .insight-muted {
+            color: var(--slate);
+            font-size: 12px;
+        }
+
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .inventory-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .inventory-table th,
+        .inventory-table td {
+            padding: 8px 6px;
+            border-bottom: 1px solid #ede9e2;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        .inventory-table th {
+            color: var(--slate);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+
+        .trust-chip {
+            align-self: flex-start;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            background: rgba(47, 61, 51, 0.1);
+            color: var(--cass-moss);
+        }
+
+        .trust-chip.warning {
+            background: rgba(196, 154, 74, 0.15);
+            color: #8b6b1f;
+        }
+
+        .trust-chip.critical {
+            background: rgba(166, 58, 58, 0.15);
+            color: #8b2e2e;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: 18px;
+            padding: 18px;
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+            min-height: 180px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .card h3 {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 16px;
+        }
+
+        .card canvas {
+            width: 100%;
+            height: 90px;
+        }
+
+        .sparkline {
+            height: 90px;
+            width: 100%;
+            background: linear-gradient(120deg, rgba(31,111,107,0.2), rgba(196,154,74,0.2));
+            border-radius: 12px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sparkline::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: repeating-linear-gradient(90deg, transparent, transparent 12px, rgba(255,255,255,0.6) 12px, rgba(255,255,255,0.6) 13px);
+            opacity: 0.4;
+        }
+
+        .chart-note {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--slate);
+        }
+
+        .chat-panel {
+            grid-row: 2;
+            border-left: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0.65) 100%);
+            padding: 24px 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            height: calc(100vh - 72px);
+            overflow: hidden;
+        }
+
+        .chat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 14px;
+            color: var(--ink-soft);
+        }
+
+        .chat-container {
+            flex: 1;
+            background: #ffffff;
+            border-radius: 18px;
+            border: 1px solid var(--line);
+            box-shadow: var(--shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .message {
+            margin-bottom: 16px;
+            max-width: 85%;
+        }
+
+        .message.user {
+            margin-left: auto;
+        }
+
+        .message-content {
+            padding: 12px 16px;
+            border-radius: 16px;
+            line-height: 1.5;
+            font-size: 14px;
+        }
+
+        .message.user .message-content {
+            background: var(--cass-black);
+            color: #f7f1e8;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant .message-content {
+            background: #f4f1ec;
+            color: var(--ink);
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-content h2 {
+            font-size: 15px;
+            margin: 16px 0 8px 0;
+        }
+
+        .message-content h2:first-child {
+            margin-top: 0;
+        }
+
+        .message-content ul, .message-content ol {
+            margin: 8px 0;
+            padding-left: 20px;
+        }
+
+        .message-content li {
+            margin: 4px 0;
+        }
+
+        .message-content strong {
+            color: var(--cass-gold);
+        }
+
+        .message-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 12px 0;
+            font-size: 12px;
+        }
+
+        .message-content th, .message-content td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #e2dfda;
+        }
+
+        .message-content th {
+            background: #f8f6f2;
+            font-weight: 600;
+        }
+
+        .input-area {
+            padding: 12px 16px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .input-area input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        .input-area input:focus {
+            border-color: var(--cass-gold);
+            box-shadow: 0 0 0 3px rgba(196,154,74,0.15);
+        }
+
+        .input-area button {
+            padding: 10px 16px;
+            background: var(--cass-moss);
+            color: #f7f1e8;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .input-area button:hover {
+            background: #35463b;
+        }
+
+        .input-area button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .typing {
+            display: flex;
+            gap: 4px;
+            padding: 12px 16px;
+        }
+
+        .typing span {
+            width: 8px;
+            height: 8px;
+            background: #888;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out;
+        }
+
+        .typing span:nth-child(1) { animation-delay: -0.32s; }
+        .typing span:nth-child(2) { animation-delay: -0.16s; }
+
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        .welcome {
+            text-align: center;
+            color: #6b6670;
+            padding: 32px 16px;
+        }
+
+        .welcome h2 {
+            color: var(--cass-black);
+            margin-bottom: 8px;
+        }
+
+        .suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 16px;
+        }
+
+        .suggestion {
+            padding: 6px 12px;
+            background: #f0ede8;
+            border-radius: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .suggestion:hover {
+            background: #e6e1d9;
+        }
+
+        @media (max-width: 1200px) {
+            .app-shell {
+                grid-template-columns: 200px minmax(0, 1fr);
+                grid-template-rows: auto auto 1fr;
+            }
+
+            .chat-panel {
+                grid-column: 1 / -1;
+                border-left: none;
+                border-top: 1px solid var(--line);
+            }
+        }
+
+        @media (max-width: 900px) {
+            .app-shell {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto auto;
+            }
+
+            .side-nav {
+                grid-row: 2;
+                display: flex;
+                gap: 12px;
+                overflow-x: auto;
+                padding: 16px;
+            }
+
+            .main-area {
+                padding: 20px;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .insights-row {
+                grid-template-columns: 1fr;
+            }
+
+            .inventory-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .brand-bar {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+
+            .brand-bar input {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <div class="brand-bar">
+            <div class="brand-mark">
+                <span class="brand-dot"></span>
+                <strong>Cass Brothers Intelligence</strong>
+            </div>
+            <input type="search" placeholder="Search reports, SKUs, or alerts..." />
+            <div class="brand-actions">
+                <span class="pill">Analytics</span>
+                <span class="pill">Live</span>
+            </div>
+        </div>
+
+        <aside class="side-nav">
+            <h2>Dashboards</h2>
+            <a class="nav-item active" href="/dashboard"><span></span> Overview</a>
+            <a class="nav-item" href="/performance"><span></span> Performance</a>
+            <a class="nav-item" href="/seo-dashboard"><span></span> SEO &amp; Content</a>
+            <a class="nav-item" href="/ads-intelligence"><span></span> Ads Intelligence</a>
+            <a class="nav-item" href="/finance-dashboard"><span></span> Finance</a>
+            <a class="nav-item" href="/inventory"><span></span> Inventory</a>
+            <a class="nav-item" href="/pricing-intel"><span></span> Pricing Intel</a>
+            <a class="nav-item" href="/customer-intelligence"><span></span> Customer Intel</a>
+            <a class="nav-item" href="/merchant-center-intel"><span></span> Merchant Center</a>
+            <a class="nav-item" href="/strategic-intelligence"><span></span> Intelligence Brief</a>
+            <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
+                <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
+            </div>
+        </aside>
+
+        <section class="main-area">
+            <div class="overview">
+                <div>
+                    <h1>Analytics Overview</h1>
+                    <p class="time-pill">Last refresh: just now</p>
+                </div>
+                <div class="time-pill">Today · AUD</div>
+            </div>
+
+            <div class="stat-row">
+                <div class="stat-card">
+                    <div class="label">Total Revenue</div>
+                    <div class="value" id="revenue">-</div>
+                    <div class="delta">↑ 2.2% vs yesterday</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Orders</div>
+                    <div class="value" id="orders">-</div>
+                    <div class="delta">↑ 1.1% vs yesterday</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Products Tracked</div>
+                    <div class="value" id="products">-</div>
+                    <div class="delta">Competitive watchlist</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Active Alerts</div>
+                    <div class="value">4</div>
+                    <div class="delta">2 critical · 2 medium</div>
+                </div>
+            </div>
+
+            <div class="insights-row">
+                <div class="insight-card">
+                    <h3>AI Suggestions</h3>
+                    <div class="insight-list" id="ai-suggestions">
+                        <div class="insight-item">Loading recommendations...</div>
+                    </div>
+                    <div class="insight-muted">Based on connector health + recent alerts</div>
+                </div>
+                <div class="insight-card">
+                    <h3>System Trust Snapshot</h3>
+                    <span class="trust-chip" id="trust-chip">Checking status...</span>
+                    <div class="insight-list" id="trust-details">
+                        <div class="insight-item">Sync health: -</div>
+                        <div class="insight-item">Validation rate: -</div>
+                        <div class="insight-item">Alert backlog: -</div>
+                    </div>
+                    <div class="insight-muted">Helps directors understand data reliability</div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <div class="card">
+                    <h3>Total sales over time</h3>
+                    <canvas id="chart-revenue" height="90"></canvas>
+                    <div class="chart-note">
+                        <span id="revenue-note">-</span>
+                        <span id="revenue-change">-</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Sessions over time</h3>
+                    <canvas id="chart-sessions" height="90"></canvas>
+                    <div class="chart-note">
+                        <span id="sessions-note">-</span>
+                        <span id="sessions-change">-</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Conversion rate</h3>
+                    <canvas id="chart-conversion" height="90"></canvas>
+                    <div class="chart-note">
+                        <span id="conversion-note">-</span>
+                        <span id="conversion-change">-</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <h3>Average order value</h3>
+                    <canvas id="chart-aov" height="90"></canvas>
+                    <div class="chart-note">
+                        <span id="aov-note">-</span>
+                        <span id="aov-change">-</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="inventory-grid">
+                <div class="insight-card">
+                    <h3>Inventory · Reorder Now</h3>
+                    <div class="insight-muted">Lowest days of cover</div>
+                    <table class="inventory-table">
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Brand</th>
+                                <th>On Hand</th>
+                                <th>Days</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-reorder">
+                            <tr><td colspan="4">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="insight-card">
+                    <h3>Inventory · Overstock</h3>
+                    <div class="insight-muted">Highest days of cover</div>
+                    <table class="inventory-table">
+                        <thead>
+                            <tr>
+                                <th>SKU</th>
+                                <th>Brand</th>
+                                <th>On Hand</th>
+                                <th>Days</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventory-overstock">
+                            <tr><td colspan="4">Loading…</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <aside class="chat-panel">
+            <div class="chat-header">
+                <strong>Assistant</strong>
+                <span>New conversation</span>
+            </div>
+            <div class="chat-container">
+                <div class="messages" id="messages">
+                    <div class="welcome">
+                        <h2>Ask about pricing, SEO, or inventory</h2>
+                        <p>I can compare competitors, track margins, and surface daily issues.</p>
+                        <div class="suggestions">
+                            <span class="suggestion" onclick="askQuestion(this.textContent)">Who are we following on SKU HSNRT80B?</span>
+                            <span class="suggestion" onclick="askQuestion(this.textContent)">Which Zip SKUs are below minimum?</span>
+                            <span class="suggestion" onclick="askQuestion(this.textContent)">Top non-brand queries (last 28 days)</span>
+                            <span class="suggestion" onclick="askQuestion(this.textContent)">GA4 vs Shopify orders (last 28 days)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-area">
+                    <input type="text" id="input" placeholder="Ask a question..." onkeypress="handleKeyPress(event)">
+                    <button id="send" onclick="sendMessage()">Send</button>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        const API_URL = '';  // Same origin
+
+        // Load stats on page load
+        async function loadStats() {
+            try {
+                const liveResponse = await fetch('/monitor/metrics/live');
+                const live = await liveResponse.json();
+
+                const dashboardResponse = await fetch('/monitor/dashboard');
+                const dashboard = await dashboardResponse.json();
+
+                const healthResponse = await fetch('/monitor/health/dashboard');
+                const health = await healthResponse.json();
+
+                if (live.metrics) {
+                    document.getElementById('revenue').textContent = '$' + live.metrics.revenue_today.toLocaleString(undefined, { maximumFractionDigits: 0 });
+                    document.getElementById('orders').textContent = live.metrics.orders_today.toLocaleString();
+                }
+
+                if (dashboard.summary) {
+                    document.querySelector('.stat-card:nth-child(4) .value').textContent = dashboard.summary.active_issues;
+                }
+
+                document.getElementById('products').textContent = '16K+';
+
+                if (health && health.recommendations) {
+                    const suggestionList = document.getElementById('ai-suggestions');
+                    suggestionList.innerHTML = '';
+                    const suggestions = health.recommendations.slice(0, 4);
+                    if (suggestions.length === 0) {
+                        suggestionList.innerHTML = '<div class="insight-item">All systems look healthy. No urgent actions.</div>';
+                    } else {
+                        suggestions.forEach(text => {
+                            const item = document.createElement('div');
+                            item.className = 'insight-item';
+                            item.textContent = text;
+                            suggestionList.appendChild(item);
+                        });
+                    }
+                }
+
+                if (health) {
+                    const trustChip = document.getElementById('trust-chip');
+                    const status = health.overall_status || 'unknown';
+                    trustChip.textContent = health.status_message || 'Status unknown';
+                    trustChip.className = `trust-chip ${status === 'critical' ? 'critical' : status === 'warning' || status === 'degraded' ? 'warning' : ''}`;
+
+                    const trustDetails = document.getElementById('trust-details');
+                    const sync = health.sync_health || {};
+                    const validation = health.validation_health || {};
+                    const backlog = health.alert_backlog || {};
+                    trustDetails.innerHTML = `
+                        <div class="insight-item">Sync health: ${sync.success_rate_24h === null ? 'No syncs' : `${Math.round(sync.success_rate_24h || 0)}% success`} · ${sync.total_syncs_24h || 0} runs</div>
+                        <div class="insight-item">Validation rate: ${validation.failure_rate_24h ?? '-'}% · ${validation.total_failures_24h ?? 0} issues</div>
+                        <div class="insight-item">Alert backlog: ${backlog.total_unresolved ?? 0} unresolved</div>
+                    `;
+                }
+
+                await loadCharts();
+                await loadInventoryInsights();
+            } catch (error) {
+                console.error('Failed to load stats:', error);
+            }
+        }
+
+        function askQuestion(question) {
+            document.getElementById('input').value = question;
+            sendMessage();
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('input');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            // Clear welcome message on first send
+            const welcome = document.querySelector('.welcome');
+            if (welcome) welcome.remove();
+
+            // Add user message
+            addMessage(message, 'user');
+            input.value = '';
+
+            // Show typing indicator
+            const typing = addTypingIndicator();
+
+            // Disable input
+            const sendBtn = document.getElementById('send');
+            sendBtn.disabled = true;
+
+            try {
+                const response = await fetch('/llm/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+
+                const data = await response.json();
+
+                // Remove typing indicator
+                typing.remove();
+
+                // Add assistant response
+                addMessage(data.response, 'assistant');
+
+            } catch (error) {
+                typing.remove();
+                addMessage('Sorry, something went wrong. Please try again.', 'assistant');
+            }
+
+            sendBtn.disabled = false;
+            input.focus();
+        }
+
+        function addMessage(content, role) {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+
+            // Convert markdown-like formatting to HTML
+            let html = content
+                .replace(/## (.*?)(\n|$)/g, '<h2>$1</h2>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\n- /g, '<br>• ')
+                .replace(/\n\d+\. /g, '<br>')
+                .replace(/\n/g, '<br>');
+
+            div.innerHTML = `<div class="message-content">${html}</div>`;
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+            return div;
+        }
+
+        function addTypingIndicator() {
+            const messages = document.getElementById('messages');
+            const div = document.createElement('div');
+            div.className = 'message assistant';
+            div.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+            messages.appendChild(div);
+            messages.scrollTop = messages.scrollHeight;
+            return div;
+        }
+
+        function formatDelta(value) {
+            if (value === null || value === undefined) return '-';
+            const sign = value > 0 ? '↑' : (value < 0 ? '↓' : '•');
+            return `${sign} ${Math.abs(value).toFixed(1)}%`;
+        }
+
+        async function loadCharts() {
+            const response = await fetch('/monitor/metrics/timeseries?days=7');
+            const data = await response.json();
+
+            const labels = data.dates.map(date => {
+                const d = new Date(date);
+                return `${d.getDate()}/${d.getMonth() + 1}`;
+            });
+
+            const revenue = data.series.revenue;
+            const sessions = data.series.sessions;
+            const conversion = data.series.conversion_rate;
+            const aov = data.series.aov;
+
+            buildLineChart('chart-revenue', labels, revenue, '#1f6f6b');
+            buildLineChart('chart-sessions', labels, sessions, '#c49a4a');
+            buildLineChart('chart-conversion', labels, conversion, '#2f3d33');
+            buildLineChart('chart-aov', labels, aov, '#1b1b1b');
+
+            const lastRevenue = revenue[revenue.length - 1] || 0;
+            const prevRevenue = revenue[revenue.length - 2] || 0;
+            const revenueChange = prevRevenue ? ((lastRevenue - prevRevenue) / prevRevenue) * 100 : 0;
+
+            const lastSessions = sessions[sessions.length - 1] || 0;
+            const prevSessions = sessions[sessions.length - 2] || 0;
+            const sessionsChange = prevSessions ? ((lastSessions - prevSessions) / prevSessions) * 100 : 0;
+
+            const lastConversion = conversion[conversion.length - 1] || 0;
+            const prevConversion = conversion[conversion.length - 2] || 0;
+            const conversionChange = prevConversion ? ((lastConversion - prevConversion) / prevConversion) * 100 : 0;
+
+            const lastAov = aov[aov.length - 1] || 0;
+            const prevAov = aov[aov.length - 2] || 0;
+            const aovChange = prevAov ? ((lastAov - prevAov) / prevAov) * 100 : 0;
+
+            document.getElementById('revenue-note').textContent = `$${lastRevenue.toLocaleString(undefined, { maximumFractionDigits: 0 })} today`;
+            document.getElementById('revenue-change').textContent = formatDelta(revenueChange);
+            document.getElementById('sessions-note').textContent = `${lastSessions.toLocaleString()} sessions`;
+            document.getElementById('sessions-change').textContent = formatDelta(sessionsChange);
+            document.getElementById('conversion-note').textContent = `${lastConversion.toFixed(2)}%`;
+            document.getElementById('conversion-change').textContent = formatDelta(conversionChange);
+            document.getElementById('aov-note').textContent = `$${lastAov.toFixed(2)}`;
+            document.getElementById('aov-change').textContent = formatDelta(aovChange);
+        }
+
+        function buildLineChart(canvasId, labels, values, color) {
+            const canvas = document.getElementById(canvasId);
+            const ctx = canvas.getContext('2d');
+            const width = canvas.parentElement.clientWidth;
+            const height = 90;
+
+            canvas.width = width * window.devicePixelRatio;
+            canvas.height = height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+            ctx.clearRect(0, 0, width, height);
+
+            const validValues = values.filter(v => typeof v === 'number');
+            const min = Math.min(...validValues, 0);
+            const max = Math.max(...validValues, 1);
+            const range = max - min || 1;
+
+            ctx.beginPath();
+            values.forEach((value, index) => {
+                const x = (index / (values.length - 1 || 1)) * (width - 10) + 5;
+                const y = height - ((value - min) / range) * (height - 12) - 6;
+                if (index === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.lineTo(width - 5, height - 6);
+            ctx.lineTo(5, height - 6);
+            ctx.closePath();
+            ctx.fillStyle = `${color}1a`;
+            ctx.fill();
+        }
+
+        async function loadInventoryInsights() {
+            try {
+                const response = await fetch('/ml/inventory-suggestions');
+                const payload = await response.json();
+                const items = payload?.data?.items || payload?.data || payload?.items || [];
+
+                const reorder = items
+                    .filter(item => item.suggestion === 'reorder_now')
+                    .sort((a, b) => (a.days_of_cover || 0) - (b.days_of_cover || 0))
+                    .slice(0, 6);
+
+                const overstock = items
+                    .filter(item => item.suggestion === 'overstock')
+                    .sort((a, b) => (b.days_of_cover || 0) - (a.days_of_cover || 0))
+                    .slice(0, 6);
+
+                renderInventoryTable('inventory-reorder', reorder);
+                renderInventoryTable('inventory-overstock', overstock);
+            } catch (error) {
+                console.error('Failed to load inventory suggestions:', error);
+                renderInventoryTable('inventory-reorder', []);
+                renderInventoryTable('inventory-overstock', []);
+            }
+        }
+
+        function renderInventoryTable(targetId, rows) {
+            const tbody = document.getElementById(targetId);
+            if (!tbody) return;
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="4">No data</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rows.map(row => `
+                <tr>
+                    <td>${row.sku || '-'}</td>
+                    <td>${row.brand || '-'}</td>
+                    <td>${row.units_on_hand ?? '-'}</td>
+                    <td>${row.days_of_cover ? row.days_of_cover.toFixed(0) : '-'}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Load stats on page load
+        loadStats();
+    </script>
+</body>
+</html>

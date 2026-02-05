@@ -1,0 +1,1633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cass Brothers · Search Performance Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        :root {
+            --ink: #1c1b1f;
+            --ink-soft: #3d3a40;
+            --slate: #6b6670;
+            --card: #ffffff;
+            --line: rgba(27, 27, 27, 0.08);
+            --shadow: 0 1px 3px rgba(17,18,19,0.04), 0 8px 24px rgba(17,18,19,0.06);
+            --shadow-lg: 0 4px 12px rgba(17,18,19,0.05), 0 20px 48px rgba(17,18,19,0.08);
+            --cass-black: #1b1b1b;
+            --cass-cream: #f7f3ed;
+            --cass-gold: #c49a4a;
+            --cass-teal: #1f6f6b;
+            --cass-moss: #2f3d33;
+            --green: #1a7a3a;
+            --green-bg: rgba(26,122,58,0.08);
+            --red: #b5342a;
+            --red-bg: rgba(181,52,42,0.08);
+            --amber: #8b6b1f;
+            --amber-bg: rgba(196,154,74,0.12);
+            --radius: 14px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "IBM Plex Sans", "Space Grotesk", sans-serif;
+            background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        /* ---- Shell ---- */
+        .app-shell {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr);
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+        }
+
+        .brand-bar {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 28px;
+            background: var(--cass-black);
+            color: #f7f1e8;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+
+        .brand-mark {
+            display: flex; align-items: center; gap: 12px;
+            font-family: "Space Grotesk", sans-serif; letter-spacing: 0.5px;
+        }
+        .brand-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--cass-gold); box-shadow: 0 0 0 3px rgba(196,154,74,0.2); }
+
+        .brand-actions { display: flex; gap: 10px; font-size: 13px; }
+        .pill {
+            padding: 5px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18);
+            cursor: pointer; transition: border-color 0.2s; background: none; color: inherit; font: inherit; font-size: 13px;
+        }
+        .pill:hover { border-color: rgba(255,255,255,0.4); }
+
+        /* ---- Side Nav ---- */
+        .side-nav {
+            padding: 24px 16px;
+            border-right: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.35) 100%);
+        }
+        .side-nav h2 {
+            font-size: 11px; text-transform: uppercase; letter-spacing: 1.2px;
+            color: var(--slate); margin-bottom: 14px; padding-left: 12px;
+        }
+        .nav-item {
+            display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px;
+            font-size: 13.5px; color: var(--ink-soft); margin-bottom: 4px; cursor: pointer;
+            transition: all 0.15s ease; text-decoration: none;
+        }
+        .nav-item:hover { background: rgba(27,27,27,0.04); }
+        .nav-item.active { background: var(--cass-black); color: #f7f1e8; box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+        .nav-item span { width: 7px; height: 7px; border-radius: 50%; background: var(--cass-gold); opacity: 0.6; flex-shrink: 0; }
+        .nav-item.active span { opacity: 1; }
+
+        /* ---- Main Content ---- */
+        .main-area {
+            padding: 28px 32px 48px;
+            display: flex; flex-direction: column; gap: 24px; overflow-y: auto;
+        }
+
+        /* ---- Page Header ---- */
+        .page-header { display: flex; align-items: flex-end; justify-content: space-between; }
+        .page-header h1 { font-family: "Space Grotesk", sans-serif; font-size: 24px; font-weight: 600; letter-spacing: -0.3px; }
+        .page-header .subtitle { font-size: 13px; color: var(--slate); margin-top: 2px; }
+        .header-badges { display: flex; gap: 10px; align-items: center; }
+        .meta-badge {
+            padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 500;
+            background: rgba(27,27,27,0.05); color: var(--ink-soft);
+        }
+        .meta-badge.trust-healthy { background: var(--green-bg); color: var(--green); }
+        .meta-badge.trust-warning { background: var(--amber-bg); color: var(--amber); }
+        .meta-badge.trust-critical { background: var(--red-bg); color: var(--red); }
+
+        /* ---- Tab Navigation ---- */
+        .tab-nav {
+            display: flex; gap: 4px; background: rgba(27,27,27,0.04); border-radius: 12px; padding: 4px;
+            width: fit-content;
+        }
+        .tab-btn {
+            padding: 8px 18px; border-radius: 10px; font-size: 13px; font-weight: 500;
+            border: none; background: none; color: var(--slate); cursor: pointer;
+            transition: all 0.2s ease; font-family: inherit;
+        }
+        .tab-btn:hover { color: var(--ink); }
+        .tab-btn.active {
+            background: var(--cass-black); color: #f7f1e8; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        }
+        .tab-content { display: none; flex-direction: column; gap: 20px; }
+        .tab-content.active { display: flex; }
+
+        /* ---- Pulse Banner ---- */
+        .pulse-banner {
+            background: var(--cass-moss); color: #e8e2d6; border-radius: var(--radius);
+            padding: 20px 24px; display: grid; grid-template-columns: 1fr auto;
+            gap: 16px; align-items: start; box-shadow: var(--shadow-lg);
+        }
+        .pulse-banner h2 { font-family: "Space Grotesk", sans-serif; font-size: 15px; font-weight: 600; margin-bottom: 6px; color: var(--cass-gold); letter-spacing: 0.3px; }
+        .pulse-body { font-size: 14px; line-height: 1.55; color: #c8c1b4; }
+        .pulse-meta { display: flex; gap: 20px; margin-top: 12px; font-size: 12px; }
+        .pulse-meta-item { display: flex; flex-direction: column; gap: 2px; }
+        .pulse-meta-item .pm-label { color: #8a8276; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
+        .pulse-meta-item .pm-value { color: #e8e2d6; font-weight: 500; }
+        .pulse-status-chip {
+            padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap;
+        }
+        .pulse-status-chip.growing { background: rgba(26,122,58,0.2); color: #6cd992; }
+        .pulse-status-chip.stable { background: rgba(196,154,74,0.2); color: var(--cass-gold); }
+        .pulse-status-chip.declining { background: rgba(181,52,42,0.2); color: #f08c84; }
+
+        /* ---- KPI Row ---- */
+        .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+        .kpi-card {
+            background: var(--card); border-radius: var(--radius); padding: 16px 18px;
+            box-shadow: var(--shadow); border: 1px solid var(--line);
+            display: flex; flex-direction: column; gap: 4px;
+        }
+        .kpi-card .kpi-label { font-size: 11px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 500; }
+        .kpi-card .kpi-value { font-family: "Space Grotesk", sans-serif; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+        .kpi-card .kpi-delta { font-size: 12px; font-weight: 500; }
+        .kpi-delta.up { color: var(--green); }
+        .kpi-delta.down { color: var(--red); }
+        .kpi-delta.neutral { color: var(--slate); }
+
+        /* ---- Section Grid ---- */
+        .section-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+        .section-grid .full-width { grid-column: 1 / -1; }
+
+        /* ---- Card ---- */
+        .card {
+            background: var(--card); border-radius: var(--radius); padding: 20px 22px;
+            border: 1px solid var(--line); box-shadow: var(--shadow);
+        }
+        .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+        .card-header h3 { font-family: "Space Grotesk", sans-serif; font-size: 14px; font-weight: 600; }
+        .card-header .card-badge {
+            font-size: 11px; padding: 3px 10px; border-radius: 999px;
+            background: rgba(27,27,27,0.05); color: var(--slate); font-weight: 500;
+        }
+        .card .narrative { font-size: 13px; color: var(--slate); line-height: 1.45; margin-bottom: 12px; }
+
+        /* ---- Tables ---- */
+        table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+        th, td { padding: 8px 8px; text-align: left; border-bottom: 1px solid #f0ece5; }
+        th {
+            color: var(--slate); font-weight: 600; font-size: 10.5px;
+            text-transform: uppercase; letter-spacing: 0.5px; padding-bottom: 10px;
+        }
+        tr:last-child td { border-bottom: none; }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        th.num { text-align: right; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+        .badge.info { background: rgba(31,111,107,0.1); color: var(--cass-teal); }
+        .badge.warning { background: var(--amber-bg); color: var(--amber); }
+        .badge.critical { background: var(--red-bg); color: var(--red); }
+        .badge.success { background: var(--green-bg); color: var(--green); }
+
+        .delta-positive { color: var(--green); font-weight: 500; }
+        .delta-negative { color: var(--red); font-weight: 500; }
+        .wrap { white-space: normal; word-break: break-word; }
+        .muted { color: var(--slate); font-size: 11px; }
+        .scroll-x { overflow-x: auto; }
+
+        /* Clickable row */
+        tr.clickable { cursor: pointer; transition: background 0.15s; }
+        tr.clickable:hover { background: rgba(31,111,107,0.04); }
+
+        /* ---- Position Distribution Bar ---- */
+        .pos-bar-container { display: flex; border-radius: 8px; overflow: hidden; height: 28px; margin-top: 4px; }
+        .pos-bar-segment {
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 600; color: #fff; transition: width 0.5s ease;
+            min-width: 0;
+        }
+        .pos-bar-segment.pos-1-3 { background: var(--green); }
+        .pos-bar-segment.pos-4-10 { background: var(--cass-teal); }
+        .pos-bar-segment.pos-11-20 { background: var(--cass-gold); }
+        .pos-bar-segment.pos-20plus { background: var(--red); opacity: 0.75; }
+
+        .pos-legend { display: flex; gap: 16px; margin-top: 8px; font-size: 11px; color: var(--slate); }
+        .pos-legend-item { display: flex; align-items: center; gap: 5px; }
+        .pos-legend-dot { width: 8px; height: 8px; border-radius: 2px; }
+
+        /* ---- CTR Bar (actual vs expected) ---- */
+        .ctr-bar-wrap { display: flex; align-items: center; gap: 6px; min-width: 120px; }
+        .ctr-bar { height: 6px; border-radius: 3px; background: #e5e1da; position: relative; flex: 1; overflow: hidden; }
+        .ctr-bar-fill { height: 100%; border-radius: 3px; background: var(--cass-teal); transition: width 0.4s; }
+        .ctr-bar-expected { position: absolute; top: -3px; height: 12px; width: 2px; background: var(--cass-gold); }
+
+        /* ---- SVG Chart ---- */
+        .chart-container { width: 100%; height: 200px; margin-top: 8px; }
+        .chart-container svg { width: 100%; height: 100%; }
+
+        /* ---- Sparkline ---- */
+        .sparkline-svg { vertical-align: middle; }
+
+        /* ---- Pagination Controls ---- */
+        .pagination-controls { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+        .pagination-controls select {
+            padding: 4px 8px; border-radius: 8px; border: 1px solid var(--line);
+            font-size: 12px; font-family: inherit; background: var(--card); color: var(--ink);
+        }
+        .pagination-controls .pill-ctrl {
+            padding: 4px 10px; border: 1px solid var(--line); color: var(--ink-soft); font-size: 12px;
+            border-radius: 999px; cursor: pointer; background: none; font-family: inherit;
+        }
+        .pagination-controls .pill-ctrl:hover { border-color: var(--cass-gold); }
+
+        /* ---- Modal ---- */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(27,27,27,0.45); backdrop-filter: blur(4px);
+            z-index: 1000; display: none; align-items: center; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-box {
+            background: var(--card); border-radius: 18px; width: min(92vw, 820px);
+            max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            padding: 28px 32px 24px;
+        }
+        .modal-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 18px; }
+        .modal-header h2 { font-family: "Space Grotesk", sans-serif; font-size: 18px; font-weight: 600; }
+        .modal-close {
+            width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line);
+            background: none; cursor: pointer; font-size: 16px; display: flex; align-items: center;
+            justify-content: center; color: var(--slate); transition: background 0.15s;
+        }
+        .modal-close:hover { background: rgba(27,27,27,0.05); }
+        .modal-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 18px; }
+        .modal-stat {
+            background: rgba(27,27,27,0.03); border-radius: 10px; padding: 12px 14px;
+            display: flex; flex-direction: column; gap: 2px;
+        }
+        .modal-stat .ms-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--slate); }
+        .modal-stat .ms-value { font-family: "Space Grotesk", sans-serif; font-size: 18px; font-weight: 600; }
+        .modal-stat .ms-delta { font-size: 11px; }
+        .modal-flags { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+        .flag-pill { padding: 4px 12px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+        .flag-pill.risk { background: var(--red-bg); color: var(--red); }
+        .flag-pill.decay { background: var(--amber-bg); color: var(--amber); }
+        .flag-pill.cannib { background: rgba(31,111,107,0.1); color: var(--cass-teal); }
+        .modal-fix-box {
+            background: rgba(31,111,107,0.06); border: 1px solid rgba(31,111,107,0.15);
+            border-radius: 10px; padding: 12px 16px; margin-bottom: 16px;
+        }
+        .modal-fix-box .fix-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--cass-teal); font-weight: 600; margin-bottom: 4px; }
+        .modal-fix-box .fix-text { font-size: 13px; color: var(--ink); }
+        .modal-chart { width: 100%; height: 160px; margin: 12px 0; }
+        .modal-chart svg { width: 100%; height: 100%; }
+
+        /* ---- Placeholder Card ---- */
+        .placeholder-card {
+            background: rgba(27,27,27,0.03); border: 1px dashed var(--line);
+            border-radius: var(--radius); padding: 28px 24px; text-align: center;
+        }
+        .placeholder-card h3 { font-family: "Space Grotesk", sans-serif; font-size: 14px; margin-bottom: 6px; color: var(--ink-soft); }
+        .placeholder-card p { font-size: 13px; color: var(--slate); }
+
+        /* ---- Decision Card ---- */
+        .decision-card {
+            background: var(--card); border-radius: var(--radius); padding: 20px 22px;
+            border: 1px solid var(--line); border-left: 4px solid var(--cass-gold);
+            box-shadow: var(--shadow);
+        }
+        .decision-card-header {
+            display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+        }
+        .decision-card-header h3 {
+            font-family: "Space Grotesk", sans-serif; font-size: 14px; font-weight: 600;
+            color: var(--amber); display: flex; align-items: center; gap: 8px; margin: 0;
+        }
+        .confidence-badge {
+            padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.4px;
+        }
+        .confidence-high { background: var(--green-bg); color: var(--green); }
+        .confidence-medium { background: var(--amber-bg); color: var(--amber); }
+        .confidence-low { background: var(--red-bg); color: var(--red); }
+        .decision-row {
+            display: grid; grid-template-columns: 120px 1fr;
+            gap: 4px 16px; padding: 8px 0; border-bottom: 1px solid var(--line);
+        }
+        .decision-row:last-child { border-bottom: none; }
+        .decision-row .dr-label {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
+            color: var(--slate); font-weight: 600; padding-top: 2px;
+        }
+        .decision-row .dr-value { font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+        .impact-badge, .effort-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 999px;
+            font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
+            margin-left: 6px; vertical-align: middle;
+        }
+        .impact-high { background: var(--red-bg); color: var(--red); }
+        .impact-medium { background: var(--amber-bg); color: var(--amber); }
+        .impact-low { background: rgba(27,27,27,0.06); color: var(--slate); }
+        .effort-low { background: var(--green-bg); color: var(--green); }
+        .effort-medium { background: var(--amber-bg); color: var(--amber); }
+        .effort-high { background: var(--red-bg); color: var(--red); }
+
+        /* ---- Trust Banner ---- */
+        .trust-banner {
+            background: rgba(196,154,74,0.08); border: 1px solid rgba(196,154,74,0.3);
+            border-radius: var(--radius); padding: 14px 18px;
+            display: flex; align-items: flex-start; gap: 10px;
+            font-size: 13px; color: var(--amber);
+        }
+        .trust-banner .tb-icon { font-size: 18px; flex-shrink: 0; line-height: 1; }
+        .trust-banner .tb-body { line-height: 1.5; }
+        .trust-banner strong { color: var(--ink); }
+
+        /* ---- Explainability Tooltips ---- */
+        .why-tip {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: rgba(27,27,27,0.08); color: var(--slate);
+            font-size: 9px; font-weight: 700; cursor: help;
+            margin-left: 4px; position: relative; vertical-align: middle;
+        }
+        .why-tip .why-tip-box {
+            display: none; position: absolute; bottom: calc(100% + 6px); left: 50%;
+            transform: translateX(-50%); width: 220px; padding: 10px 12px;
+            background: var(--cass-black); color: #e8e2d6; border-radius: 10px;
+            font-size: 11px; font-weight: 400; line-height: 1.5;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 50;
+            text-transform: none; letter-spacing: 0; pointer-events: none;
+        }
+        .why-tip:hover .why-tip-box { display: block; }
+
+        /* ---- Table Readability ---- */
+        tbody tr:nth-child(even) { background: rgba(0,0,0,0.015); }
+        th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+
+        /* ---- Responsive ---- */
+        @media (max-width: 1100px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 900px) {
+            .app-shell { grid-template-columns: 1fr; }
+            .side-nav { display: flex; gap: 8px; overflow-x: auto; padding: 12px 16px; border-right: none; border-bottom: 1px solid var(--line); }
+            .side-nav h2 { display: none; }
+            .section-grid { grid-template-columns: 1fr; }
+            .kpi-row { grid-template-columns: 1fr 1fr; }
+            .pulse-banner { grid-template-columns: 1fr; }
+            .modal-stats { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <!-- Brand Bar -->
+        <div class="brand-bar">
+            <div class="brand-mark">
+                <span class="brand-dot"></span>
+                <strong>Cass Brothers Intelligence</strong>
+            </div>
+            <div class="brand-actions">
+                <span class="pill" id="tone-toggle">Plain</span>
+                <span class="pill" id="seo-refresh">Loading...</span>
+            </div>
+        </div>
+
+        <!-- Side Nav -->
+        <aside class="side-nav">
+            <h2>Dashboards</h2>
+            <a class="nav-item" href="/dashboard"><span></span> Overview</a>
+            <a class="nav-item" href="/performance"><span></span> Performance</a>
+            <a class="nav-item active" href="/seo-dashboard"><span></span> SEO &amp; Content</a>
+            <a class="nav-item" href="/ads-intelligence"><span></span> Ads Intelligence</a>
+            <a class="nav-item" href="/finance-dashboard"><span></span> Finance</a>
+            <a class="nav-item" href="/inventory"><span></span> Inventory</a>
+            <a class="nav-item" href="/pricing-intel"><span></span> Pricing Intel</a>
+            <a class="nav-item" href="/customer-intelligence"><span></span> Customer Intel</a>
+            <a class="nav-item" href="/merchant-center-intel"><span></span> Merchant Center</a>
+            <a class="nav-item" href="/strategic-intelligence"><span></span> Intelligence Brief</a>
+            <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
+                <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <section class="main-area">
+            <!-- Page Header -->
+            <div class="page-header">
+                <div>
+                    <h1>Search Performance Intelligence</h1>
+                    <p class="subtitle" id="seo-period">Last 30 days</p>
+                </div>
+                <div class="header-badges">
+                    <div class="meta-badge" id="health-badge">Health: loading...</div>
+                    <div class="meta-badge" id="snapshot-time">--</div>
+                </div>
+            </div>
+
+            <!-- Tab Navigation -->
+            <div class="tab-nav">
+                <button class="tab-btn active" onclick="switchTab('performance')">Performance</button>
+                <button class="tab-btn" onclick="switchTab('queries')">Query Intelligence</button>
+                <button class="tab-btn" onclick="switchTab('pages')">Page Intelligence</button>
+                <button class="tab-btn" onclick="switchTab('actions')">Action Plan</button>
+            </div>
+
+            <!-- ================================================================
+                 TAB 1: PERFORMANCE
+                 ================================================================ -->
+            <div class="tab-content active" id="tab-performance">
+
+                <!-- Pulse Banner -->
+                <div class="pulse-banner">
+                    <div>
+                        <h2>Search Pulse</h2>
+                        <div class="pulse-body" id="pulse-summary">Loading...</div>
+                        <div class="pulse-meta">
+                            <div class="pulse-meta-item">
+                                <span class="pm-label">Click Gap</span>
+                                <span class="pm-value" id="pulse-clickgap">--</span>
+                            </div>
+                            <div class="pulse-meta-item">
+                                <span class="pm-label">Gaining</span>
+                                <span class="pm-value" id="pulse-gaining">--</span>
+                            </div>
+                            <div class="pulse-meta-item">
+                                <span class="pm-label">Losing</span>
+                                <span class="pm-value" id="pulse-losing">--</span>
+                            </div>
+                            <div class="pulse-meta-item">
+                                <span class="pm-label">URLs</span>
+                                <span class="pm-value" id="pulse-urls">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="pulse-status-chip stable" id="pulse-status">Stable</div>
+                </div>
+
+                <!-- Trust Banner (conditional) -->
+                <div class="trust-banner" id="seo-trust-banner" style="display:none;">
+                    <div class="tb-icon">&#9888;</div>
+                    <div class="tb-body" id="seo-trust-body"></div>
+                </div>
+
+                <!-- Decision Card -->
+                <div class="decision-card" id="seo-decision-card">
+                    <div class="decision-card-header">
+                        <h3>Decision Summary</h3>
+                        <span class="confidence-badge confidence-medium" id="seo-confidence">Medium</span>
+                    </div>
+                    <div class="decision-row">
+                        <div class="dr-label">Primary Insight</div>
+                        <div class="dr-value" id="seo-dc-insight">Loading...</div>
+                    </div>
+                    <div class="decision-row">
+                        <div class="dr-label">Why It Matters</div>
+                        <div class="dr-value" id="seo-dc-why">--</div>
+                    </div>
+                    <div class="decision-row">
+                        <div class="dr-label">Do Next</div>
+                        <div class="dr-value" id="seo-dc-next">--</div>
+                    </div>
+                </div>
+
+                <!-- KPI Row 1: Core Search Metrics -->
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Clicks</div>
+                        <div class="kpi-value" id="kpi-clicks">--</div>
+                        <div class="kpi-delta neutral" id="kpi-clicks-delta">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Impressions</div>
+                        <div class="kpi-value" id="kpi-impressions">--</div>
+                        <div class="kpi-delta neutral" id="kpi-impressions-delta">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Weighted CTR <span class="why-tip">?<span class="why-tip-box">Click-through rate weighted by impressions. Accounts for ranking position — higher positions should get more clicks. Good: within 80% of expected CTR for your positions.</span></span></div>
+                        <div class="kpi-value" id="kpi-wctr">--</div>
+                        <div class="kpi-delta neutral" id="kpi-wctr-delta">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Avg Position <span class="why-tip">?<span class="why-tip-box">Impression-weighted average Google position. Lower is better. Under 10 means you're on page 1 for most queries.</span></span></div>
+                        <div class="kpi-value" id="kpi-position">--</div>
+                        <div class="kpi-delta neutral" id="kpi-position-delta">--</div>
+                    </div>
+                </div>
+
+                <!-- KPI Row 2 -->
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Click Gap <span class="why-tip">?<span class="why-tip-box">Clicks you should be getting based on your ranking positions vs what you actually get. A large gap means title tags and meta descriptions need work.</span></span></div>
+                        <div class="kpi-value" id="kpi-clickgap">--</div>
+                        <div class="kpi-delta neutral">Missed clicks</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">URLs Analyzed</div>
+                        <div class="kpi-value" id="kpi-urls">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Gaining Rank</div>
+                        <div class="kpi-value delta-positive" id="kpi-gaining">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Losing Rank</div>
+                        <div class="kpi-value delta-negative" id="kpi-losing">--</div>
+                    </div>
+                </div>
+
+                <!-- Position Distribution -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Position Distribution</h3>
+                        <div class="card-badge" id="pos-total-badge">--</div>
+                    </div>
+                    <div class="pos-bar-container" id="pos-bar"></div>
+                    <div class="pos-legend">
+                        <div class="pos-legend-item"><div class="pos-legend-dot" style="background:var(--green)"></div> Pos 1-3</div>
+                        <div class="pos-legend-item"><div class="pos-legend-dot" style="background:var(--cass-teal)"></div> Pos 4-10</div>
+                        <div class="pos-legend-item"><div class="pos-legend-dot" style="background:var(--cass-gold)"></div> Pos 11-20</div>
+                        <div class="pos-legend-item"><div class="pos-legend-dot" style="background:var(--red);opacity:0.75"></div> Pos 20+</div>
+                    </div>
+                </div>
+
+                <!-- Monthly Trends Chart + Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Monthly Trends</h3>
+                        <div class="card-badge">6 months</div>
+                    </div>
+                    <div class="chart-container" id="trends-chart"></div>
+                    <div class="scroll-x" style="margin-top:14px;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Month</th>
+                                    <th class="num">Clicks</th>
+                                    <th class="num">Impressions</th>
+                                    <th class="num">CTR</th>
+                                    <th class="num">Avg Pos</th>
+                                    <th class="num">Click Gap</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trends-table"><tr><td colspan="6">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================================
+                 TAB 2: QUERY INTELLIGENCE
+                 ================================================================ -->
+            <div class="tab-content" id="tab-queries">
+                <div class="kpi-row" id="query-kpis">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Queries</div>
+                        <div class="kpi-value" id="q-total-queries">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">CTR Drags</div>
+                        <div class="kpi-value" id="q-ctr-drags">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Cannibalized</div>
+                        <div class="kpi-value" id="q-cannibalized">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Click Gap Sum</div>
+                        <div class="kpi-value" id="q-clickgap-sum">--</div>
+                    </div>
+                </div>
+
+                <!-- Click Gap Top 30 -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Click Gap Analysis — Top 30</h3>
+                        <div class="card-badge" id="clickgap-badge">--</div>
+                    </div>
+                    <div class="scroll-x">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Query</th>
+                                    <th>Page</th>
+                                    <th class="num">Pos</th>
+                                    <th>CTR</th>
+                                    <th class="num">Click Gap</th>
+                                    <th class="num">Rev Gap</th>
+                                    <th class="num">Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody id="clickgap-table"><tr><td colspan="7">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="section-grid">
+                    <!-- Category Breakdown -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Category Breakdown</h3>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Template</th>
+                                    <th class="num">Pages</th>
+                                    <th class="num">Clicks</th>
+                                    <th class="num">CTR</th>
+                                    <th class="num">Avg Pos</th>
+                                </tr>
+                            </thead>
+                            <tbody id="category-table"><tr><td colspan="5">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Alerts -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Alerts</h3>
+                            <div class="card-badge" id="alert-count">--</div>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Alert</th>
+                                    <th>Severity</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="alerts-table"><tr><td colspan="3">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================================
+                 TAB 3: PAGE INTELLIGENCE
+                 ================================================================ -->
+            <div class="tab-content" id="tab-pages">
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Pages</div>
+                        <div class="kpi-value" id="p-total-pages">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Declining Pages</div>
+                        <div class="kpi-value delta-negative" id="p-declining">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Close to Page 1</div>
+                        <div class="kpi-value" id="p-close-p1">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Non-Brand Share</div>
+                        <div class="kpi-value" id="p-non-brand">--</div>
+                    </div>
+                </div>
+
+                <!-- Declining Pages -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Declining Pages</h3>
+                        <div class="card-badge" id="declining-badge">--</div>
+                    </div>
+                    <div class="scroll-x">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>URL</th>
+                                    <th class="num">Clicks Lost</th>
+                                    <th class="num">Pos Change</th>
+                                    <th>Top Query</th>
+                                    <th>Severity</th>
+                                </tr>
+                            </thead>
+                            <tbody id="declining-table"><tr><td colspan="5">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="section-grid">
+                    <!-- Close to Page 1 -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Close to Page 1</h3>
+                            <div class="card-badge">Pos 8-15</div>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Query</th>
+                                    <th class="num">Impr</th>
+                                    <th class="num">Pos</th>
+                                    <th class="num">Potential</th>
+                                </tr>
+                            </thead>
+                            <tbody id="close-page-table"><tr><td colspan="4">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Technical Issues -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Technical Issues</h3>
+                            <div class="card-badge" id="tech-badge">--</div>
+                        </div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Issue</th>
+                                    <th>Severity</th>
+                                </tr>
+                            </thead>
+                            <tbody id="technical-table"><tr><td colspan="2">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================================================================
+                 TAB 4: ACTION PLAN
+                 ================================================================ -->
+            <div class="tab-content" id="tab-actions">
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Underperformers</div>
+                        <div class="kpi-value" id="a-underperformers">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Revenue Opportunity</div>
+                        <div class="kpi-value" id="a-rev-opp">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">SERP Risks</div>
+                        <div class="kpi-value delta-negative" id="a-serp-risks">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Content Decay</div>
+                        <div class="kpi-value" id="a-content-decay">--</div>
+                    </div>
+                </div>
+
+                <!-- Underperformers Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Underperformers — ML Priority Ranking</h3>
+                        <div class="card-badge" id="underperf-badge">--</div>
+                    </div>
+                    <div class="pagination-controls">
+                        <span class="muted">Rows:</span>
+                        <select id="underperf-size">
+                            <option value="10">10</option>
+                            <option value="25" selected>25</option>
+                            <option value="50">50</option>
+                        </select>
+                        <button class="pill-ctrl" id="underperf-prev" type="button">Prev</button>
+                        <button class="pill-ctrl" id="underperf-next" type="button">Next</button>
+                        <span class="muted" id="underperf-page"></span>
+                    </div>
+                    <div class="scroll-x">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="num">#</th>
+                                    <th>Query</th>
+                                    <th>Page</th>
+                                    <th>Template</th>
+                                    <th class="num">Click Gap</th>
+                                    <th class="num">Priority</th>
+                                    <th>Flags</th>
+                                    <th>Fix First</th>
+                                    <th class="num">Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody id="underperf-table"><tr><td colspan="9">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Competitor Pressure placeholder -->
+                <div class="placeholder-card">
+                    <h3>Competitor Pressure</h3>
+                    <p>Competitor data not connected yet. Connect competitor tracking to see SERP overlap and movement.</p>
+                </div>
+
+                <!-- What to Do Next -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>What to Do Next</h3>
+                        <div class="card-badge">Priority stack</div>
+                    </div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Priority</th>
+                                <th>Task</th>
+                                <th>Impact</th>
+                            </tr>
+                        </thead>
+                        <tbody id="next-actions-table"><tr><td colspan="3">Loading...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- ================================================================
+         DRILL-DOWN MODAL
+         ================================================================ -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal-box" id="modal-box">
+            <div class="modal-header">
+                <h2 id="modal-title">--</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div id="modal-body">Loading...</div>
+        </div>
+    </div>
+
+    <script>
+    /* ============================================================
+       GLOBALS
+       ============================================================ */
+    let dashData = null;
+    let underperfData = [];
+    let underperfPage = 1;
+
+    /* ============================================================
+       TAB SWITCHING
+       ============================================================ */
+    function switchTab(tab) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        const tabMap = {performance:'tab-performance', queries:'tab-queries', pages:'tab-pages', actions:'tab-actions'};
+        document.getElementById(tabMap[tab]).classList.add('active');
+        event.target.classList.add('active');
+        // Lazy load action plan tab
+        if (tab === 'actions' && underperfData.length === 0) loadUnderperformers();
+    }
+
+    /* ============================================================
+       DATA LOADING
+       ============================================================ */
+    async function loadSeoDashboard() {
+        try {
+            const response = await fetch('/seo/dashboard?days=30');
+            dashData = await response.json();
+
+            document.getElementById('seo-refresh').textContent = 'Updated just now';
+            document.getElementById('snapshot-time').textContent = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            document.getElementById('seo-period').textContent = `Last ${dashData.period_days || 30} days`;
+
+            renderPerformanceTab();
+            renderQueryTab();
+            renderPageTab();
+            renderHealthBadge();
+        } catch (err) {
+            console.error('Failed to load SEO data:', err);
+            document.getElementById('seo-refresh').textContent = 'Load failed';
+        }
+    }
+
+    async function loadUnderperformers() {
+        try {
+            const resp = await fetch('/seo/underperformers?days=30&limit=50');
+            const data = await resp.json();
+            underperfData = data.items || [];
+            setVal('a-underperformers', underperfData.length);
+            setVal('a-rev-opp', '$' + (data.total_revenue_opportunity || 0).toLocaleString(undefined, {maximumFractionDigits: 0}));
+            setVal('a-serp-risks', data.serp_risks || 0);
+            setVal('a-content-decay', data.content_decays || 0);
+            setVal('underperf-badge', underperfData.length + ' items');
+            renderUnderperfTable();
+            // Render action stack from dashData
+            if (dashData) renderNextActions();
+        } catch (err) {
+            console.error('Failed to load underperformers:', err);
+        }
+    }
+
+    /* ============================================================
+       TAB 1: PERFORMANCE
+       ============================================================ */
+    function renderPerformanceTab() {
+        const snap = dashData.executive_snapshot || {};
+        const metrics = dashData.metrics || {};
+
+        // Pulse + Decision Card
+        renderPulse(snap);
+        renderDecisionCard(snap);
+
+        // KPI Row 1
+        setVal('kpi-clicks', (snap.total_clicks || 0).toLocaleString());
+        setDelta('kpi-clicks-delta', snap.clicks_wow, '%');
+        setVal('kpi-impressions', (snap.total_impressions || 0).toLocaleString());
+        setDelta('kpi-impressions-delta', snap.impressions_wow, '%');
+        setVal('kpi-wctr', (snap.weighted_ctr || 0) + '%');
+        setDelta('kpi-wctr-delta', snap.weighted_ctr_wow, 'pts');
+        setVal('kpi-position', snap.weighted_position || '--');
+        setDelta('kpi-position-delta', snap.position_wow, '', true);
+
+        // KPI Row 2
+        setVal('kpi-clickgap', (snap.click_gap_total || 0).toLocaleString());
+        setVal('kpi-urls', (snap.urls_analyzed || 0).toLocaleString());
+        setVal('kpi-gaining', snap.gaining_rank || 0);
+        setVal('kpi-losing', snap.losing_rank || 0);
+
+        // Position Distribution
+        renderPositionBar(dashData.position_distribution || {});
+
+        // Monthly Trends
+        renderMonthlyTrends(dashData.monthly_trends || []);
+    }
+
+    function renderPulse(snap) {
+        const status = snap.status || 'Stable';
+        const chip = document.getElementById('pulse-status');
+        chip.textContent = status;
+        chip.className = 'pulse-status-chip ' + status.toLowerCase();
+
+        setVal('pulse-clickgap', (snap.click_gap_total || 0).toLocaleString());
+        setVal('pulse-gaining', snap.gaining_rank || 0);
+        setVal('pulse-losing', snap.losing_rank || 0);
+        setVal('pulse-urls', snap.urls_analyzed || 0);
+
+        // Build narrative
+        const parts = [];
+        const wow = snap.clicks_wow;
+        if (wow != null) {
+            if (wow > 0) parts.push(`Clicks up ${wow}% week-over-week`);
+            else if (wow < 0) parts.push(`Clicks down ${Math.abs(wow)}% week-over-week`);
+            else parts.push('Clicks flat week-over-week');
+        }
+        if (snap.click_gap_total > 0) parts.push(`${snap.click_gap_total.toLocaleString()} clicks left on the table`);
+        if (snap.losing_rank > 0) parts.push(`${snap.losing_rank} pages losing rank`);
+        document.getElementById('pulse-summary').textContent = parts.length ? parts.join('. ') + '.' : 'Search performance is stable.';
+    }
+
+    function renderDecisionCard(snap) {
+        const clickGap = snap.click_gap_total || 0;
+        const losing = snap.losing_rank || 0;
+        const gaining = snap.gaining_rank || 0;
+        const techIssues = (dashData.summary || {}).technical_issues_count || 0;
+
+        // Trust banner
+        const trustBanner = document.getElementById('seo-trust-banner');
+        const trustBody = document.getElementById('seo-trust-body');
+        if (techIssues > 5 || losing > 50) {
+            trustBanner.style.display = 'flex';
+            const parts = [];
+            if (techIssues > 5) parts.push(`${techIssues} technical issues detected`);
+            if (losing > 50) parts.push(`${losing} pages losing rank`);
+            trustBody.innerHTML = `<strong>SEO HEALTH:</strong> ${parts.join('; ')}. Rankings may be under pressure from technical debt.`;
+        }
+
+        // Primary insight
+        let insight, why, doNext;
+        let impactLevel = 'Medium', effortLevel = 'Medium';
+
+        if (clickGap > 500) {
+            insight = `${clickGap.toLocaleString()} clicks left on the table — CTR is below benchmarks for your ranking positions.`;
+        } else if (losing > gaining) {
+            insight = `More pages losing rank (${losing}) than gaining (${gaining}). Content freshness or technical issues may be the cause.`;
+        } else {
+            insight = `Search performance is healthy. ${gaining} pages gaining rank vs ${losing} losing.`;
+        }
+
+        // Why it matters
+        if (clickGap > 500) {
+            why = `Each missed click is a potential customer. At your current conversion rate, this represents ~$${Math.round(clickGap * 2).toLocaleString()} in estimated lost monthly revenue.`;
+        } else if (losing > gaining) {
+            why = `Rank losses compound over time. Losing pages today means less organic traffic next month unless addressed.`;
+        } else {
+            why = `Organic search is your most cost-effective channel. Maintaining this momentum protects long-term revenue.`;
+        }
+
+        // Do next
+        if (losing > 20) {
+            doNext = `Review the ${losing} declining pages and update content for the top 5 by traffic loss.`;
+            impactLevel = 'High'; effortLevel = 'Medium';
+        } else if (clickGap > 500) {
+            doNext = `Optimize title tags and meta descriptions for the top 10 click-gap queries.`;
+            impactLevel = 'High'; effortLevel = 'Low';
+        } else {
+            doNext = `Monitor trends. Focus on page 2 queries close to breaking into page 1.`;
+            impactLevel = 'Medium'; effortLevel = 'Low';
+        }
+
+        // Confidence
+        const periodDays = dashData.period_days || 30;
+        const confidence = periodDays >= 14 ? 'High' : 'Medium';
+        const confEl = document.getElementById('seo-confidence');
+        confEl.textContent = confidence;
+        confEl.className = 'confidence-badge confidence-' + confidence.toLowerCase();
+
+        document.getElementById('seo-dc-insight').textContent = insight;
+        document.getElementById('seo-dc-why').textContent = why;
+        document.getElementById('seo-dc-next').innerHTML = doNext
+            + ` <span class="impact-badge impact-${impactLevel.toLowerCase()}">Impact: ${impactLevel}</span>`
+            + ` <span class="effort-badge effort-${effortLevel.toLowerCase()}">Effort: ${effortLevel}</span>`;
+    }
+
+    function renderPositionBar(pd) {
+        const buckets = pd.buckets || {};
+        const pcts = pd.percentages || {};
+        setVal('pos-total-badge', (pd.total_queries || 0).toLocaleString() + ' queries');
+        const bar = document.getElementById('pos-bar');
+        bar.innerHTML = '';
+        const segments = [
+            {key: '1-3', cls: 'pos-1-3'},
+            {key: '4-10', cls: 'pos-4-10'},
+            {key: '11-20', cls: 'pos-11-20'},
+            {key: '20+', cls: 'pos-20plus'},
+        ];
+        segments.forEach(s => {
+            const pct = pcts[s.key] || 0;
+            const count = buckets[s.key] || 0;
+            if (pct < 0.5) return;
+            const el = document.createElement('div');
+            el.className = 'pos-bar-segment ' + s.cls;
+            el.style.width = pct + '%';
+            el.textContent = pct >= 5 ? `${pct}%` : '';
+            el.title = `${s.key}: ${count.toLocaleString()} queries (${pct}%)`;
+            bar.appendChild(el);
+        });
+    }
+
+    function renderMonthlyTrends(trends) {
+        // Table
+        const tbody = document.getElementById('trends-table');
+        if (!trends.length) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--slate)">No data</td></tr>'; return; }
+        tbody.innerHTML = trends.map(t => `
+            <tr>
+                <td>${t.month}</td>
+                <td class="num">${(t.clicks || 0).toLocaleString()}</td>
+                <td class="num">${(t.impressions || 0).toLocaleString()}</td>
+                <td class="num">${t.ctr}%</td>
+                <td class="num">${t.avg_position}</td>
+                <td class="num">${(t.click_gap || 0).toLocaleString()}</td>
+            </tr>
+        `).join('');
+
+        // SVG Chart
+        buildTrendsChart(trends);
+    }
+
+    function buildTrendsChart(trends) {
+        const container = document.getElementById('trends-chart');
+        if (!trends.length) { container.innerHTML = ''; return; }
+
+        const W = 700, H = 180, padL = 50, padR = 20, padT = 20, padB = 30;
+        const cw = W - padL - padR;
+        const ch = H - padT - padB;
+
+        const clicks = trends.map(t => t.clicks || 0);
+        const gaps = trends.map(t => t.click_gap || 0);
+        const maxVal = Math.max(...clicks, ...gaps, 1);
+
+        const barW = cw / trends.length * 0.35;
+        const stepX = cw / (trends.length - 1 || 1);
+
+        let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">`;
+
+        // Grid lines
+        for (let i = 0; i <= 4; i++) {
+            const y = padT + (ch / 4) * i;
+            const label = Math.round(maxVal * (1 - i / 4));
+            svg += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#e5e1da" stroke-width="0.5"/>`;
+            svg += `<text x="${padL - 6}" y="${y + 4}" text-anchor="end" fill="#999" font-size="9" font-family="IBM Plex Sans">${label >= 1000 ? Math.round(label/1000)+'k' : label}</text>`;
+        }
+
+        // Gap bars (gold)
+        trends.forEach((t, i) => {
+            const x = padL + i * stepX - barW / 2;
+            const h = (gaps[i] / maxVal) * ch;
+            const y = padT + ch - h;
+            svg += `<rect x="${x}" y="${y}" width="${barW}" height="${h}" fill="rgba(196,154,74,0.35)" rx="3"/>`;
+        });
+
+        // Click line (teal)
+        let linePts = clicks.map((c, i) => {
+            const x = padL + i * stepX;
+            const y = padT + ch - (c / maxVal) * ch;
+            return `${x},${y}`;
+        }).join(' ');
+        svg += `<polyline points="${linePts}" fill="none" stroke="#1f6f6b" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+
+        // Dots
+        clicks.forEach((c, i) => {
+            const x = padL + i * stepX;
+            const y = padT + ch - (c / maxVal) * ch;
+            svg += `<circle cx="${x}" cy="${y}" r="4" fill="#1f6f6b"/>`;
+        });
+
+        // X labels
+        trends.forEach((t, i) => {
+            const x = padL + i * stepX;
+            svg += `<text x="${x}" y="${H - 6}" text-anchor="middle" fill="#999" font-size="10" font-family="IBM Plex Sans">${t.month.replace(' ','\\n').split(' ')[0]}</text>`;
+        });
+
+        // Legend
+        svg += `<circle cx="${padL}" cy="${H - 4}" r="3" fill="#1f6f6b"/>`;
+        svg += `<text x="${padL + 8}" y="${H - 1}" fill="#666" font-size="9" font-family="IBM Plex Sans">Clicks</text>`;
+        svg += `<rect x="${padL + 55}" y="${H - 7}" width="8" height="6" fill="rgba(196,154,74,0.5)" rx="1"/>`;
+        svg += `<text x="${padL + 67}" y="${H - 1}" fill="#666" font-size="9" font-family="IBM Plex Sans">Click Gap</text>`;
+
+        svg += '</svg>';
+        container.innerHTML = svg;
+    }
+
+    /* ============================================================
+       TAB 2: QUERY INTELLIGENCE
+       ============================================================ */
+    function renderQueryTab() {
+        const metrics = dashData.metrics || {};
+        const summary = dashData.summary || {};
+        const clickGap = dashData.click_gap_top30 || [];
+        const categories = dashData.category_breakdown || [];
+        const alerts = dashData.alerts || [];
+
+        setVal('q-total-queries', (metrics.unique_queries || 0).toLocaleString());
+        setVal('q-ctr-drags', metrics.ctr_drag_count || 0);
+
+        // Count cannibalized from alerts
+        const cannibAlert = alerts.find(a => a.type === 'cannibalization');
+        setVal('q-cannibalized', cannibAlert ? cannibAlert.message.match(/\d+/)?.[0] || '0' : '0');
+
+        const gapSum = clickGap.reduce((s, r) => s + (r.click_gap || 0), 0);
+        setVal('q-clickgap-sum', gapSum.toLocaleString());
+        setVal('clickgap-badge', clickGap.length + ' queries');
+
+        // Click gap table
+        renderClickGapTable(clickGap);
+
+        // Category table
+        renderTable('category-table', categories, row => `
+            <tr>
+                <td>${row.template}</td>
+                <td class="num">${row.pages}</td>
+                <td class="num">${(row.clicks || 0).toLocaleString()}</td>
+                <td class="num">${row.ctr}%</td>
+                <td class="num">${row.avg_position}</td>
+            </tr>
+        `, 15);
+
+        // Alerts
+        setVal('alert-count', alerts.length ? alerts.length + ' active' : 'None');
+        renderTable('alerts-table', alerts, row => `
+            <tr>
+                <td class="wrap">${row.title || '-'}</td>
+                <td><span class="badge ${row.severity === 'critical' ? 'critical' : row.severity === 'high' ? 'warning' : 'info'}">${row.severity || 'info'}</span></td>
+                <td class="wrap">${renderTone(row)}</td>
+            </tr>
+        `, 8);
+    }
+
+    function renderClickGapTable(rows) {
+        const tbody = document.getElementById('clickgap-table');
+        if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--slate)">No data</td></tr>'; return; }
+        tbody.innerHTML = rows.map(row => {
+            const actualPct = row.actual_ctr || 0;
+            const expectedPct = row.expected_ctr || 1;
+            const barWidth = Math.min(actualPct / expectedPct * 100, 100);
+            const expectedPos = Math.min(expectedPct / (expectedPct * 1.2) * 100, 100);
+            const spark = renderSparklineSVG(row.sparkline || []);
+            return `
+            <tr class="clickable" onclick="openQueryModal('${encodeURIComponent(row.query)}')">
+                <td class="wrap">${row.query}</td>
+                <td class="wrap muted">${row.short_page || '-'}</td>
+                <td class="num">${row.position || '-'}</td>
+                <td>
+                    <div class="ctr-bar-wrap">
+                        <div class="ctr-bar">
+                            <div class="ctr-bar-fill" style="width:${barWidth}%"></div>
+                            <div class="ctr-bar-expected" style="left:${expectedPos}%"></div>
+                        </div>
+                        <span class="muted">${actualPct}%</span>
+                    </div>
+                </td>
+                <td class="num">${(row.click_gap || 0).toLocaleString()}</td>
+                <td class="num">$${(row.revenue_gap || 0).toLocaleString(undefined, {maximumFractionDigits: 0})}</td>
+                <td class="num">${spark}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    /* ============================================================
+       TAB 3: PAGE INTELLIGENCE
+       ============================================================ */
+    function renderPageTab() {
+        const metrics = dashData.metrics || {};
+        const summary = dashData.summary || {};
+        const declining = dashData.by_category?.declining_pages || [];
+        const closePage = dashData.by_category?.close_to_page_one || [];
+        const technical = dashData.technical_health?.issues || [];
+
+        setVal('p-total-pages', (metrics.unique_pages || 0).toLocaleString());
+        setVal('p-declining', summary.declining_pages_count || 0);
+        setVal('p-close-p1', summary.close_to_page_one_count || 0);
+        setVal('p-non-brand', metrics.non_brand_share != null ? metrics.non_brand_share + '%' : '--');
+
+        // Declining
+        setVal('declining-badge', declining.length + ' pages');
+        renderTable('declining-table', declining, row => `
+            <tr class="clickable" onclick="openPageModal('${encodeURIComponent(row.url || '')}')">
+                <td class="wrap">${row.url ? row.url.replace('https://www.cassbrothers.com.au', '') : '-'}</td>
+                <td class="num delta-negative">${row.clicks_lost ? '-' + row.clicks_lost : '-'}</td>
+                <td class="num ${row.position_change > 0 ? 'delta-negative' : 'delta-positive'}">${row.position_change != null ? (row.position_change > 0 ? '+' : '') + Math.abs(row.position_change).toFixed(1) : '-'}</td>
+                <td class="wrap">${row.top_queries?.length ? row.top_queries[0].query : '-'}</td>
+                <td><span class="badge ${row.severity === 'critical' ? 'critical' : 'warning'}">${row.severity || 'high'}</span></td>
+            </tr>
+        `, 15);
+
+        // Close to page 1
+        renderTable('close-page-table', closePage, row => `
+            <tr>
+                <td class="wrap">${row.query || '-'}</td>
+                <td class="num">${(row.impressions || 0).toLocaleString()}</td>
+                <td class="num">${row.position ?? '-'}</td>
+                <td class="num delta-positive">${row.potential_additional_clicks ? '+' + row.potential_additional_clicks : '-'}</td>
+            </tr>
+        `, 10);
+
+        // Technical
+        setVal('tech-badge', technical.length + ' issues');
+        renderTable('technical-table', technical, row => `
+            <tr>
+                <td class="wrap">${row.issue || row.type || '-'}</td>
+                <td><span class="badge ${row.severity === 'critical' ? 'critical' : row.severity === 'high' ? 'warning' : 'info'}">${row.severity || 'info'}</span></td>
+            </tr>
+        `, 8);
+    }
+
+    /* ============================================================
+       TAB 4: ACTION PLAN
+       ============================================================ */
+    function renderUnderperfTable() {
+        const sizeEl = document.getElementById('underperf-size');
+        const pageEl = document.getElementById('underperf-page');
+        const size = parseInt(sizeEl.value, 10);
+        const total = underperfData.length;
+        const totalPages = Math.max(1, Math.ceil(total / size));
+        if (underperfPage > totalPages) underperfPage = totalPages;
+        const start = (underperfPage - 1) * size;
+        const slice = underperfData.slice(start, start + size);
+
+        pageEl.textContent = `Page ${underperfPage} of ${totalPages} (${total} rows)`;
+
+        const tbody = document.getElementById('underperf-table');
+        if (!slice.length) {
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--slate)">No data</td></tr>';
+            return;
+        }
+        tbody.innerHTML = slice.map((row, idx) => {
+            const rank = start + idx + 1;
+            const spark = renderSparklineSVG(row.sparkline || []);
+            const flags = [];
+            if (row.serp_risk) flags.push('<span class="badge critical">SERP Risk</span>');
+            if (row.content_decay) flags.push('<span class="badge warning">Decay</span>');
+            return `
+            <tr class="clickable" onclick="openQueryModal('${encodeURIComponent(row.query)}')">
+                <td class="num">${rank}</td>
+                <td class="wrap">${row.query}</td>
+                <td class="wrap muted">${row.short_page || '-'}</td>
+                <td>${row.template || '-'}</td>
+                <td class="num">${(row.click_gap || 0).toLocaleString()}</td>
+                <td class="num"><strong>${row.priority_score}</strong></td>
+                <td>${flags.join(' ') || '<span class="badge info">OK</span>'}</td>
+                <td class="wrap muted">${row.fix_first || '-'}</td>
+                <td class="num">${spark}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderNextActions() {
+        const rows = dashData?.action_stack || [];
+        renderTable('next-actions-table', rows, row => `
+            <tr>
+                <td><span class="badge ${row.priority === 'high' ? 'critical' : row.priority === 'medium' ? 'warning' : 'info'}">${row.priority || '-'}</span></td>
+                <td class="wrap">${renderTone(row)}</td>
+                <td class="wrap">${row.impact || '-'}</td>
+            </tr>
+        `, 6);
+    }
+
+    /* ============================================================
+       MODAL: QUERY DRILL-DOWN
+       ============================================================ */
+    async function openQueryModal(encodedQuery) {
+        const query = decodeURIComponent(encodedQuery);
+        const overlay = document.getElementById('modal-overlay');
+        const body = document.getElementById('modal-body');
+        document.getElementById('modal-title').textContent = query;
+        overlay.classList.add('active');
+        body.innerHTML = '<p style="color:var(--slate)">Loading detail...</p>';
+
+        try {
+            const resp = await fetch(`/seo/query-detail?query=${encodedQuery}&days=30`);
+            const d = await resp.json();
+            renderQueryModalContent(d, body);
+        } catch (err) {
+            body.innerHTML = '<p style="color:var(--red)">Failed to load detail.</p>';
+        }
+    }
+
+    function renderQueryModalContent(d, body) {
+        const cur = d.current || {};
+        const prev = d.previous || {};
+
+        let html = '';
+
+        // Stats
+        html += '<div class="modal-stats">';
+        html += modalStat('Clicks', cur.clicks, prev.clicks);
+        html += modalStat('Impressions', cur.impressions, prev.impressions);
+        html += modalStat('CTR', cur.ctr + '%', prev.ctr + '%', true);
+        html += modalStat('Position', cur.position, prev.position, false, true);
+        html += '</div>';
+
+        // Flags
+        const flags = d.flags || {};
+        html += '<div class="modal-flags">';
+        if (flags.serp_risk) html += '<span class="flag-pill risk">SERP Risk</span>';
+        if (flags.content_decay) html += '<span class="flag-pill decay">Content Decay</span>';
+        if (d.is_cannibalized) html += '<span class="flag-pill cannib">Cannibalized</span>';
+        if (d.click_gap > 0) html += `<span class="flag-pill" style="background:rgba(31,111,107,0.1);color:var(--cass-teal)">Click Gap: ${d.click_gap.toLocaleString()}</span>`;
+        html += '</div>';
+
+        // Fix First
+        if (flags.fix_first) {
+            html += `<div class="modal-fix-box"><div class="fix-label">Fix First</div><div class="fix-text">${flags.fix_first}</div></div>`;
+        }
+
+        // Mini chart
+        const monthly = d.monthly || [];
+        if (monthly.length) {
+            html += `<div class="modal-chart" id="modal-mini-chart"></div>`;
+        }
+
+        // Pages sub-table
+        const pages = d.pages || [];
+        if (pages.length) {
+            html += '<h4 style="font-size:13px;margin:12px 0 8px;font-family:Space Grotesk">Pages Ranking for This Query</h4>';
+            html += '<table><thead><tr><th>Page</th><th class="num">Clicks</th><th class="num">Pos</th><th class="num">CTR</th></tr></thead><tbody>';
+            pages.forEach(p => {
+                html += `<tr class="clickable" onclick="openPageModal('${encodeURIComponent(p.page)}')">
+                    <td class="wrap muted">${p.short_page || p.page}</td>
+                    <td class="num">${(p.clicks || 0).toLocaleString()}</td>
+                    <td class="num">${p.position || '-'}</td>
+                    <td class="num">${p.ctr}%</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+        }
+
+        body.innerHTML = html;
+
+        // Render mini chart after DOM update
+        if (monthly.length) {
+            setTimeout(() => buildModalMiniChart(monthly, 'modal-mini-chart'), 10);
+        }
+    }
+
+    /* ============================================================
+       MODAL: PAGE DRILL-DOWN
+       ============================================================ */
+    async function openPageModal(encodedUrl) {
+        const url = decodeURIComponent(encodedUrl);
+        const overlay = document.getElementById('modal-overlay');
+        const body = document.getElementById('modal-body');
+        document.getElementById('modal-title').textContent = url.replace('https://www.cassbrothers.com.au', '') || '/';
+        overlay.classList.add('active');
+        body.innerHTML = '<p style="color:var(--slate)">Loading detail...</p>';
+
+        try {
+            const resp = await fetch(`/seo/page-detail?url=${encodedUrl}&days=30`);
+            const d = await resp.json();
+            renderPageModalContent(d, body);
+        } catch (err) {
+            body.innerHTML = '<p style="color:var(--red)">Failed to load detail.</p>';
+        }
+    }
+
+    function renderPageModalContent(d, body) {
+        const cur = d.current || {};
+        const prev = d.previous || {};
+
+        let html = '';
+        html += `<div style="margin-bottom:12px"><span class="badge info">${d.template || 'Unknown'}</span></div>`;
+
+        // Stats
+        html += '<div class="modal-stats">';
+        html += modalStat('Clicks', cur.clicks, prev.clicks);
+        html += modalStat('Impressions', cur.impressions, prev.impressions);
+        html += modalStat('CTR', cur.ctr + '%', prev.ctr + '%', true);
+        html += modalStat('Position', cur.position, prev.position, false, true);
+        html += '</div>';
+
+        // Mini chart
+        const monthly = d.monthly || [];
+        if (monthly.length) {
+            html += `<div class="modal-chart" id="modal-mini-chart"></div>`;
+        }
+
+        // Queries sub-table
+        const queries = d.queries || [];
+        if (queries.length) {
+            html += '<h4 style="font-size:13px;margin:12px 0 8px;font-family:Space Grotesk">Top Queries</h4>';
+            html += '<table><thead><tr><th>Query</th><th class="num">Clicks</th><th class="num">Pos</th><th class="num">CTR</th></tr></thead><tbody>';
+            queries.forEach(q => {
+                html += `<tr class="clickable" onclick="openQueryModal('${encodeURIComponent(q.query)}')">
+                    <td class="wrap">${q.query}</td>
+                    <td class="num">${(q.clicks || 0).toLocaleString()}</td>
+                    <td class="num">${q.position || '-'}</td>
+                    <td class="num">${q.ctr}%</td>
+                </tr>`;
+            });
+            html += '</tbody></table>';
+        }
+
+        body.innerHTML = html;
+
+        if (monthly.length) {
+            setTimeout(() => buildModalMiniChart(monthly, 'modal-mini-chart'), 10);
+        }
+    }
+
+    function buildModalMiniChart(monthly, containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        const W = 520, H = 140, padL = 40, padR = 10, padT = 15, padB = 25;
+        const cw = W - padL - padR;
+        const ch = H - padT - padB;
+        const clicks = monthly.map(m => m.clicks || 0);
+        const maxVal = Math.max(...clicks, 1);
+        const stepX = cw / (monthly.length - 1 || 1);
+
+        let svg = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">`;
+        // Grid
+        for (let i = 0; i <= 3; i++) {
+            const y = padT + (ch / 3) * i;
+            svg += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#e5e1da" stroke-width="0.5"/>`;
+        }
+        // Line
+        let pts = clicks.map((c, i) => `${padL + i * stepX},${padT + ch - (c / maxVal) * ch}`).join(' ');
+        svg += `<polyline points="${pts}" fill="none" stroke="#1f6f6b" stroke-width="2" stroke-linejoin="round"/>`;
+        // Dots + labels
+        clicks.forEach((c, i) => {
+            const x = padL + i * stepX;
+            const y = padT + ch - (c / maxVal) * ch;
+            svg += `<circle cx="${x}" cy="${y}" r="3" fill="#1f6f6b"/>`;
+            svg += `<text x="${x}" y="${H - 6}" text-anchor="middle" fill="#999" font-size="9">${monthly[i].month.split(' ')[0]}</text>`;
+        });
+        svg += '</svg>';
+        container.innerHTML = svg;
+    }
+
+    function closeModal() {
+        document.getElementById('modal-overlay').classList.remove('active');
+    }
+
+    /* ============================================================
+       HEALTH BADGE
+       ============================================================ */
+    function renderHealthBadge() {
+        const summary = dashData.summary || {};
+        const snap = dashData.executive_snapshot || {};
+        const el = document.getElementById('health-badge');
+        const losing = snap.losing_rank || 0;
+        const techIssues = summary.technical_issues_count || 0;
+
+        if (techIssues > 5 || losing > 50) {
+            el.textContent = 'Health: needs attention'; el.className = 'meta-badge trust-critical';
+        } else if (techIssues > 0 || losing > 20) {
+            el.textContent = 'Health: fair'; el.className = 'meta-badge trust-warning';
+        } else {
+            el.textContent = 'Health: good'; el.className = 'meta-badge trust-healthy';
+        }
+    }
+
+    /* ============================================================
+       UTILITIES
+       ============================================================ */
+    function setVal(id, value) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+    }
+
+    function setDelta(id, value, suffix, invertColor) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (value == null) { el.textContent = '--'; el.className = 'kpi-delta neutral'; return; }
+        const sign = value > 0 ? '+' : '';
+        el.textContent = `${sign}${value}${suffix ? ' ' + suffix : ''}`;
+        let cls = 'neutral';
+        if (invertColor) {
+            // Lower position is better
+            cls = value < 0 ? 'up' : value > 0 ? 'down' : 'neutral';
+        } else {
+            cls = value > 0 ? 'up' : value < 0 ? 'down' : 'neutral';
+        }
+        el.className = 'kpi-delta ' + cls;
+    }
+
+    function modalStat(label, curVal, prevVal, isPercent, invertColor) {
+        let delta = '';
+        if (prevVal != null && curVal != null) {
+            const cv = parseFloat(curVal);
+            const pv = parseFloat(prevVal);
+            if (!isNaN(cv) && !isNaN(pv) && pv !== 0) {
+                const diff = cv - pv;
+                const sign = diff > 0 ? '+' : '';
+                let cls = 'neutral';
+                if (invertColor) { cls = diff < 0 ? 'delta-positive' : diff > 0 ? 'delta-negative' : ''; }
+                else { cls = diff > 0 ? 'delta-positive' : diff < 0 ? 'delta-negative' : ''; }
+                delta = `<div class="ms-delta ${cls}">${sign}${isPercent ? diff.toFixed(1) + 'pts' : Math.round(diff).toLocaleString()} vs prev</div>`;
+            }
+        }
+        return `<div class="modal-stat"><div class="ms-label">${label}</div><div class="ms-value">${curVal != null ? (typeof curVal === 'number' ? curVal.toLocaleString() : curVal) : '--'}</div>${delta}</div>`;
+    }
+
+    function renderTable(targetId, rows, rowTemplate, limit) {
+        const tbody = document.getElementById(targetId);
+        if (!tbody) return;
+        const list = (rows || []).slice(0, limit);
+        if (!list.length) {
+            const colspan = tbody.closest('table')?.querySelectorAll('th')?.length || 4;
+            tbody.innerHTML = `<tr><td colspan="${colspan}" style="color:var(--slate);text-align:center;padding:16px 0;">No data</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = list.map(rowTemplate).join('');
+    }
+
+    function renderTone(row) {
+        const tone = document.documentElement.getAttribute('data-tone') || 'plain';
+        if (tone === 'pro') return row.pro || row.action || row.task || '-';
+        return row.plain || row.action || row.task || '-';
+    }
+
+    function renderSparklineSVG(values) {
+        if (!values || values.length < 2) return '';
+        const w = 60, h = 18;
+        const mn = Math.min(...values);
+        const mx = Math.max(...values);
+        const rng = mx - mn || 1;
+        const step = w / (values.length - 1);
+        const pts = values.map((v, i) => `${Math.round(i * step)},${Math.round(h - ((v - mn) / rng) * h)}`).join(' ');
+        const lastY = Math.round(h - ((values[values.length - 1] - mn) / rng) * h);
+        const lastX = Math.round((values.length - 1) * step);
+        const color = values[values.length - 1] >= values[0] ? 'var(--green)' : 'var(--red)';
+        return `<svg class="sparkline-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round"/><circle cx="${lastX}" cy="${lastY}" r="2" fill="${color}"/></svg>`;
+    }
+
+    /* ============================================================
+       TONE TOGGLE
+       ============================================================ */
+    function setupToneToggle() {
+        const toggle = document.getElementById('tone-toggle');
+        if (!toggle) return;
+        document.documentElement.setAttribute('data-tone', 'plain');
+        toggle.addEventListener('click', () => {
+            const current = document.documentElement.getAttribute('data-tone') || 'plain';
+            const next = current === 'plain' ? 'pro' : 'plain';
+            document.documentElement.setAttribute('data-tone', next);
+            toggle.textContent = next === 'plain' ? 'Plain' : 'Pro';
+            if (dashData) {
+                renderQueryTab();
+                renderPageTab();
+                if (underperfData.length) renderNextActions();
+            }
+        });
+    }
+
+    /* ============================================================
+       UNDERPERFORMER PAGINATION
+       ============================================================ */
+    function setupUnderperfControls() {
+        const sizeEl = document.getElementById('underperf-size');
+        const prevEl = document.getElementById('underperf-prev');
+        const nextEl = document.getElementById('underperf-next');
+        sizeEl.addEventListener('change', () => { underperfPage = 1; renderUnderperfTable(); });
+        prevEl.addEventListener('click', () => { underperfPage = Math.max(1, underperfPage - 1); renderUnderperfTable(); });
+        nextEl.addEventListener('click', () => { underperfPage++; renderUnderperfTable(); });
+    }
+
+    /* ============================================================
+       MODAL ESC / CLICK-OUTSIDE
+       ============================================================ */
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+    document.getElementById('modal-overlay').addEventListener('click', e => {
+        if (e.target === document.getElementById('modal-overlay')) closeModal();
+    });
+
+    /* ============================================================
+       INIT
+       ============================================================ */
+    setupToneToggle();
+    setupUnderperfControls();
+    loadSeoDashboard();
+    </script>
+</body>
+</html>

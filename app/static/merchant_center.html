@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cass Brothers · Merchant Center Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        :root {
+            --ink: #1c1b1f;
+            --ink-soft: #3d3a40;
+            --slate: #6b6670;
+            --card: #ffffff;
+            --line: rgba(27, 27, 27, 0.08);
+            --shadow: 0 1px 3px rgba(17,18,19,0.04), 0 8px 24px rgba(17,18,19,0.06);
+            --shadow-lg: 0 4px 12px rgba(17,18,19,0.05), 0 20px 48px rgba(17,18,19,0.08);
+            --cass-black: #1b1b1b;
+            --cass-cream: #f7f3ed;
+            --cass-gold: #c49a4a;
+            --cass-teal: #1f6f6b;
+            --cass-moss: #2f3d33;
+            --green: #1a7a3a;
+            --green-bg: rgba(26,122,58,0.08);
+            --red: #b5342a;
+            --red-bg: rgba(181,52,42,0.08);
+            --amber: #8b6b1f;
+            --amber-bg: rgba(196,154,74,0.12);
+            --radius: 14px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "IBM Plex Sans", "Space Grotesk", sans-serif;
+            background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        .app-shell {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr);
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+        }
+
+        .brand-bar {
+            grid-column: 1 / -1;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 28px;
+            background: var(--cass-black); color: #f7f1e8;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+        .brand-mark { display: flex; align-items: center; gap: 12px; font-family: "Space Grotesk", sans-serif; letter-spacing: 0.5px; }
+        .brand-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--cass-gold); box-shadow: 0 0 0 4px rgba(196,154,74,0.2); }
+        .brand-actions { display: flex; gap: 12px; font-size: 13px; }
+        .pill { padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.2); }
+
+        .side-nav {
+            padding: 28px 20px;
+            border-right: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.4) 100%);
+        }
+        .side-nav h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--slate); margin-bottom: 12px; }
+        .nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 12px; border-radius: 12px; font-size: 14px;
+            color: var(--ink-soft); margin-bottom: 6px; cursor: pointer; transition: all 0.2s ease;
+            text-decoration: none;
+        }
+        .nav-item:hover { background: rgba(0,0,0,0.04); }
+        .nav-item.active { background: var(--cass-black); color: #f7f1e8; box-shadow: 0 12px 24px rgba(0,0,0,0.15); }
+        .nav-item span { width: 8px; height: 8px; border-radius: 50%; background: var(--cass-gold); opacity: 0.7; }
+
+        .main-area {
+            padding: 28px 32px 32px;
+            display: flex; flex-direction: column; gap: 18px;
+            overflow-y: auto;
+        }
+
+        /* Header + Tabs */
+        .page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+        .page-title { font-family: "Space Grotesk", sans-serif; font-size: 22px; font-weight: 700; }
+        .page-sub { color: var(--slate); font-size: 14px; }
+
+        .tab-bar {
+            display: flex; gap: 4px; background: rgba(0,0,0,0.04); border-radius: 14px; padding: 4px;
+            align-self: flex-start;
+        }
+        .tab-btn {
+            padding: 8px 18px; border: none; background: none; border-radius: 12px;
+            font-size: 13px; font-weight: 600; cursor: pointer; color: var(--ink-soft); transition: all .25s;
+            font-family: "Space Grotesk", sans-serif;
+        }
+        .tab-btn.active { background: var(--cass-black); color: #f7f1e8; box-shadow: var(--shadow); }
+
+        .tab-panel { display: none; flex-direction: column; gap: 18px; }
+        .tab-panel.active { display: flex; }
+
+        /* Pulse banner */
+        .pulse-banner {
+            display: flex; align-items: center; gap: 14px; padding: 18px 22px;
+            background: linear-gradient(135deg, var(--cass-black) 0%, #2a2a2a 100%);
+            color: #f7f1e8; border-radius: var(--radius);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+        }
+        .pulse-text { flex: 1; font-size: 15px; line-height: 1.6; }
+        .status-chip {
+            padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 700;
+            letter-spacing: .5px; text-transform: uppercase; white-space: nowrap;
+        }
+        .status-Healthy { background: rgba(26,122,58,0.2); color: #5cdb8a; }
+        .status-Stable { background: rgba(31,111,107,0.2); color: #5ecec8; }
+        .chip-Needs-Attention, .status-Needs-Attention { background: rgba(196,154,74,0.2); color: #e8c75e; }
+        .status-At-Risk { background: rgba(232,140,58,0.2); color: #f0a050; }
+        .status-Critical { background: rgba(181,52,42,0.2); color: #f57272; }
+        .tone-toggle { display: flex; gap: 6px; margin-left: 12px; }
+        .tone-btn {
+            padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.25);
+            background: none; color: rgba(255,255,255,0.5); cursor: pointer; font-size: 11px;
+            font-family: "Space Grotesk"; font-weight: 600;
+        }
+        .tone-btn.active { background: rgba(255,255,255,0.15); color: #fff; }
+
+        /* Health score ring */
+        .health-ring {
+            width: 88px; height: 88px; position: relative; flex-shrink: 0;
+        }
+        .health-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+        .health-ring-label {
+            position: absolute; inset: 0; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; font-family: "Space Grotesk";
+        }
+        .health-ring-value { font-size: 22px; font-weight: 700; }
+        .health-ring-sub { font-size: 9px; text-transform: uppercase; letter-spacing: .5px; opacity: .7; }
+
+        /* KPI cards */
+        .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+        .kpi-card {
+            background: var(--card); border-radius: var(--radius); padding: 18px 20px;
+            box-shadow: var(--shadow); border: 1px solid var(--line);
+        }
+        .kpi-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--slate); margin-bottom: 6px; }
+        .kpi-value { font-family: "Space Grotesk"; font-size: 26px; font-weight: 700; color: var(--ink); }
+        .kpi-sub { font-size: 12px; color: var(--slate); margin-top: 4px; }
+
+        /* Cards / sections */
+        .section-card {
+            background: var(--card); border-radius: var(--radius); padding: 22px 24px;
+            box-shadow: var(--shadow); border: 1px solid var(--line);
+        }
+        .section-title { font-family: "Space Grotesk"; font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+        /* Tables */
+        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .data-table th {
+            text-align: left; padding: 10px 12px; font-weight: 600; color: var(--slate);
+            border-bottom: 2px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+        }
+        .data-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+        .data-table tr { cursor: pointer; transition: background .15s; }
+        .data-table tbody tr:hover { background: rgba(196,154,74,0.06); }
+        .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+        /* Badges */
+        .badge {
+            display: inline-block; padding: 3px 10px; border-radius: 999px;
+            font-size: 11px; font-weight: 700; letter-spacing: .3px;
+        }
+        .badge-approved { background: var(--green-bg); color: var(--green); }
+        .badge-disapproved { background: var(--red-bg); color: var(--red); }
+        .badge-pending { background: var(--amber-bg); color: var(--amber); }
+        .badge-expiring { background: rgba(232,140,58,0.12); color: #c47020; }
+        .badge-ok { background: var(--green-bg); color: var(--green); }
+        .badge-warning { background: var(--amber-bg); color: var(--amber); }
+        .badge-critical { background: var(--red-bg); color: var(--red); }
+
+        /* Stacked bar */
+        .stacked-bar { display: flex; height: 32px; border-radius: 8px; overflow: hidden; margin: 8px 0; }
+        .stacked-seg { height: 100%; transition: width .4s; position: relative; }
+        .stacked-seg:hover { opacity: 0.85; }
+        .stacked-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+        /* Progress bars */
+        .progress-track {
+            height: 8px; background: rgba(0,0,0,0.06); border-radius: 4px; overflow: hidden;
+        }
+        .progress-fill { height: 100%; border-radius: 4px; transition: width .4s; }
+        .progress-ok { background: var(--green); }
+        .progress-warning { background: var(--cass-gold); }
+        .progress-critical { background: var(--red); }
+
+        /* GMC not configured banner */
+        .gmc-banner {
+            display: flex; align-items: center; gap: 14px; padding: 16px 20px;
+            background: rgba(31,111,107,0.08); border-radius: var(--radius);
+            border: 1px dashed var(--cass-teal); color: var(--cass-teal); font-size: 13px;
+        }
+        .gmc-banner-icon { font-size: 24px; }
+
+        /* Modal */
+        .modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+            z-index: 1000; display: none; justify-content: center; align-items: flex-start;
+            padding: 60px 20px; overflow-y: auto;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal-content {
+            background: var(--card); border-radius: 18px; max-width: 680px; width: 100%;
+            box-shadow: var(--shadow-lg); padding: 28px 30px; position: relative;
+        }
+        .modal-close {
+            position: absolute; top: 16px; right: 18px; background: none; border: none;
+            font-size: 20px; cursor: pointer; color: var(--slate); width: 32px; height: 32px;
+            display: flex; align-items: center; justify-content: center; border-radius: 50%;
+        }
+        .modal-close:hover { background: rgba(0,0,0,0.06); }
+        .modal-header { margin-bottom: 20px; }
+        .modal-name { font-family: "Space Grotesk"; font-size: 20px; font-weight: 700; }
+        .modal-sub { font-size: 13px; color: var(--slate); margin-top: 4px; }
+        .modal-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+        .modal-stat { background: var(--cass-cream); border-radius: 12px; padding: 14px 16px; text-align: center; }
+        .modal-stat-label { font-size: 11px; color: var(--slate); font-weight: 600; text-transform: uppercase; }
+        .modal-stat-value { font-family: "Space Grotesk"; font-size: 20px; font-weight: 700; margin-top: 4px; }
+
+        .loading { text-align: center; padding: 40px; color: var(--slate); }
+        .empty-state { text-align: center; padding: 40px; color: var(--slate); font-size: 14px; }
+
+        /* ---- Decision Card ---- */
+        .decision-card {
+            background: var(--card); border-radius: var(--radius); padding: 20px 22px;
+            border: 1px solid var(--line); border-left: 4px solid var(--cass-gold);
+            box-shadow: var(--shadow);
+        }
+        .decision-card-header {
+            display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+        }
+        .decision-card-header h3 {
+            font-family: "Space Grotesk", sans-serif; font-size: 14px; font-weight: 600;
+            color: var(--amber); display: flex; align-items: center; gap: 8px; margin: 0;
+        }
+        .confidence-badge {
+            padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.4px;
+        }
+        .confidence-high { background: var(--green-bg); color: var(--green); }
+        .confidence-medium { background: var(--amber-bg); color: var(--amber); }
+        .confidence-low { background: var(--red-bg); color: var(--red); }
+        .decision-row {
+            display: grid; grid-template-columns: 120px 1fr;
+            gap: 4px 16px; padding: 8px 0; border-bottom: 1px solid var(--line);
+        }
+        .decision-row:last-child { border-bottom: none; }
+        .decision-row .dr-label {
+            font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px;
+            color: var(--slate); font-weight: 600; padding-top: 2px;
+        }
+        .decision-row .dr-value { font-size: 13.5px; line-height: 1.5; color: var(--ink-soft); }
+        .impact-badge, .effort-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 999px;
+            font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
+            margin-left: 6px; vertical-align: middle;
+        }
+        .impact-high { background: var(--red-bg); color: var(--red); }
+        .impact-medium { background: var(--amber-bg); color: var(--amber); }
+        .impact-low { background: rgba(27,27,27,0.06); color: var(--slate); }
+        .effort-low { background: var(--green-bg); color: var(--green); }
+        .effort-medium { background: var(--amber-bg); color: var(--amber); }
+        .effort-high { background: var(--red-bg); color: var(--red); }
+
+        /* ---- Explainability Tooltips ---- */
+        .why-tip {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 14px; height: 14px; border-radius: 50%;
+            background: rgba(27,27,27,0.08); color: var(--slate);
+            font-size: 9px; font-weight: 700; cursor: help;
+            margin-left: 4px; position: relative; vertical-align: middle;
+        }
+        .why-tip .why-tip-box {
+            display: none; position: absolute; bottom: calc(100% + 6px); left: 50%;
+            transform: translateX(-50%); width: 220px; padding: 10px 12px;
+            background: var(--cass-black); color: #e8e2d6; border-radius: 10px;
+            font-size: 11px; font-weight: 400; line-height: 1.5;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 50;
+            text-transform: none; letter-spacing: 0; pointer-events: none;
+        }
+        .why-tip:hover .why-tip-box { display: block; }
+
+        /* ---- Table Readability ---- */
+        .data-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.015); }
+        .data-table th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+    </style>
+</head>
+<body>
+<div class="app-shell">
+    <!-- Brand bar -->
+    <header class="brand-bar">
+        <div class="brand-mark">
+            <div class="brand-dot"></div>
+            <span style="font-size:18px; font-weight:600;">Cass Brothers</span>
+            <span style="opacity:0.5; font-size:13px; margin-left:4px;">Growth Intelligence</span>
+        </div>
+        <div class="brand-actions">
+            <span class="pill" id="lastUpdated">Loading...</span>
+        </div>
+    </header>
+
+    <!-- Side nav -->
+    <nav class="side-nav">
+        <h2>Dashboards</h2>
+        <a class="nav-item" href="/dashboard"><span></span> Overview</a>
+        <a class="nav-item" href="/performance"><span></span> Performance</a>
+        <a class="nav-item" href="/seo-dashboard"><span></span> SEO &amp; Content</a>
+        <a class="nav-item" href="/ads-intelligence"><span></span> Ads Intelligence</a>
+        <a class="nav-item" href="/finance-dashboard"><span></span> Finance</a>
+        <a class="nav-item" href="/inventory"><span></span> Inventory</a>
+        <a class="nav-item" href="/pricing-intel"><span></span> Pricing Intel</a>
+        <a class="nav-item" href="/customer-intelligence"><span></span> Customer Intel</a>
+        <a class="nav-item active" href="/merchant-center-intel"><span></span> Merchant Center</a>
+        <a class="nav-item" href="/strategic-intelligence"><span></span> Intelligence Brief</a>
+        <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
+            <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
+        </div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="main-area">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Merchant Center Intelligence</div>
+                <div class="page-sub">Product visibility, feed health, and revenue risk analysis</div>
+            </div>
+        </div>
+
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('overview')">Executive Overview</button>
+            <button class="tab-btn" onclick="switchTab('issues')">Issues &amp; Risk</button>
+            <button class="tab-btn" onclick="switchTab('readiness')">Feed Readiness</button>
+            <button class="tab-btn" onclick="switchTab('pricing')">Price &amp; Availability</button>
+        </div>
+
+        <!-- Tab 1: Executive Overview -->
+        <div class="tab-panel active" id="tab-overview">
+            <div class="loading" id="loading">Loading dashboard data...</div>
+        </div>
+
+        <!-- Tab 2: Issues & Risk -->
+        <div class="tab-panel" id="tab-issues"></div>
+
+        <!-- Tab 3: Feed Readiness -->
+        <div class="tab-panel" id="tab-readiness"></div>
+
+        <!-- Tab 4: Price & Availability -->
+        <div class="tab-panel" id="tab-pricing"></div>
+    </main>
+</div>
+
+<!-- Product Detail Modal -->
+<div class="modal-backdrop" id="productModal" onclick="if(event.target===this)closeModal()">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <div id="modalBody"><div class="loading">Loading...</div></div>
+    </div>
+</div>
+
+<script>
+let D = null; // dashboard data
+let tone = 'plain';
+
+async function loadDashboard() {
+    try {
+        const res = await fetch('/merchant-center/dashboard');
+        const json = await res.json();
+        if (!json.success) throw new Error(json.detail || 'API error');
+        D = json.data;
+        document.getElementById('lastUpdated').textContent = D.snapshot_date ? `Snapshot: ${D.snapshot_date}` : 'Feed readiness mode';
+        renderOverviewTab();
+        renderIssuesTab();
+        renderReadinessTab();
+        renderPricingTab();
+    } catch (e) {
+        document.getElementById('loading').textContent = 'Failed to load: ' + e.message;
+    }
+}
+
+function switchTab(id) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + id).classList.add('active');
+    event.target.classList.add('active');
+}
+
+function setTone(t) {
+    tone = t;
+    document.querySelectorAll('.tone-btn').forEach(b => b.classList.toggle('active', b.dataset.tone === t));
+    const el = document.getElementById('pulseNarrative');
+    if (el && D) el.textContent = tone === 'pro' ? D.pulse.pro_narrative : D.pulse.narrative;
+}
+
+function fmt(n) { return n == null ? '0' : Number(n).toLocaleString(); }
+function fmtD(n) { return n == null ? '$0' : '$' + Number(n).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0}); }
+function pct(n) { return n == null ? '0%' : Number(n).toFixed(1) + '%'; }
+
+function statusBadge(s) {
+    const cls = (s || '').toLowerCase();
+    return `<span class="badge badge-${cls}">${s || 'unknown'}</span>`;
+}
+
+function fieldBadge(s) {
+    return `<span class="badge badge-${s}">${s === 'ok' ? 'OK' : s === 'warning' ? 'Warning' : 'Critical'}</span>`;
+}
+
+function healthColor(score) {
+    if (score >= 80) return '#1a7a3a';
+    if (score >= 60) return '#c49a4a';
+    if (score >= 40) return '#e88c3a';
+    return '#b5342a';
+}
+
+function renderHealthRing(score) {
+    const c = healthColor(score);
+    const r = 36, circ = 2 * Math.PI * r;
+    const offset = circ - (score / 100) * circ;
+    return `
+        <div class="health-ring">
+            <svg viewBox="0 0 88 88">
+                <circle cx="44" cy="44" r="${r}" fill="none" stroke="rgba(0,0,0,0.08)" stroke-width="7"/>
+                <circle cx="44" cy="44" r="${r}" fill="none" stroke="${c}" stroke-width="7"
+                    stroke-dasharray="${circ}" stroke-dashoffset="${offset}" stroke-linecap="round"/>
+            </svg>
+            <div class="health-ring-label" style="color: #f7f1e8;">
+                <div class="health-ring-value">${score}</div>
+                <div class="health-ring-sub">Score</div>
+            </div>
+        </div>`;
+}
+
+function whyTip(text) {
+    return `<span class="why-tip">?<span class="why-tip-box">${text}</span></span>`;
+}
+
+function buildMCDecisionCard() {
+    const k = D.executive_kpis;
+    const score = D.health_score;
+    const issueCount = k.products_with_issues || 0;
+    const revenueRisk = k.est_revenue_at_risk || 0;
+
+    let insight, why, doNext;
+    let impactLevel = 'Medium', effortLevel = 'Medium';
+
+    if (score < 50) {
+        insight = `Feed health is critical (${score}/100). ${issueCount} products have issues, putting ${fmtD(revenueRisk)}/mo at risk.`;
+    } else if (score < 75) {
+        insight = `Feed health needs attention (${score}/100). ${issueCount} products have issues.`;
+    } else {
+        insight = `Feed health is strong (${score}/100). ${issueCount} products have minor issues.`;
+    }
+
+    if (revenueRisk > 0) {
+        why = `Products with issues may be disapproved or demoted in Shopping results, costing an estimated ${fmtD(revenueRisk)} per month in lost visibility.`;
+    } else {
+        why = 'Maintaining feed health ensures maximum visibility across Google Shopping and free listings.';
+    }
+
+    if (k.disapproved_products > 0) {
+        doNext = `Fix ${k.disapproved_products} disapproved products \u2014 these have zero Shopping visibility until resolved.`;
+        impactLevel = 'High'; effortLevel = 'Medium';
+    } else if (issueCount > 100) {
+        doNext = 'Address the top 5 issue categories to reduce feed warnings and improve eligible rate.';
+        impactLevel = 'High'; effortLevel = 'Medium';
+    } else {
+        doNext = 'Maintain feed quality. Focus on GTIN coverage to maximize free listing performance.';
+        impactLevel = 'Medium'; effortLevel = 'Low';
+    }
+
+    const confidence = D.has_gmc_data ? 'High' : 'Medium';
+
+    return `<div class="decision-card">
+        <div class="decision-card-header">
+            <h3>Decision Summary</h3>
+            <span class="confidence-badge confidence-${confidence.toLowerCase()}">${confidence}</span>
+        </div>
+        <div class="decision-row">
+            <div class="dr-label">Primary Insight</div>
+            <div class="dr-value">${insight}</div>
+        </div>
+        <div class="decision-row">
+            <div class="dr-label">Why It Matters</div>
+            <div class="dr-value">${why}</div>
+        </div>
+        <div class="decision-row">
+            <div class="dr-label">Do Next</div>
+            <div class="dr-value">${doNext}
+                <span class="impact-badge impact-${impactLevel.toLowerCase()}">Impact: ${impactLevel}</span>
+                <span class="effort-badge effort-${effortLevel.toLowerCase()}">Effort: ${effortLevel}</span>
+            </div>
+        </div>
+    </div>`;
+}
+
+// ====================== Tab 1: Executive Overview ======================
+function renderOverviewTab() {
+    const panel = document.getElementById('tab-overview');
+    const p = D.pulse;
+    const k = D.executive_kpis;
+    const hasGmc = D.has_gmc_data;
+
+    let html = '';
+
+    // Pulse banner with health ring
+    const statusCls = (p.status || '').replace(/\s+/g, '-');
+    html += `
+        <div class="pulse-banner">
+            ${renderHealthRing(D.health_score)}
+            <div class="pulse-text" id="pulseNarrative">${p.narrative}</div>
+            <span class="status-chip status-${statusCls}">${p.status}</span>
+            <div class="tone-toggle">
+                <button class="tone-btn active" data-tone="plain" onclick="setTone('plain')">Plain</button>
+                <button class="tone-btn" data-tone="pro" onclick="setTone('pro')">Pro</button>
+            </div>
+        </div>`;
+
+    // GMC not configured banner
+    const est = D.estimates_only;
+    const estTag = est ? ' <span style="font-size:10px;color:var(--amber);font-weight:600">(Est.)</span>' : '';
+    if (!hasGmc) {
+        html += `
+            <div class="gmc-banner">
+                <div class="gmc-banner-icon">&#x2139;</div>
+                <div>
+                    <strong>GMC data not connected — using Shopify + Cost + Caprice estimates.</strong>
+                    All counts are estimated from Shopify active products (${fmt(k.total_products)} universe).
+                    Once Merchant Center syncs daily, this will show live approval status and disapprovals.
+                </div>
+            </div>`;
+    }
+
+    // Decision Card
+    html += buildMCDecisionCard();
+
+    // KPI Row 1 — all counts from same active product universe
+    html += `<div class="kpi-row">
+        <div class="kpi-card">
+            <div class="kpi-label">Total Products${estTag}</div>
+            <div class="kpi-value">${fmt(k.total_products)}</div>
+            <div class="kpi-sub">${hasGmc ? 'In GMC feed' : 'Active in Shopify'}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Active / Approved${estTag} ${whyTip('Products eligible to appear in Google Shopping. Higher eligible rate = more product visibility.')}</div>
+            <div class="kpi-value">${fmt(k.active_products)}</div>
+            <div class="kpi-sub">${hasGmc ? pct(k.eligible_rate || k.approval_rate) + ' eligible rate' : pct(k.eligible_rate || k.approval_rate) + ' est. eligible rate'}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">${hasGmc ? 'Disapproved' : 'Price Violations'}${estTag}</div>
+            <div class="kpi-value" style="color: ${k.disapproved_products > 0 ? 'var(--red)' : 'inherit'}">${fmt(k.disapproved_products)}</div>
+            <div class="kpi-sub">${hasGmc ? 'Need attention' : 'Below minimum price'}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Est. Revenue at Risk ${whyTip('Estimated monthly revenue impact from disapproved or ineligible products, based on recent sales velocity.')}</div>
+            <div class="kpi-value" style="color: ${k.est_revenue_at_risk > 0 ? 'var(--red)' : 'inherit'}">${fmtD(k.est_revenue_at_risk)}</div>
+            <div class="kpi-sub">Monthly impact</div>
+        </div>
+    </div>`;
+
+    // KPI Row 2
+    html += `<div class="kpi-row">
+        <div class="kpi-card">
+            <div class="kpi-label">Pending</div>
+            <div class="kpi-value">${fmt(k.pending_products)}</div>
+            <div class="kpi-sub">${hasGmc ? 'Awaiting review' : 'N/A without GMC'}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">${hasGmc ? 'Expiring' : 'Out of Stock'}${estTag}</div>
+            <div class="kpi-value">${fmt(k.expiring_products)}</div>
+            <div class="kpi-sub">${hasGmc ? 'Need refresh' : 'Cannot serve on Shopping'}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Products with Issues${estTag} ${whyTip('Distinct products with at least one feed issue. A single product may have multiple issues across categories.')}</div>
+            <div class="kpi-value">${fmt(k.products_with_issues)}</div>
+            <div class="kpi-sub">${est ? 'Distinct products (deduplicated)' : 'Any severity'}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Feed Completeness ${whyTip('Percentage of required Google Shopping fields populated across your product catalog. 100% = all required fields filled.')}</div>
+            <div class="kpi-value">${D.feed_readiness.completeness_score}%</div>
+            <div class="kpi-sub">Based on required fields</div>
+        </div>
+    </div>`;
+
+    // Eligibility breakdown stacked bar + Approval trend
+    html += `<div class="grid-2">`;
+
+    // Left: Eligibility
+    html += `<div class="section-card">
+        <div class="section-title">Eligibility Breakdown</div>`;
+    const elig = D.eligibility_breakdown;
+    if (elig && elig.length > 0) {
+        html += `<div class="stacked-bar">`;
+        elig.forEach(e => {
+            html += `<div class="stacked-seg" style="width:${e.pct}%; background:${e.color}" title="${e.status}: ${e.count} (${e.pct}%)"></div>`;
+        });
+        html += `</div><div class="stacked-legend">`;
+        elig.forEach(e => {
+            html += `<div class="legend-item"><div class="legend-dot" style="background:${e.color}"></div>${e.status} (${fmt(e.count)})</div>`;
+        });
+        html += `</div>`;
+        // Revenue at risk per status
+        const atRisk = elig.filter(e => e.est_revenue_risk > 0);
+        if (atRisk.length > 0) {
+            html += `<div style="margin-top:14px; font-size:12px; color:var(--slate);">Revenue at risk:</div>`;
+            atRisk.forEach(e => {
+                html += `<div style="font-size:13px; margin-top:4px;"><strong>${e.status}</strong>: ${fmtD(e.est_revenue_risk)}/mo</div>`;
+            });
+        }
+    } else {
+        html += `<div class="empty-state">Enable GMC sync to see eligibility data</div>`;
+    }
+    html += `</div>`;
+
+    // Right: Approval trend
+    html += `<div class="section-card">
+        <div class="section-title">Approval Rate Trend</div>`;
+    const trend = D.approval_trend;
+    if (trend && trend.length > 0) {
+        html += renderApprovalTrendChart(trend);
+    } else {
+        html += `<div class="empty-state">Historical data will appear after daily syncs</div>`;
+    }
+    html += `</div></div>`;
+
+    panel.innerHTML = html;
+}
+
+function renderApprovalTrendChart(data) {
+    if (!data || data.length === 0) return '<div class="empty-state">No trend data</div>';
+    const W = 480, H = 200, pad = {t: 10, r: 20, b: 30, l: 45};
+    const pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+    const maxRate = 100;
+
+    let path = '';
+    const pts = data.map((d, i) => {
+        const x = pad.l + (i / Math.max(data.length - 1, 1)) * pw;
+        const y = pad.t + ph - (d.approval_rate / maxRate) * ph;
+        return {x, y, d};
+    });
+    pts.forEach((p, i) => { path += (i === 0 ? 'M' : 'L') + `${p.x},${p.y} `; });
+
+    // Area fill
+    let area = path + `L${pts[pts.length-1].x},${pad.t+ph} L${pts[0].x},${pad.t+ph} Z`;
+
+    let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;">`;
+    // Grid lines
+    for (let i = 0; i <= 4; i++) {
+        const y = pad.t + (i / 4) * ph;
+        const val = Math.round(100 - i * 25);
+        svg += `<line x1="${pad.l}" y1="${y}" x2="${W-pad.r}" y2="${y}" stroke="rgba(0,0,0,0.06)" />`;
+        svg += `<text x="${pad.l-8}" y="${y+4}" text-anchor="end" font-size="10" fill="#6b6670">${val}%</text>`;
+    }
+    // X labels
+    const step = Math.max(1, Math.floor(data.length / 6));
+    data.forEach((d, i) => {
+        if (i % step === 0 || i === data.length - 1) {
+            const x = pad.l + (i / Math.max(data.length - 1, 1)) * pw;
+            svg += `<text x="${x}" y="${H-5}" text-anchor="middle" font-size="9" fill="#6b6670">${d.date.slice(5)}</text>`;
+        }
+    });
+    svg += `<path d="${area}" fill="rgba(31,111,107,0.08)" />`;
+    svg += `<path d="${path}" fill="none" stroke="var(--cass-teal)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />`;
+    pts.forEach(p => {
+        svg += `<circle cx="${p.x}" cy="${p.y}" r="3" fill="var(--cass-teal)" stroke="#fff" stroke-width="1.5" />`;
+    });
+    svg += `</svg>`;
+    return svg;
+}
+
+// ====================== Tab 2: Issues & Risk ======================
+function renderIssuesTab() {
+    const panel = document.getElementById('tab-issues');
+    const est = D.estimates_only;
+    const estLabel = est ? ' (Estimated)' : '';
+    let html = '';
+
+    // Issue breakdown
+    const issues = D.issue_breakdown;
+    html += `<div class="section-card">
+        <div class="section-title">Issue Breakdown by Type${estLabel}</div>`;
+    if (issues && issues.length > 0) {
+        html += `<table class="data-table"><thead><tr>
+            <th>Issue</th><th>Severity</th><th class="num">Products${estLabel}</th><th class="num">Est. Revenue Risk</th>
+        </tr></thead><tbody>`;
+        issues.forEach(i => {
+            html += `<tr>
+                <td><strong>${i.description}</strong><br><span style="font-size:11px;color:var(--slate)">${i.issue_code}</span></td>
+                <td>${statusBadge(i.severity)}</td>
+                <td class="num">${fmt(i.products)}</td>
+                <td class="num" style="color:var(--red)">${fmtD(i.est_revenue_risk)}</td>
+            </tr>`;
+        });
+        html += `</tbody></table>`;
+        html += `<div style="margin-top:10px; font-size:12px; color:var(--slate); font-style:italic;">Issue counts are not mutually exclusive; a product can appear in multiple categories.</div>`;
+    } else {
+        html += `<div class="empty-state">No feed issues detected</div>`;
+    }
+    html += `</div>`;
+
+    // Category / brand risk
+    const cat = D.category_risk;
+    if (cat && cat.by_vendor && cat.by_vendor.length > 0) {
+        html += `<div class="section-card">
+            <div class="section-title">Brand Risk Analysis</div>
+            <table class="data-table"><thead><tr>
+                <th>Brand / Vendor</th><th class="num">Total Products</th><th class="num">Active %</th><th class="num">Products with Issues</th>
+            </tr></thead><tbody>`;
+        cat.by_vendor.forEach(v => {
+            const riskColor = v.issues > 10 ? 'var(--red)' : v.issues > 0 ? 'var(--amber)' : 'inherit';
+            html += `<tr>
+                <td><strong>${v.name}</strong></td>
+                <td class="num">${fmt(v.total)}</td>
+                <td class="num">${pct(v.active_pct)}</td>
+                <td class="num" style="color:${riskColor}">${fmt(v.issues)}</td>
+            </tr>`;
+        });
+        html += `</tbody></table></div>`;
+    }
+
+    // At-risk products
+    const risk = D.at_risk_products;
+    html += `<div class="section-card">
+        <div class="section-title">At-Risk Products (by Revenue Impact)</div>`;
+    if (risk && risk.length > 0) {
+        const canDrill = D.has_gmc_data;
+        html += `<table class="data-table"><thead><tr>
+            <th>Product</th><th>Status</th><th>Top Issue</th><th class="num">Days Affected</th><th class="num">Monthly Revenue</th><th class="num">Est. Revenue Loss</th>
+        </tr></thead><tbody>`;
+        risk.slice(0, 30).forEach(p => {
+            const rowClick = canDrill ? `onclick="openProductModal('${p.product_id}')"` : '';
+            const rowStyle = canDrill ? '' : 'style="cursor:default"';
+            html += `<tr ${rowClick} ${rowStyle}>
+                <td><strong>${(p.title || '').substring(0, 50)}</strong>${p.title && p.title.length > 50 ? '...' : ''}</td>
+                <td>${statusBadge(p.status)}</td>
+                <td style="font-size:12px">${p.top_issue}</td>
+                <td class="num">${p.days_affected}d</td>
+                <td class="num">${fmtD(p.monthly_revenue)}</td>
+                <td class="num" style="color:var(--red)">${fmtD(p.est_revenue_loss)}</td>
+            </tr>`;
+        });
+        html += `</tbody></table>`;
+        if (!canDrill) {
+            html += `<div style="font-size:11px;color:var(--slate);margin-top:8px">Product drill-down available when GMC syncs daily.</div>`;
+        }
+    } else {
+        html += `<div class="empty-state">No at-risk products detected</div>`;
+    }
+    html += `</div>`;
+
+    panel.innerHTML = html;
+}
+
+// ====================== Tab 3: Feed Readiness ======================
+function renderReadinessTab() {
+    const panel = document.getElementById('tab-readiness');
+    const r = D.feed_readiness;
+    const gtin = D.gtin_coverage;
+    let html = '';
+
+    // KPI row
+    html += `<div class="kpi-row">
+        <div class="kpi-card">
+            <div class="kpi-label">Active Catalog</div>
+            <div class="kpi-value">${fmt(r.active_products)}</div>
+            <div class="kpi-sub">Active Shopify products</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Completeness Score</div>
+            <div class="kpi-value">${r.completeness_score}%</div>
+            <div class="kpi-sub">Weighted field coverage</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">GTIN / EAN Coverage</div>
+            <div class="kpi-value">${pct(r.gtin_coverage_pct)}</div>
+            <div class="kpi-sub">of ${fmt(r.active_products)} active products</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Feed Health Score</div>
+            <div class="kpi-value">${D.health_score}/100</div>
+            <div class="kpi-sub">Composite score</div>
+        </div>
+    </div>`;
+
+    // Field completeness
+    html += `<div class="section-card">
+        <div class="section-title">Feed Field Completeness</div>
+        <table class="data-table"><thead><tr>
+            <th>Field</th><th class="num">Products</th><th class="num">Coverage</th><th>Status</th><th style="width:200px">Progress</th>
+        </tr></thead><tbody>`;
+    (r.fields || []).forEach(f => {
+        const barCls = f.status === 'ok' ? 'progress-ok' : f.status === 'warning' ? 'progress-warning' : 'progress-critical';
+        html += `<tr>
+            <td><strong>${f.field}</strong></td>
+            <td class="num">${fmt(f.count)}</td>
+            <td class="num">${pct(f.pct)}</td>
+            <td>${fieldBadge(f.status)}</td>
+            <td><div class="progress-track"><div class="progress-fill ${barCls}" style="width:${Math.min(f.pct, 100)}%"></div></div></td>
+        </tr>`;
+    });
+    html += `</tbody></table></div>`;
+
+    // GTIN coverage by vendor
+    html += `<div class="section-card">
+        <div class="section-title">GTIN / EAN Coverage by Vendor</div>`;
+    if (gtin && gtin.length > 0) {
+        html += `<table class="data-table"><thead><tr>
+            <th>Vendor</th><th class="num">Total SKUs</th><th class="num">With GTIN</th><th class="num">Missing</th><th class="num">Coverage</th><th>Status</th>
+        </tr></thead><tbody>`;
+        gtin.forEach(g => {
+            html += `<tr>
+                <td><strong>${g.vendor}</strong></td>
+                <td class="num">${fmt(g.total)}</td>
+                <td class="num">${fmt(g.with_gtin)}</td>
+                <td class="num" style="color:${g.missing_gtin > 0 ? 'var(--red)' : 'inherit'}">${fmt(g.missing_gtin)}</td>
+                <td class="num">${pct(g.coverage_pct)}</td>
+                <td>${fieldBadge(g.status)}</td>
+            </tr>`;
+        });
+        html += `</tbody></table>`;
+    } else {
+        html += `<div class="empty-state">No GTIN data available</div>`;
+    }
+    html += `</div>`;
+
+    panel.innerHTML = html;
+}
+
+// ====================== Tab 4: Price & Availability ======================
+function renderPricingTab() {
+    const panel = document.getElementById('tab-pricing');
+    const pd = D.price_drift;
+    const av = D.availability_health;
+    let html = '';
+
+    // KPI row
+    const s = pd.summary || {};
+    html += `<div class="kpi-row">
+        <div class="kpi-card">
+            <div class="kpi-label">Price Tracked SKUs</div>
+            <div class="kpi-value">${fmt(s.total_tracked)}</div>
+            <div class="kpi-sub">${pd.pricing_date ? 'As of ' + pd.pricing_date : ''}</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Below Minimum</div>
+            <div class="kpi-value" style="color:${(s.below_minimum||0)>0?'var(--red)':'inherit'}">${fmt(s.below_minimum)}</div>
+            <div class="kpi-sub">${pct(s.below_min_pct)} of tracked</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Above RRP</div>
+            <div class="kpi-value" style="color:${(s.above_rrp||0)>0?'var(--amber)':'inherit'}">${fmt(s.above_rrp)}</div>
+            <div class="kpi-sub">Overpriced risk</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Losing Money</div>
+            <div class="kpi-value" style="color:${(s.losing_money||0)>0?'var(--red)':'inherit'}">${fmt(s.losing_money)}</div>
+            <div class="kpi-sub">Negative margin</div>
+        </div>
+    </div>`;
+
+    // Price drift table + Availability side by side
+    html += `<div class="grid-2">`;
+
+    // Price drifts
+    html += `<div class="section-card">
+        <div class="section-title">Biggest Price Violations</div>`;
+    const drifts = pd.top_drifts || [];
+    if (drifts.length > 0) {
+        html += `<table class="data-table"><thead><tr>
+            <th>Product</th><th class="num">Current</th><th class="num">Minimum</th><th class="num">Margin</th>
+        </tr></thead><tbody>`;
+        drifts.forEach(d => {
+            const gap = d.current_price - d.minimum_price;
+            html += `<tr>
+                <td><strong>${d.title}</strong><br><span style="font-size:11px;color:var(--slate)">${d.vendor} | ${d.sku}</span></td>
+                <td class="num" style="color:var(--red)">$${d.current_price.toFixed(2)}</td>
+                <td class="num">$${d.minimum_price.toFixed(2)}</td>
+                <td class="num" style="color:${d.margin_pct < 0 ? 'var(--red)' : 'inherit'}">${d.margin_pct.toFixed(1)}%</td>
+            </tr>`;
+        });
+        html += `</tbody></table>`;
+    } else {
+        html += `<div class="empty-state">No price violations detected</div>`;
+    }
+    html += `</div>`;
+
+    // Availability health
+    html += `<div class="section-card">
+        <div class="section-title">Availability Health</div>`;
+
+    // Summary stats
+    html += `<div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; margin-bottom:16px;">
+        <div style="background:var(--green-bg); border-radius:10px; padding:12px; text-align:center;">
+            <div style="font-size:11px; color:var(--green); font-weight:600;">IN STOCK</div>
+            <div style="font-family:'Space Grotesk'; font-size:20px; font-weight:700; color:var(--green);">${fmt(av.in_stock)}</div>
+        </div>
+        <div style="background:var(--red-bg); border-radius:10px; padding:12px; text-align:center;">
+            <div style="font-size:11px; color:var(--red); font-weight:600;">OUT OF STOCK</div>
+            <div style="font-family:'Space Grotesk'; font-size:20px; font-weight:700; color:var(--red);">${fmt(av.out_of_stock)}</div>
+        </div>
+        <div style="background:var(--amber-bg); border-radius:10px; padding:12px; text-align:center;">
+            <div style="font-size:11px; color:var(--amber); font-weight:600;">OVERSOLD</div>
+            <div style="font-family:'Space Grotesk'; font-size:20px; font-weight:700; color:var(--amber);">${fmt(av.oversold)}</div>
+        </div>
+    </div>`;
+
+    // In stock % bar
+    html += `<div style="margin-bottom:14px;">
+        <div style="font-size:12px; color:var(--slate); margin-bottom:4px;">In Stock Rate: <strong>${pct(av.in_stock_pct)}</strong></div>
+        <div class="progress-track"><div class="progress-fill ${av.in_stock_pct >= 80 ? 'progress-ok' : av.in_stock_pct >= 60 ? 'progress-warning' : 'progress-critical'}" style="width:${av.in_stock_pct}%"></div></div>
+    </div>`;
+
+    // By vendor
+    const vendors = av.by_vendor || [];
+    if (vendors.length > 0) {
+        html += `<div style="font-size:13px; font-weight:600; margin-bottom:8px;">By Vendor (Top 10)</div>
+        <table class="data-table"><thead><tr>
+            <th>Vendor</th><th class="num">Total</th><th class="num">In Stock</th><th class="num">%</th>
+        </tr></thead><tbody>`;
+        vendors.slice(0, 10).forEach(v => {
+            html += `<tr>
+                <td>${v.vendor}</td>
+                <td class="num">${fmt(v.total)}</td>
+                <td class="num">${fmt(v.in_stock)}</td>
+                <td class="num">${pct(v.in_stock_pct)}</td>
+            </tr>`;
+        });
+        html += `</tbody></table>`;
+    }
+    html += `</div></div>`;
+
+    // Availability by vendor — full table
+    if (vendors.length > 10) {
+        html += `<div class="section-card">
+            <div class="section-title">Full Vendor Availability</div>
+            <table class="data-table"><thead><tr>
+                <th>Vendor</th><th class="num">Total</th><th class="num">In Stock</th><th class="num">Out of Stock</th><th class="num">In Stock %</th><th style="width:160px">Coverage</th>
+            </tr></thead><tbody>`;
+        vendors.forEach(v => {
+            const cls = v.in_stock_pct >= 80 ? 'progress-ok' : v.in_stock_pct >= 60 ? 'progress-warning' : 'progress-critical';
+            html += `<tr>
+                <td><strong>${v.vendor}</strong></td>
+                <td class="num">${fmt(v.total)}</td>
+                <td class="num">${fmt(v.in_stock)}</td>
+                <td class="num">${fmt(v.out_of_stock)}</td>
+                <td class="num">${pct(v.in_stock_pct)}</td>
+                <td><div class="progress-track"><div class="progress-fill ${cls}" style="width:${v.in_stock_pct}%"></div></div></td>
+            </tr>`;
+        });
+        html += `</tbody></table></div>`;
+    }
+
+    panel.innerHTML = html;
+}
+
+// ====================== Product Modal ======================
+async function openProductModal(productId) {
+    const modal = document.getElementById('productModal');
+    const body = document.getElementById('modalBody');
+    modal.classList.add('open');
+    body.innerHTML = '<div class="loading">Loading product detail...</div>';
+
+    try {
+        const res = await fetch(`/merchant-center/product-detail?product_id=${encodeURIComponent(productId)}`);
+        const json = await res.json();
+        if (!json.success || !json.data) {
+            body.innerHTML = '<div class="empty-state">Product not found</div>';
+            return;
+        }
+        renderProductModal(json.data);
+    } catch (e) {
+        body.innerHTML = `<div class="empty-state">Error: ${e.message}</div>`;
+    }
+}
+
+function renderProductModal(p) {
+    const body = document.getElementById('modalBody');
+    let html = `
+        <div class="modal-header">
+            <div class="modal-name">${p.title || 'Unknown Product'}</div>
+            <div class="modal-sub">Product ID: ${p.product_id} | Offer: ${p.offer_id || 'N/A'}</div>
+            <div style="margin-top:8px;">${statusBadge(p.status)}</div>
+        </div>
+
+        <div class="modal-stats">
+            <div class="modal-stat">
+                <div class="modal-stat-label">Issues</div>
+                <div class="modal-stat-value" style="color:${p.issue_count > 0 ? 'var(--red)' : 'inherit'}">${p.issue_count || 0}</div>
+            </div>
+            <div class="modal-stat">
+                <div class="modal-stat-label">Monthly Revenue</div>
+                <div class="modal-stat-value">${fmtD(p.monthly_revenue)}</div>
+            </div>
+            <div class="modal-stat">
+                <div class="modal-stat-label">Monthly Units</div>
+                <div class="modal-stat-value">${fmt(p.monthly_units)}</div>
+            </div>
+        </div>`;
+
+    // Issues
+    if (p.issues && p.issues.length > 0) {
+        html += `<div style="margin-bottom:18px;">
+            <div class="section-title">Active Issues</div>
+            <table class="data-table"><thead><tr>
+                <th>Issue</th><th>Severity</th><th>Attribute</th><th class="num">Days</th>
+            </tr></thead><tbody>`;
+        p.issues.forEach(i => {
+            html += `<tr>
+                <td><strong>${i.description || i.code}</strong>${i.detail ? '<br><span style="font-size:11px;color:var(--slate)">' + i.detail + '</span>' : ''}</td>
+                <td>${statusBadge(i.severity)}</td>
+                <td style="font-size:12px">${i.attribute || '-'}</td>
+                <td class="num">${i.days_affected}d</td>
+            </tr>`;
+        });
+        html += `</tbody></table></div>`;
+    }
+
+    // Status history
+    if (p.history && p.history.length > 0) {
+        html += `<div>
+            <div class="section-title">Status History</div>
+            <table class="data-table"><thead><tr>
+                <th>Date</th><th>Status</th><th class="num">Issues</th>
+            </tr></thead><tbody>`;
+        p.history.slice(0, 15).forEach(h => {
+            html += `<tr>
+                <td>${h.date}</td>
+                <td>${statusBadge(h.status)}</td>
+                <td class="num">${h.issues || 0}</td>
+            </tr>`;
+        });
+        html += `</tbody></table></div>`;
+    }
+
+    body.innerHTML = html;
+}
+
+function closeModal() {
+    document.getElementById('productModal').classList.remove('open');
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+// Load on ready
+loadDashboard();
+</script>
+</body>
+</html>

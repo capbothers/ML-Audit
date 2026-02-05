@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cass Brothers · Customer Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        :root {
+            --ink: #1c1b1f;
+            --ink-soft: #3d3a40;
+            --slate: #6b6670;
+            --card: #ffffff;
+            --line: rgba(27, 27, 27, 0.08);
+            --shadow: 0 1px 3px rgba(17,18,19,0.04), 0 8px 24px rgba(17,18,19,0.06);
+            --shadow-lg: 0 4px 12px rgba(17,18,19,0.05), 0 20px 48px rgba(17,18,19,0.08);
+            --cass-black: #1b1b1b;
+            --cass-cream: #f7f3ed;
+            --cass-gold: #c49a4a;
+            --cass-teal: #1f6f6b;
+            --cass-moss: #2f3d33;
+            --green: #1a7a3a;
+            --green-bg: rgba(26,122,58,0.08);
+            --red: #b5342a;
+            --red-bg: rgba(181,52,42,0.08);
+            --amber: #8b6b1f;
+            --amber-bg: rgba(196,154,74,0.12);
+            --radius: 14px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "IBM Plex Sans", "Space Grotesk", sans-serif;
+            background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        .app-shell {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr);
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+        }
+
+        .brand-bar {
+            grid-column: 1 / -1;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 28px;
+            background: var(--cass-black); color: #f7f1e8;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+        .brand-mark { display: flex; align-items: center; gap: 12px; font-family: "Space Grotesk", sans-serif; letter-spacing: 0.5px; }
+        .brand-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--cass-gold); box-shadow: 0 0 0 4px rgba(196,154,74,0.2); }
+        .brand-actions { display: flex; gap: 12px; font-size: 13px; }
+        .pill { padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.2); }
+
+        .side-nav {
+            padding: 28px 20px;
+            border-right: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.4) 100%);
+        }
+        .side-nav h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--slate); margin-bottom: 12px; }
+        .nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 12px; border-radius: 12px; font-size: 14px;
+            color: var(--ink-soft); margin-bottom: 6px; cursor: pointer; transition: all 0.2s ease;
+            text-decoration: none;
+        }
+        .nav-item:hover { background: rgba(0,0,0,0.04); }
+        .nav-item.active { background: var(--cass-black); color: #f7f1e8; box-shadow: 0 12px 24px rgba(0,0,0,0.15); }
+        .nav-item span { width: 8px; height: 8px; border-radius: 50%; background: var(--cass-gold); opacity: 0.7; }
+
+        .main-area {
+            padding: 28px 32px 32px;
+            display: flex; flex-direction: column; gap: 18px;
+            overflow-y: auto;
+        }
+
+        /* Header + Tabs */
+        .page-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+        .page-title { font-family: "Space Grotesk", sans-serif; font-size: 22px; font-weight: 700; }
+        .page-sub { color: var(--slate); font-size: 14px; }
+
+        .tab-bar {
+            display: flex; gap: 4px; background: rgba(0,0,0,0.04); border-radius: 14px; padding: 4px;
+            align-self: flex-start;
+        }
+        .tab-btn {
+            padding: 8px 18px; border: none; background: none; border-radius: 12px;
+            font-size: 13px; font-weight: 600; cursor: pointer; color: var(--ink-soft); transition: all .25s;
+            font-family: "Space Grotesk", sans-serif;
+        }
+        .tab-btn.active { background: var(--cass-black); color: #f7f1e8; box-shadow: var(--shadow); }
+
+        .tab-panel { display: none; flex-direction: column; gap: 18px; }
+        .tab-panel.active { display: flex; }
+
+        /* Pulse banner */
+        .pulse-banner {
+            display: flex; align-items: center; gap: 14px; padding: 18px 22px;
+            background: linear-gradient(135deg, var(--cass-black) 0%, #2a2a2a 100%);
+            color: #f7f1e8; border-radius: var(--radius);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.15);
+        }
+        .pulse-text { flex: 1; font-size: 15px; line-height: 1.6; }
+        .status-chip {
+            padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 700;
+            letter-spacing: .5px; text-transform: uppercase; white-space: nowrap;
+        }
+        .status-Thriving { background: rgba(26,122,58,0.2); color: #5cdb8a; }
+        .status-Stable { background: rgba(31,111,107,0.2); color: #5ecec8; }
+        .status-At-Risk, .status-AtRisk { background: rgba(196,154,74,0.2); color: #e8c75e; }
+        .status-Critical { background: rgba(181,52,42,0.2); color: #f57272; }
+        .tone-toggle { display: flex; gap: 6px; margin-left: 12px; }
+        .tone-btn {
+            padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.25);
+            background: none; color: rgba(255,255,255,0.5); cursor: pointer; font-size: 11px;
+            font-family: "Space Grotesk"; font-weight: 600;
+        }
+        .tone-btn.active { background: rgba(255,255,255,0.15); color: #fff; }
+
+        /* KPI cards */
+        .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+        .kpi-card {
+            background: var(--card); border-radius: var(--radius); padding: 18px 20px;
+            box-shadow: var(--shadow); border: 1px solid var(--line);
+        }
+        .kpi-label { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--slate); margin-bottom: 6px; }
+        .kpi-value { font-family: "Space Grotesk"; font-size: 26px; font-weight: 700; color: var(--ink); }
+        .kpi-sub { font-size: 12px; color: var(--slate); margin-top: 4px; }
+
+        /* Cards / sections */
+        .section-card {
+            background: var(--card); border-radius: var(--radius); padding: 22px 24px;
+            box-shadow: var(--shadow); border: 1px solid var(--line);
+        }
+        .section-title { font-family: "Space Grotesk"; font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+        /* Tables */
+        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .data-table th {
+            text-align: left; padding: 10px 12px; font-weight: 600; color: var(--slate);
+            border-bottom: 2px solid var(--line); font-size: 11px; text-transform: uppercase; letter-spacing: .5px;
+        }
+        .data-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+        .data-table tr { cursor: pointer; transition: background .15s; }
+        .data-table tbody tr:hover { background: rgba(196,154,74,0.06); }
+        .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+        /* Badges */
+        .badge {
+            display: inline-block; padding: 3px 10px; border-radius: 999px;
+            font-size: 11px; font-weight: 700; letter-spacing: .3px;
+        }
+        .badge-champions { background: rgba(196,154,74,0.15); color: #9a7730; }
+        .badge-loyal { background: var(--green-bg); color: var(--green); }
+        .badge-potential-loyalist { background: rgba(31,111,107,0.12); color: var(--cass-teal); }
+        .badge-promising { background: rgba(58,143,214,0.12); color: #3a8fd6; }
+        .badge-new-customers { background: rgba(107,92,231,0.12); color: #6b5ce7; }
+        .badge-need-attention { background: var(--amber-bg); color: var(--amber); }
+        .badge-about-to-sleep { background: rgba(232,140,58,0.12); color: #c47020; }
+        .badge-at-risk { background: var(--red-bg); color: var(--red); }
+        .badge-hibernating { background: rgba(139,94,60,0.12); color: #8b5e3c; }
+        .badge-lost { background: rgba(107,114,128,0.12); color: #6b7280; }
+
+        /* Flag badges */
+        .flag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; margin-right: 4px; }
+        .flag-Champion { background: rgba(196,154,74,0.15); color: #9a7730; }
+        .flag-Loyal { background: var(--green-bg); color: var(--green); }
+        .flag-At-Risk, .flag-AtRisk { background: var(--red-bg); color: var(--red); }
+        .flag-Churned { background: rgba(107,114,128,0.15); color: #6b7280; }
+        .flag-High-Value, .flag-HighValue { background: rgba(196,154,74,0.15); color: #9a7730; }
+        .flag-New { background: rgba(107,92,231,0.12); color: #6b5ce7; }
+
+        /* Stacked bar */
+        .stacked-bar { display: flex; height: 32px; border-radius: 8px; overflow: hidden; margin: 8px 0; }
+        .stacked-seg { height: 100%; transition: width .4s; position: relative; }
+        .stacked-seg:hover { opacity: 0.85; }
+        .stacked-legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+        .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+        /* Modal */
+        .modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+            z-index: 1000; display: none; justify-content: center; align-items: flex-start;
+            padding: 60px 20px; overflow-y: auto;
+        }
+        .modal-backdrop.open { display: flex; }
+        .modal-content {
+            background: var(--card); border-radius: 18px; max-width: 680px; width: 100%;
+            box-shadow: var(--shadow-lg); padding: 28px 30px; position: relative;
+        }
+        .modal-close {
+            position: absolute; top: 16px; right: 18px; background: none; border: none;
+            font-size: 20px; cursor: pointer; color: var(--slate); width: 32px; height: 32px;
+            display: flex; align-items: center; justify-content: center; border-radius: 50%;
+        }
+        .modal-close:hover { background: rgba(0,0,0,0.06); }
+        .modal-header { margin-bottom: 20px; }
+        .modal-name { font-family: "Space Grotesk"; font-size: 20px; font-weight: 700; }
+        .modal-email { font-size: 13px; color: var(--slate); margin-top: 4px; }
+        .modal-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+        .modal-stat { background: var(--cass-cream); border-radius: 12px; padding: 14px 16px; text-align: center; }
+        .modal-stat-label { font-size: 11px; color: var(--slate); font-weight: 600; text-transform: uppercase; }
+        .modal-stat-value { font-family: "Space Grotesk"; font-size: 20px; font-weight: 700; margin-top: 4px; }
+        .rfm-scores { display: flex; gap: 8px; margin: 12px 0; }
+        .rfm-score {
+            width: 44px; height: 44px; border-radius: 12px; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; font-family: "Space Grotesk";
+            font-weight: 700; font-size: 16px; color: #fff;
+        }
+        .rfm-score small { font-size: 9px; font-weight: 600; opacity: 0.8; }
+        .rfm-r { background: var(--cass-teal); }
+        .rfm-f { background: var(--cass-gold); }
+        .rfm-m { background: var(--cass-moss); }
+
+        /* Cohort heatmap */
+        .heatmap-grid { overflow-x: auto; }
+        .heatmap-table { border-collapse: collapse; font-size: 12px; width: 100%; }
+        .heatmap-table th { padding: 6px 8px; font-size: 11px; color: var(--slate); font-weight: 600; text-align: center; }
+        .heatmap-table td { padding: 6px 8px; text-align: center; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .heatmap-cell { border-radius: 4px; padding: 4px 6px; font-size: 11px; }
+
+        /* Scatter plot container */
+        .scatter-container { width: 100%; height: 320px; }
+        .scatter-container svg { width: 100%; height: 100%; }
+
+        /* Action cards */
+        .action-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+        .action-card {
+            background: var(--cass-cream); border-radius: 12px; padding: 16px 18px;
+            border-left: 4px solid var(--cass-gold);
+        }
+        .action-card-title { font-family: "Space Grotesk"; font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+        .action-card-count { font-size: 12px; color: var(--slate); margin-bottom: 8px; }
+        .action-card-desc { font-size: 12px; color: var(--ink-soft); line-height: 1.5; margin-bottom: 6px; }
+        .action-card-action { font-size: 12px; color: var(--cass-teal); font-weight: 600; }
+
+        /* Search */
+        .search-box {
+            display: flex; gap: 10px; align-items: center; background: var(--card);
+            border-radius: var(--radius); padding: 12px 18px; box-shadow: var(--shadow); border: 1px solid var(--line);
+        }
+        .search-box input {
+            flex: 1; border: none; outline: none; font-size: 14px; background: none;
+            font-family: "IBM Plex Sans";
+        }
+        .search-box button {
+            padding: 8px 18px; border: none; border-radius: 10px;
+            background: var(--cass-black); color: #f7f1e8; font-weight: 600;
+            cursor: pointer; font-size: 13px; font-family: "Space Grotesk";
+        }
+
+        /* Pagination */
+        .pagination {
+            display: flex; align-items: center; justify-content: space-between; padding: 12px 0;
+            font-size: 13px; color: var(--slate);
+        }
+        .page-btns { display: flex; gap: 6px; }
+        .page-btn {
+            padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px;
+            background: var(--card); cursor: pointer; font-size: 12px; font-weight: 600;
+        }
+        .page-btn.active { background: var(--cass-black); color: #f7f1e8; border-color: var(--cass-black); }
+        .page-btn:disabled { opacity: 0.4; cursor: default; }
+        .per-page-select {
+            padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px;
+            font-size: 12px; background: var(--card);
+        }
+
+        .loading { text-align: center; padding: 40px; color: var(--slate); }
+        .empty-state { text-align: center; padding: 40px; color: var(--slate); font-size: 14px; }
+    </style>
+</head>
+<body>
+<div class="app-shell">
+    <!-- Brand bar -->
+    <header class="brand-bar">
+        <div class="brand-mark">
+            <div class="brand-dot"></div>
+            <span style="font-size:18px; font-weight:600;">Cass Brothers</span>
+            <span style="opacity:0.5; font-size:13px; margin-left:4px;">Growth Intelligence</span>
+        </div>
+        <div class="brand-actions">
+            <span class="pill" id="lastUpdated">Loading…</span>
+        </div>
+    </header>
+
+    <!-- Side nav -->
+    <nav class="side-nav">
+        <h2>Dashboards</h2>
+        <a class="nav-item" href="/dashboard"><span></span> Overview</a>
+        <a class="nav-item" href="/performance"><span></span> Performance</a>
+        <a class="nav-item" href="/seo-dashboard"><span></span> SEO &amp; Content</a>
+        <a class="nav-item" href="/ads-intelligence"><span></span> Ads Intelligence</a>
+        <a class="nav-item" href="/finance-dashboard"><span></span> Finance</a>
+        <a class="nav-item" href="/inventory"><span></span> Inventory</a>
+        <a class="nav-item" href="/pricing-intel"><span></span> Pricing Intel</a>
+        <a class="nav-item active" href="/customer-intelligence"><span></span> Customer Intel</a>
+        <a class="nav-item" href="/merchant-center-intel"><span></span> Merchant Center</a>
+        <a class="nav-item" href="/strategic-intelligence"><span></span> Intelligence Brief</a>
+        <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
+            <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
+        </div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="main-area">
+        <div class="page-header">
+            <div>
+                <div class="page-title">Customer Intelligence</div>
+                <div class="page-sub">ML-powered RFM scoring, cohort retention, and customer analytics</div>
+            </div>
+        </div>
+
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('pulse')">Customer Pulse</button>
+            <button class="tab-btn" onclick="switchTab('rfm')">RFM Intelligence</button>
+            <button class="tab-btn" onclick="switchTab('retention')">Retention &amp; Cohort</button>
+            <button class="tab-btn" onclick="switchTab('product')">Product &amp; Geo</button>
+        </div>
+
+        <!-- ==================== TAB 1: CUSTOMER PULSE ==================== -->
+        <div class="tab-panel active" id="tab-pulse">
+            <div id="pulseBanner" class="pulse-banner">
+                <div class="pulse-text" id="pulseText">Loading customer intelligence…</div>
+                <div class="tone-toggle">
+                    <button class="tone-btn active" onclick="setTone('plain')">Plain</button>
+                    <button class="tone-btn" onclick="setTone('pro')">Pro</button>
+                </div>
+            </div>
+
+            <div class="kpi-row" id="kpiRow1"></div>
+            <div class="kpi-row" id="kpiRow2"></div>
+
+            <div class="section-card">
+                <div class="section-title">RFM Segment Distribution</div>
+                <div id="rfmStackedBar"></div>
+            </div>
+
+            <div class="grid-2">
+                <div class="section-card">
+                    <div class="section-title">Revenue by Customer Segment</div>
+                    <div id="revenueBySegment"></div>
+                </div>
+                <div class="section-card">
+                    <div class="section-title">Customer Acquisition Trend (12 months)</div>
+                    <div id="acquisitionTrend"></div>
+                </div>
+            </div>
+
+            <div class="section-card">
+                <div class="section-title">Top Customers</div>
+                <table class="data-table" id="topCustomersTable">
+                    <thead><tr>
+                        <th>Customer</th><th>Email</th><th class="num">Orders</th>
+                        <th class="num">Total Spent</th><th>Last Order</th>
+                        <th>Segment</th><th class="num">Days Since</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 2: RFM INTELLIGENCE ==================== -->
+        <div class="tab-panel" id="tab-rfm">
+            <div class="kpi-row" id="rfmKpiRow"></div>
+
+            <div class="section-card">
+                <div class="section-title">RFM Segment Detail</div>
+                <table class="data-table" id="rfmTable">
+                    <thead><tr>
+                        <th>Segment</th><th class="num">Count</th><th class="num">% of Total</th>
+                        <th class="num">Avg Orders</th><th class="num">Avg Spend</th>
+                        <th class="num">Avg Recency</th><th class="num">Revenue</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="section-card">
+                <div class="section-title">Segment Actions</div>
+                <div class="action-cards" id="segmentActions"></div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 3: RETENTION & COHORT ==================== -->
+        <div class="tab-panel" id="tab-retention">
+            <div class="kpi-row" id="retentionKpiRow"></div>
+
+            <div class="section-card">
+                <div class="section-title">Cohort Retention Heatmap</div>
+                <div class="heatmap-grid" id="cohortHeatmap"></div>
+            </div>
+
+            <div class="grid-2">
+                <div class="section-card">
+                    <div class="section-title">Repeat Purchase Curve</div>
+                    <div id="repeatCurve" style="height:280px;"></div>
+                </div>
+                <div class="section-card">
+                    <div class="section-title">Days Between Orders</div>
+                    <div id="daysBetween" style="height:280px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== TAB 4: PRODUCT & GEO ==================== -->
+        <div class="tab-panel" id="tab-product">
+            <div class="kpi-row" id="productKpiRow"></div>
+
+            <div class="section-card">
+                <div class="section-title">Gateway Products (First-Order Products)</div>
+                <table class="data-table" id="gatewayTable">
+                    <thead><tr>
+                        <th>Product</th><th class="num">First Orders</th>
+                        <th class="num">Repeat Rate</th><th class="num">Avg Customer LTV</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="section-card">
+                <div class="section-title">Brand Affinity (Co-Purchase Analysis)</div>
+                <table class="data-table" id="affinityTable">
+                    <thead><tr>
+                        <th>Brand A</th><th>Brand B</th>
+                        <th class="num">Co-Purchases</th><th class="num">Lift</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="section-card">
+                <div class="section-title">Geographic Distribution</div>
+                <table class="data-table" id="geoTable">
+                    <thead><tr>
+                        <th>City</th><th>State</th><th>Country</th>
+                        <th class="num">Customers</th><th class="num">Revenue</th><th class="num">Avg Orders</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Customer Modal -->
+<div class="modal-backdrop" id="customerModal">
+    <div class="modal-content" id="modalContent"></div>
+</div>
+
+<script>
+// ======================== STATE ========================
+let D = {};
+let currentTone = 'plain';
+
+// ======================== INIT ========================
+document.addEventListener('DOMContentLoaded', () => {
+    loadDashboard();
+    document.getElementById('customerModal').addEventListener('click', e => {
+        if (e.target === e.currentTarget) closeModal();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+});
+
+// ======================== TABS ========================
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach((b, i) => {
+        b.classList.toggle('active', b.textContent.toLowerCase().includes(tab === 'pulse' ? 'pulse' : tab === 'rfm' ? 'rfm' : tab === 'retention' ? 'retention' : 'product'));
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    const panel = document.getElementById('tab-' + tab);
+    if (panel) panel.classList.add('active');
+}
+
+// ======================== LOAD DASHBOARD ========================
+async function loadDashboard() {
+    try {
+        const resp = await fetch('/customers/dashboard');
+        const json = await resp.json();
+        if (!json.success) throw new Error(json.detail || 'API error');
+        D = json.data;
+        document.getElementById('lastUpdated').textContent = new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+        renderPulse();
+        renderKPIs();
+        renderRfmDistribution();
+        renderRevenueBySegment();
+        renderAcquisitionTrend();
+        renderTopCustomers();
+        renderRfmTab();
+        renderRetentionTab();
+        renderProductTab();
+    } catch (err) {
+        console.error('Dashboard load error:', err);
+        document.getElementById('pulseText').textContent = 'Failed to load customer intelligence data.';
+    }
+}
+
+// ======================== PULSE ========================
+function renderPulse() {
+    const p = D.pulse || {};
+    document.getElementById('pulseText').innerHTML =
+        `<span>${p.narrative || ''}</span>` +
+        `<span class="status-chip status-${(p.status || '').replace(/\s/g, '-')}">${p.status || ''}</span>`;
+}
+
+function setTone(tone) {
+    currentTone = tone;
+    document.querySelectorAll('.tone-btn').forEach(b => b.classList.toggle('active', b.textContent.toLowerCase() === tone));
+    const p = D.pulse || {};
+    const textEl = document.getElementById('pulseText');
+    const text = tone === 'pro' ? (p.pro_narrative || p.narrative || '') : (p.narrative || '');
+    textEl.innerHTML = `<span>${text}</span><span class="status-chip status-${(p.status || '').replace(/\s/g, '-')}">${p.status || ''}</span>`;
+}
+
+// ======================== KPI CARDS ========================
+function renderKPIs() {
+    const k = D.overview_kpis || {};
+    const row1 = [
+        { label: 'Total Customers', value: fmt(k.total_customers) },
+        { label: 'Active (90d)', value: fmt(k.active_customers) },
+        { label: 'Avg Orders/Customer', value: k.avg_orders },
+        { label: 'Avg Lifetime Value', value: '$' + fmtD(k.avg_ltv) },
+    ];
+    const row2 = [
+        { label: 'New This Month', value: fmt(k.new_this_month) },
+        { label: 'Repeat Rate', value: k.repeat_rate + '%' },
+        { label: 'At-Risk Customers', value: fmt(k.at_risk_count) },
+        { label: 'Avg Days Between Orders', value: fmt(k.avg_days_between) },
+    ];
+    document.getElementById('kpiRow1').innerHTML = row1.map(c =>
+        `<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value">${c.value}</div></div>`
+    ).join('');
+    document.getElementById('kpiRow2').innerHTML = row2.map(c =>
+        `<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value">${c.value}</div></div>`
+    ).join('');
+}
+
+// ======================== RFM STACKED BAR ========================
+function renderRfmDistribution() {
+    const dist = D.rfm_distribution || [];
+    if (!dist.length) return;
+    const total = dist.reduce((s, d) => s + d.count, 0) || 1;
+    let bar = '<div class="stacked-bar">';
+    dist.forEach(d => {
+        const pct = (d.count / total * 100);
+        if (pct > 0.5) {
+            bar += `<div class="stacked-seg" style="width:${pct}%;background:${d.color}" title="${d.segment}: ${d.count} (${d.pct}%)"></div>`;
+        }
+    });
+    bar += '</div><div class="stacked-legend">';
+    dist.forEach(d => {
+        if (d.count > 0) {
+            bar += `<div class="legend-item"><div class="legend-dot" style="background:${d.color}"></div>${d.segment} (${d.count})</div>`;
+        }
+    });
+    bar += '</div>';
+    document.getElementById('rfmStackedBar').innerHTML = bar;
+}
+
+// ======================== REVENUE BY SEGMENT BAR CHART ========================
+function renderRevenueBySegment() {
+    const data = (D.revenue_by_segment || []).filter(d => d.revenue > 0);
+    if (!data.length) return;
+    const max = Math.max(...data.map(d => d.revenue));
+    const W = 500, H = data.length * 32 + 20;
+    const labelW = 140;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;">`;
+    data.forEach((d, i) => {
+        const y = i * 32 + 10;
+        const barW = (d.revenue / max) * (W - labelW - 80);
+        svg += `<text x="${labelW - 8}" y="${y + 14}" text-anchor="end" font-size="11" fill="#3d3a40" font-family="IBM Plex Sans">${d.segment}</text>`;
+        svg += `<rect x="${labelW}" y="${y}" width="${barW}" height="22" rx="4" fill="${d.color}" opacity="0.85"/>`;
+        svg += `<text x="${labelW + barW + 6}" y="${y + 14}" font-size="11" fill="#3d3a40" font-family="Space Grotesk" font-weight="600">$${fmtD(d.revenue)}</text>`;
+    });
+    svg += '</svg>';
+    document.getElementById('revenueBySegment').innerHTML = svg;
+}
+
+// ======================== ACQUISITION TREND ========================
+function renderAcquisitionTrend() {
+    const data = D.acquisition_trend || [];
+    if (!data.length) return;
+    const max = Math.max(...data.map(d => d.count), 1);
+    const W = 500, H = 220, pad = 40, barW = Math.max(8, (W - pad * 2) / data.length - 4);
+    let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;">`;
+    data.forEach((d, i) => {
+        const x = pad + i * ((W - pad * 2) / data.length);
+        const barH = (d.count / max) * (H - pad - 30);
+        const y = H - pad - barH;
+        svg += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" rx="3" fill="var(--cass-teal)" opacity="0.8"/>`;
+        svg += `<text x="${x + barW/2}" y="${H - pad + 14}" text-anchor="middle" font-size="9" fill="#6b6670" font-family="IBM Plex Sans">${d.month.slice(5)}</text>`;
+        svg += `<text x="${x + barW/2}" y="${y - 4}" text-anchor="middle" font-size="9" fill="#3d3a40" font-family="Space Grotesk" font-weight="600">${d.count}</text>`;
+    });
+    svg += '</svg>';
+    document.getElementById('acquisitionTrend').innerHTML = svg;
+}
+
+// ======================== TOP CUSTOMERS TABLE ========================
+function renderTopCustomers() {
+    const custs = D.top_customers || [];
+    const tbody = document.querySelector('#topCustomersTable tbody');
+    tbody.innerHTML = custs.map(c =>
+        `<tr onclick="openCustomerModal('${esc(c.email)}')">
+            <td>${esc(c.name)}</td>
+            <td style="color:var(--slate)">${esc(c.email)}</td>
+            <td class="num">${c.orders}</td>
+            <td class="num">$${fmtD(c.total_spent)}</td>
+            <td>${c.last_order || '—'}</td>
+            <td>${segBadge(c.segment)}</td>
+            <td class="num">${c.days_since}</td>
+        </tr>`
+    ).join('');
+}
+
+// ======================== RFM TAB ========================
+function renderRfmTab() {
+    const segs = D.rfm_segments || [];
+
+    // KPIs
+    const find = name => (segs.find(s => s.segment === name) || {}).count || 0;
+    const kpis = [
+        { label: 'Champions', value: fmt(find('Champions')) },
+        { label: 'Loyal', value: fmt(find('Loyal')) },
+        { label: 'At Risk', value: fmt(find('At Risk')) },
+        { label: 'Lost', value: fmt(find('Lost')) },
+    ];
+    document.getElementById('rfmKpiRow').innerHTML = kpis.map(c =>
+        `<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value">${c.value}</div></div>`
+    ).join('');
+
+    // Table
+    const tbody = document.querySelector('#rfmTable tbody');
+    tbody.innerHTML = segs.map(s =>
+        `<tr>
+            <td>${segBadge(s.segment)}</td>
+            <td class="num">${fmt(s.count)}</td>
+            <td class="num">${s.pct}%</td>
+            <td class="num">${s.avg_orders}</td>
+            <td class="num">$${fmtD(s.avg_spend)}</td>
+            <td class="num">${Math.round(s.avg_recency)}d</td>
+            <td class="num">$${fmtD(s.total_revenue)}</td>
+        </tr>`
+    ).join('');
+
+    // Action cards
+    const container = document.getElementById('segmentActions');
+    container.innerHTML = segs.filter(s => s.count > 0).map(s =>
+        `<div class="action-card" style="border-left-color:${s.color}">
+            <div class="action-card-title">${s.segment}</div>
+            <div class="action-card-count">${fmt(s.count)} customers</div>
+            <div class="action-card-desc">${s.description || ''}</div>
+            <div class="action-card-action">${s.action || ''}</div>
+        </div>`
+    ).join('');
+}
+
+// ======================== RETENTION TAB ========================
+function renderRetentionTab() {
+    const rk = D.retention_kpis || {};
+    const kpis = [
+        { label: '30d Retention', value: rk.retention_30d_pct + '%' },
+        { label: '90d Retention', value: rk.retention_90d_pct + '%' },
+        { label: 'Avg Orders (Loyal)', value: rk.avg_orders_loyal },
+        { label: 'Churn Rate', value: rk.churn_rate + '%' },
+    ];
+    document.getElementById('retentionKpiRow').innerHTML = kpis.map(c =>
+        `<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value">${c.value}</div></div>`
+    ).join('');
+
+    renderCohortHeatmap();
+    renderRepeatCurve();
+    renderDaysBetween();
+}
+
+function renderCohortHeatmap() {
+    const cd = D.cohort_retention || {};
+    const cohorts = cd.cohorts || [];
+    if (!cohorts.length) {
+        document.getElementById('cohortHeatmap').innerHTML = '<div class="empty-state">No cohort data available</div>';
+        return;
+    }
+    const maxM = cd.max_months || 12;
+    let html = '<table class="heatmap-table"><thead><tr><th>Cohort</th><th>Size</th>';
+    for (let i = 0; i < maxM; i++) html += `<th>M${i}</th>`;
+    html += '</tr></thead><tbody>';
+
+    cohorts.forEach(c => {
+        html += `<tr><td style="font-weight:600;white-space:nowrap">${c.cohort}</td><td style="font-weight:600">${c.size}</td>`;
+        (c.retention || []).forEach((pct, i) => {
+            const intensity = Math.min(pct / 100, 1);
+            const bg = pct === 0 ? '#f5f3f0' : `rgba(26,122,58,${0.1 + intensity * 0.6})`;
+            const color = intensity > 0.4 ? '#fff' : '#3d3a40';
+            html += `<td><span class="heatmap-cell" style="background:${bg};color:${color}">${pct}%</span></td>`;
+        });
+        html += '</tr>';
+    });
+    html += '</tbody></table>';
+    document.getElementById('cohortHeatmap').innerHTML = html;
+}
+
+function renderRepeatCurve() {
+    const data = D.repeat_curve || [];
+    if (!data.length) return;
+    const W = 460, H = 260, pad = 50;
+    const xStep = (W - pad * 2) / (data.length - 1 || 1);
+    let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:100%;">`;
+
+    // Grid lines
+    for (let p = 0; p <= 100; p += 25) {
+        const y = pad + (100 - p) / 100 * (H - pad * 2);
+        svg += `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="var(--line)" stroke-width="1"/>`;
+        svg += `<text x="${pad - 8}" y="${y + 4}" text-anchor="end" font-size="10" fill="#6b6670">${p}%</text>`;
+    }
+
+    // Line + area
+    let path = '', areaPath = '';
+    data.forEach((d, i) => {
+        const x = pad + i * xStep;
+        const y = pad + (100 - d.pct) / 100 * (H - pad * 2);
+        path += (i === 0 ? 'M' : 'L') + `${x},${y}`;
+        areaPath += (i === 0 ? 'M' : 'L') + `${x},${y}`;
+    });
+    areaPath += `L${pad + (data.length - 1) * xStep},${H - pad}L${pad},${H - pad}Z`;
+    svg += `<path d="${areaPath}" fill="var(--cass-teal)" opacity="0.1"/>`;
+    svg += `<path d="${path}" fill="none" stroke="var(--cass-teal)" stroke-width="2.5"/>`;
+
+    // Points + labels
+    data.forEach((d, i) => {
+        const x = pad + i * xStep;
+        const y = pad + (100 - d.pct) / 100 * (H - pad * 2);
+        svg += `<circle cx="${x}" cy="${y}" r="4" fill="var(--cass-teal)"/>`;
+        svg += `<text x="${x}" y="${y - 10}" text-anchor="middle" font-size="10" fill="#3d3a40" font-weight="600">${d.pct}%</text>`;
+        svg += `<text x="${x}" y="${H - pad + 16}" text-anchor="middle" font-size="10" fill="#6b6670">${d.order_number}</text>`;
+    });
+
+    svg += `<text x="${W/2}" y="${H - 5}" text-anchor="middle" font-size="11" fill="#6b6670">Order Number</text>`;
+    svg += '</svg>';
+    document.getElementById('repeatCurve').innerHTML = svg;
+}
+
+function renderDaysBetween() {
+    const data = D.days_between_distribution || [];
+    if (!data.length) return;
+    const max = Math.max(...data.map(d => d.count), 1);
+    const W = 460, H = 260, pad = 50;
+    const barW = (W - pad * 2) / data.length - 8;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:100%;">`;
+
+    data.forEach((d, i) => {
+        const x = pad + i * ((W - pad * 2) / data.length) + 4;
+        const barH = (d.count / max) * (H - pad - 40);
+        const y = H - pad - barH;
+        svg += `<rect x="${x}" y="${y}" width="${barW}" height="${barH}" rx="4" fill="var(--cass-gold)" opacity="0.8"/>`;
+        svg += `<text x="${x + barW/2}" y="${y - 6}" text-anchor="middle" font-size="10" fill="#3d3a40" font-weight="600">${d.count}</text>`;
+        svg += `<text x="${x + barW/2}" y="${H - pad + 14}" text-anchor="middle" font-size="9" fill="#6b6670">${d.label}</text>`;
+    });
+    svg += `<text x="${W/2}" y="${H - 5}" text-anchor="middle" font-size="11" fill="#6b6670">Days Since Last Order</text>`;
+    svg += '</svg>';
+    document.getElementById('daysBetween').innerHTML = svg;
+}
+
+// ======================== PRODUCT & GEO TAB ========================
+function renderProductTab() {
+    const gw = D.gateway_products || [];
+    const af = D.brand_affinity || [];
+    const geo = D.geo_distribution || [];
+
+    // KPIs
+    const topBrand = af.length ? af[0].brand_a : '—';
+    const topProduct = gw.length ? gw[0].product : '—';
+    const cities = geo.length;
+    const topCity = geo.length ? geo[0].city : '—';
+    const kpis = [
+        { label: 'Top Co-Purchase Brand', value: topBrand },
+        { label: 'Top Gateway Product', value: topProduct.slice(0, 20) + (topProduct.length > 20 ? '…' : '') },
+        { label: 'Unique Cities', value: cities },
+        { label: 'Top City', value: topCity },
+    ];
+    document.getElementById('productKpiRow').innerHTML = kpis.map(c =>
+        `<div class="kpi-card"><div class="kpi-label">${c.label}</div><div class="kpi-value" style="font-size:${String(c.value).length > 12 ? '16' : '26'}px">${c.value}</div></div>`
+    ).join('');
+
+    // Gateway table
+    document.querySelector('#gatewayTable tbody').innerHTML = gw.map(g =>
+        `<tr>
+            <td>${esc(g.product)}</td>
+            <td class="num">${g.first_order_count}</td>
+            <td class="num">${g.repeat_rate}%</td>
+            <td class="num">$${fmtD(g.avg_customer_ltv)}</td>
+        </tr>`
+    ).join('');
+
+    // Affinity table
+    document.querySelector('#affinityTable tbody').innerHTML = af.map(a =>
+        `<tr>
+            <td>${esc(a.brand_a)}</td>
+            <td>${esc(a.brand_b)}</td>
+            <td class="num">${a.co_purchase_count}</td>
+            <td class="num">${a.lift}x</td>
+        </tr>`
+    ).join('');
+
+    // Geo table
+    document.querySelector('#geoTable tbody').innerHTML = geo.map(g =>
+        `<tr>
+            <td>${esc(g.city)}</td>
+            <td>${esc(g.state)}</td>
+            <td>${esc(g.country)}</td>
+            <td class="num">${fmt(g.customer_count)}</td>
+            <td class="num">$${fmtD(g.total_revenue)}</td>
+            <td class="num">${g.avg_orders}</td>
+        </tr>`
+    ).join('');
+}
+
+// ======================== CUSTOMER MODAL ========================
+async function openCustomerModal(email) {
+    try {
+        const resp = await fetch(`/customers/detail?email=${encodeURIComponent(email)}`);
+        const json = await resp.json();
+        if (!json.success) throw new Error(json.detail || 'Not found');
+        renderModal(json.data);
+    } catch (err) {
+        console.error('Modal load error:', err);
+    }
+}
+
+function renderModal(d) {
+    const segClass = 'badge-' + (d.segment || '').toLowerCase().replace(/\s+/g, '-');
+    const flagsHtml = (d.flags || []).map(f =>
+        `<span class="flag flag-${f.replace(/\s+/g, '')}">${f}</span>`
+    ).join('');
+
+    const ordersHtml = (d.orders || []).map(o =>
+        `<tr>
+            <td>${o.date}</td>
+            <td>#${o.order_number || ''}</td>
+            <td class="num">$${fmtD(o.total)}</td>
+            <td>${o.status}</td>
+            <td>${o.fulfillment || '—'}</td>
+        </tr>`
+    ).join('');
+
+    document.getElementById('modalContent').innerHTML = `
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <div class="modal-header">
+            <div class="modal-name">${esc(d.name || d.email)}</div>
+            <div class="modal-email">${esc(d.email)} &nbsp; <span class="badge ${segClass}">${d.segment}</span></div>
+        </div>
+        <div class="rfm-scores">
+            <div class="rfm-score rfm-r"><small>R</small>${d.r_score}</div>
+            <div class="rfm-score rfm-f"><small>F</small>${d.f_score}</div>
+            <div class="rfm-score rfm-m"><small>M</small>${d.m_score}</div>
+            <div style="flex:1"></div>
+            ${flagsHtml}
+        </div>
+        <div class="modal-stats">
+            <div class="modal-stat"><div class="modal-stat-label">Total Orders</div><div class="modal-stat-value">${d.total_orders}</div></div>
+            <div class="modal-stat"><div class="modal-stat-label">Total Spent</div><div class="modal-stat-value">$${fmtD(d.total_spent)}</div></div>
+            <div class="modal-stat"><div class="modal-stat-label">Avg Order Value</div><div class="modal-stat-value">$${fmtD(d.avg_order_value)}</div></div>
+            <div class="modal-stat"><div class="modal-stat-label">Days Since Last</div><div class="modal-stat-value">${d.days_since_last_order}</div></div>
+            <div class="modal-stat"><div class="modal-stat-label">First Order</div><div class="modal-stat-value">${d.first_order_date || '—'}</div></div>
+            <div class="modal-stat"><div class="modal-stat-label">Customer For</div><div class="modal-stat-value">${d.customer_since_months}mo</div></div>
+        </div>
+        ${d.city ? `<div style="font-size:12px;color:var(--slate);margin-bottom:12px;">Location: ${esc(d.city)}, ${esc(d.state)}, ${esc(d.country)}</div>` : ''}
+        <div class="section-title" style="margin-top:8px;">Recent Orders</div>
+        <table class="data-table" style="font-size:12px;">
+            <thead><tr><th>Date</th><th>Order</th><th class="num">Total</th><th>Status</th><th>Fulfillment</th></tr></thead>
+            <tbody>${ordersHtml || '<tr><td colspan="5" class="empty-state">No orders found</td></tr>'}</tbody>
+        </table>
+    `;
+    document.getElementById('customerModal').classList.add('open');
+}
+
+function closeModal() {
+    document.getElementById('customerModal').classList.remove('open');
+}
+
+// ======================== HELPERS ========================
+function fmt(n) { return (n || 0).toLocaleString('en-AU'); }
+function fmtD(n) { return (n || 0).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function segBadge(seg) {
+    const cls = 'badge-' + (seg || '').toLowerCase().replace(/\s+/g, '-');
+    return `<span class="badge ${cls}">${seg}</span>`;
+}
+</script>
+</body>
+</html>
