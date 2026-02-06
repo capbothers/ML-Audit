@@ -56,9 +56,9 @@ class CompetitivePricing(Base):
     price_vs_minimum = Column(Numeric(10, 2), nullable=True)  # Lowest - Minimum
 
     # Profitability
-    profit_margin_pct = Column(Numeric(6, 2), nullable=True)  # % Profit Margin
+    profit_margin_pct = Column(Numeric(10, 2), nullable=True)  # % Profit Margin
     profit_amount = Column(Numeric(10, 2), nullable=True)  # Profit in $
-    discount_off_rrp_pct = Column(Numeric(6, 2), nullable=True)  # % Off RRP
+    discount_off_rrp_pct = Column(Numeric(10, 2), nullable=True)  # % Off RRP
 
     # Competitor prices (top competitors)
     price_8appliances = Column(Numeric(10, 2), nullable=True)
