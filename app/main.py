@@ -28,6 +28,10 @@ async def lifespan(app: FastAPI):
     log.info(f"Starting {settings.app_name} v{__version__}")
     log.info(f"Environment: {settings.environment}")
 
+    # Bootstrap credential files from env vars (for Render / PaaS)
+    from app.utils.credentials import bootstrap_credentials
+    bootstrap_credentials()
+
     # Initialize database
     try:
         from app.models.base import init_db, SessionLocal

@@ -7,6 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 from datetime import datetime
+from zoneinfo import ZoneInfo
 import asyncio
 from typing import Optional
 
@@ -17,10 +18,14 @@ from app.connectors.github import GitHubConnector
 from app.services.data_sync_service import DataSyncService, SyncResult, update_data_sync_status
 from app.services.ml_intelligence_service import MLIntelligenceService
 from app.services.caprice_import_service import CapriceImportService
+from app.services.google_ads_sheet_import import GoogleAdsSheetImportService
 from app.models.base import get_db
 from app.config import get_settings
 from app.utils.logger import log
+from app.utils.cache import clear_cache
 import time
+
+SYDNEY_TZ = ZoneInfo("Australia/Sydney")
 
 settings = get_settings()
 scheduler = AsyncIOScheduler()
@@ -391,24 +396,106 @@ async def sync_caprice_pricing():
         log.error(f"Caprice pricing import error: {str(e)}")
 
 
+async def sync_shopify_full():
+    """Full Shopify sync including products (daily at 1am AEST)"""
+    try:
+        log.info("Starting Shopify full sync (with products)...")
+        sync_service = DataSyncService()
+        result = await sync_service.sync_shopify(days=3, include_products=True)
+
+        if result.get('success'):
+            log.info(
+                f"Shopify full sync completed: "
+                f"{result.get('orders_saved', 0)} orders, "
+                f"{result.get('products_saved', 0)} products in {result.get('duration', 0):.1f}s"
+            )
+            clear_cache()
+        else:
+            log.error(f"Shopify full sync failed: {result.get('error')}")
+
+    except Exception as e:
+        log.error(f"Shopify full sync error: {str(e)}")
+
+
+async def sync_google_ads_sheet():
+    """Import Google Ads data from Google Sheet (daily at 6am AEST)"""
+    try:
+        log.info("Starting Google Ads Sheet import...")
+        settings = get_settings()
+
+        if not settings.google_ads_sheet_id:
+            log.info("GOOGLE_ADS_SHEET_ID not set, skipping Google Ads Sheet import")
+            return
+
+        service = GoogleAdsSheetImportService()
+        campaign_result = service.import_from_sheet(
+            sheet_id=settings.google_ads_sheet_id,
+            credentials_path=settings.google_sheets_credentials_path,
+            tab_name=settings.google_ads_sheet_tab,
+        )
+        product_result = service.import_products_from_sheet(
+            sheet_id=settings.google_ads_sheet_id,
+            credentials_path=settings.google_sheets_credentials_path,
+            tab_name="Product Data",
+        )
+
+        log.info(
+            f"Google Ads Sheet import completed: "
+            f"campaigns={campaign_result.get('rows_imported', 0)}, "
+            f"products={product_result.get('rows_imported', 0)}"
+        )
+        clear_cache()
+
+    except Exception as e:
+        log.error(f"Google Ads Sheet import error: {str(e)}")
+
+
+async def sync_cost_sheet():
+    """Sync NETT Master cost sheet from Google Sheets (daily at 4:30am AEST)"""
+    try:
+        log.info("Starting cost sheet sync...")
+        sync_service = DataSyncService()
+        result = await sync_service.sync_cost_sheet()
+
+        if result.get('success'):
+            log.info(
+                f"Cost sheet sync completed: "
+                f"{result.get('vendors_synced', 0)} vendors, "
+                f"{result.get('products_synced', 0)} products in {result.get('duration', 0):.1f}s"
+            )
+            clear_cache()
+        else:
+            log.error(f"Cost sheet sync failed: {result.get('error')}")
+
+    except Exception as e:
+        log.error(f"Cost sheet sync error: {str(e)}")
+
+
 # Schedule Configuration
 
 def setup_scheduler():
     """
-    Configure and start the scheduler
+    Configure and start the scheduler.
+
+    All cron times are Australia/Sydney (AEST/AEDT).
 
     Sync Frequencies:
-    - Shopify: Every 2 hours (orders + order_items for COGS/P&L)
-    - Google Ads: Every hour (performance data updates frequently)
-    - GA4: Twice daily at 4am and 4pm (5-day window to cover data delay)
-    - Search Console: Daily at 5am (has 2-3 day delay)
-    - Merchant Center: Daily at 2am (product feed health)
-    - Klaviyo: Every hour (campaign performance updates frequently)
-    - Hotjar/Clarity: Daily at 6am (behavior data aggregates daily)
-    - GitHub: Daily at 7am (or triggered by webhook)
+    - Shopify orders:     Every 2 hours (orders + order_items for COGS/P&L)
+    - Shopify full:       Daily 1:00am  (includes products/variants catalog)
+    - Google Ads (Sheet): Daily 6:00am  (campaign + product data from Google Sheets)
+    - Cost Sheet (NETT):  Daily 4:30am  (product costs from Google Sheets)
+    - GA4:                4:00am + 4:00pm (5-day window covers data delay)
+    - Search Console:     Daily 5:00am  (has 2-3 day delay)
+    - Merchant Center:    Daily 2:00am  (product feed health)
+    - Klaviyo:            Every hour    (campaign performance)
+    - Hotjar/Clarity:     Daily 6:30am  (behavior data)
+    - GitHub:             Daily 7:00am  (theme commits)
+    - ML Intelligence:    Daily 3:00am  (after overnight syncs)
+    - Caprice Pricing:    Daily 1:00pm  (pricing file import)
     """
 
-    # Shopify - Every 2 hours (orders + order items)
+    # ── Shopify ──────────────────────────────────────────
+    # Orders only - every 2 hours
     scheduler.add_job(
         sync_shopify,
         trigger=IntervalTrigger(hours=2),
@@ -417,21 +504,43 @@ def setup_scheduler():
         replace_existing=True,
         max_instances=1
     )
-
-    # Google Ads - Every hour
+    # Full sync (with products) - daily at 1am AEST
     scheduler.add_job(
-        sync_google_ads,
-        trigger=IntervalTrigger(hours=1),
-        id='google_ads_sync',
-        name='Google Ads Hourly Sync',
+        sync_shopify_full,
+        trigger=CronTrigger(hour=1, minute=0, timezone=SYDNEY_TZ),
+        id='shopify_full_sync',
+        name='Shopify Full Sync (with products)',
         replace_existing=True,
         max_instances=1
     )
 
-    # GA4 - Twice daily at 4am and 4pm (5-day window to cover processing delay)
+    # ── Google Ads ───────────────────────────────────────
+    # Sheet import - daily at 6am AEST
+    scheduler.add_job(
+        sync_google_ads_sheet,
+        trigger=CronTrigger(hour=6, minute=0, timezone=SYDNEY_TZ),
+        id='google_ads_sheet_sync',
+        name='Google Ads Sheet Daily Import',
+        replace_existing=True,
+        max_instances=1
+    )
+
+    # ── Cost Sheet (NETT Master) ─────────────────────────
+    # Daily at 4:30am AEST
+    scheduler.add_job(
+        sync_cost_sheet,
+        trigger=CronTrigger(hour=4, minute=30, timezone=SYDNEY_TZ),
+        id='cost_sheet_sync',
+        name='Cost Sheet Daily Sync',
+        replace_existing=True,
+        max_instances=1
+    )
+
+    # ── GA4 ──────────────────────────────────────────────
+    # Twice daily: 4am and 4pm AEST (5-day window covers processing delay)
     scheduler.add_job(
         sync_ga4,
-        trigger=CronTrigger(hour=4, minute=0),
+        trigger=CronTrigger(hour=4, minute=0, timezone=SYDNEY_TZ),
         id='ga4_sync_morning',
         name='GA4 Morning Sync',
         replace_existing=True,
@@ -439,34 +548,37 @@ def setup_scheduler():
     )
     scheduler.add_job(
         sync_ga4,
-        trigger=CronTrigger(hour=16, minute=0),
+        trigger=CronTrigger(hour=16, minute=0, timezone=SYDNEY_TZ),
         id='ga4_sync_afternoon',
         name='GA4 Afternoon Sync',
         replace_existing=True,
         max_instances=1
     )
 
-    # Search Console - Daily at 5am
+    # ── Search Console ───────────────────────────────────
+    # Daily at 5am AEST
     scheduler.add_job(
         sync_search_console,
-        trigger=CronTrigger(hour=5, minute=0),
+        trigger=CronTrigger(hour=5, minute=0, timezone=SYDNEY_TZ),
         id='search_console_sync',
         name='Search Console Daily Sync',
         replace_existing=True,
         max_instances=1
     )
 
-    # Merchant Center - Daily at 2am
+    # ── Merchant Center ──────────────────────────────────
+    # Daily at 2am AEST
     scheduler.add_job(
         sync_merchant_center,
-        trigger=CronTrigger(hour=2, minute=0),
+        trigger=CronTrigger(hour=2, minute=0, timezone=SYDNEY_TZ),
         id='merchant_center_sync',
         name='Merchant Center Daily Sync',
         replace_existing=True,
         max_instances=1
     )
 
-    # Klaviyo - Every hour
+    # ── Klaviyo ──────────────────────────────────────────
+    # Every hour
     scheduler.add_job(
         sync_klaviyo,
         trigger=IntervalTrigger(hours=1),
@@ -476,47 +588,51 @@ def setup_scheduler():
         max_instances=1
     )
 
-    # Hotjar/Clarity - Daily at 6am
+    # ── Hotjar/Clarity ───────────────────────────────────
+    # Daily at 6:30am AEST
     scheduler.add_job(
         sync_hotjar,
-        trigger=CronTrigger(hour=6, minute=0),
+        trigger=CronTrigger(hour=6, minute=30, timezone=SYDNEY_TZ),
         id='hotjar_sync',
         name='Hotjar/Clarity Daily Sync',
         replace_existing=True,
         max_instances=1
     )
 
-    # GitHub - Daily at 7am
+    # ── GitHub ───────────────────────────────────────────
+    # Daily at 7am AEST
     scheduler.add_job(
         sync_github,
-        trigger=CronTrigger(hour=7, minute=0),
+        trigger=CronTrigger(hour=7, minute=0, timezone=SYDNEY_TZ),
         id='github_sync',
         name='GitHub Daily Sync',
         replace_existing=True,
         max_instances=1
     )
 
-    # ML Intelligence - Daily at 3am (runs after overnight data syncs)
+    # ── ML Intelligence ──────────────────────────────────
+    # Daily at 3am AEST (after overnight data syncs complete)
     scheduler.add_job(
         run_ml_intelligence,
-        trigger=CronTrigger(hour=3, minute=0),
+        trigger=CronTrigger(hour=3, minute=0, timezone=SYDNEY_TZ),
         id='ml_intelligence',
         name='ML Intelligence Daily Pipeline',
         replace_existing=True,
         max_instances=1
     )
 
-    # Caprice Pricing - Daily at 1pm
+    # ── Caprice Pricing ──────────────────────────────────
+    # Daily at 1pm AEST
     scheduler.add_job(
         sync_caprice_pricing,
-        trigger=CronTrigger(hour=13, minute=0),
+        trigger=CronTrigger(hour=13, minute=0, timezone=SYDNEY_TZ),
         id='caprice_pricing_import',
         name='Caprice Pricing Daily Import',
         replace_existing=True,
         max_instances=1
     )
 
-    log.info("Scheduler configured with all connector sync jobs")
+    log.info("Scheduler configured with all sync jobs (timezone: Australia/Sydney)")
 
 
 def start_scheduler():
@@ -544,7 +660,10 @@ def run_sync_now(connector_name: str) -> dict:
     """
     sync_functions = {
         'shopify': sync_shopify,
+        'shopify_full': sync_shopify_full,
         'google_ads': sync_google_ads,
+        'google_ads_sheet': sync_google_ads_sheet,
+        'cost_sheet': sync_cost_sheet,
         'ga4': sync_ga4,
         'search_console': sync_search_console,
         'merchant_center': sync_merchant_center,
