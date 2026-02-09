@@ -469,6 +469,34 @@
         }
         .time-btn.active { background: var(--cass-black); color: #f7f1e8; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
 
+        /* Auto-refresh countdown */
+        .refresh-countdown {
+            font-size: 11px; color: var(--slate); font-variant-numeric: tabular-nums;
+            margin-right: -4px; min-width: 32px; text-align: right;
+        }
+
+        /* Severity filter pills */
+        .filter-bar {
+            display: flex; align-items: center; gap: 6px; margin-bottom: 14px;
+        }
+        .filter-bar label { font-size: 12px; color: var(--slate); font-weight: 500; margin-right: 2px; }
+        .filter-pill {
+            padding: 5px 14px; border-radius: 999px; border: 1px solid var(--line);
+            background: var(--card); font-size: 12px; font-weight: 500; cursor: pointer;
+            color: var(--ink-soft); transition: all 0.15s; user-select: none;
+        }
+        .filter-pill:hover { border-color: rgba(27,27,27,0.2); }
+        .filter-pill.active { background: var(--cass-black); color: #f7f1e8; border-color: var(--cass-black); }
+        .filter-pill .pill-count {
+            display: inline-block; min-width: 16px; text-align: center;
+            padding: 0 5px; margin-left: 4px; border-radius: 999px;
+            font-size: 10px; font-weight: 600; background: rgba(0,0,0,0.08);
+        }
+        .filter-pill.active .pill-count { background: rgba(255,255,255,0.2); }
+
+        /* Hidden issue rows via filter */
+        .issue-row.sev-hidden { display: none !important; }
+
         /* Root-Cause Clustering */
         .cluster-header {
             display: flex; align-items: center; justify-content: space-between;
@@ -479,6 +507,36 @@
         .cluster-header:first-child { margin-top: 0; }
         .cluster-count { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(27,27,27,0.08); font-weight: 500; }
         .cluster-body.collapsed { display: none; }
+
+        /* Show More Toggle */
+        .show-more-btn {
+            display: flex; align-items: center; justify-content: center; gap: 6px;
+            width: 100%; padding: 10px; margin-top: 6px; border: 1px dashed var(--line);
+            border-radius: 10px; background: transparent; color: var(--slate);
+            font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+        }
+        .show-more-btn:hover { background: rgba(27,27,27,0.03); color: var(--ink-soft); border-color: rgba(27,27,27,0.18); }
+
+        /* Slow Resource Row */
+        .slow-resource-row {
+            display: flex; align-items: center; gap: 10px; padding: 8px 0;
+            border-bottom: 1px solid var(--line); font-size: 13px;
+        }
+        .slow-resource-row:last-child { border-bottom: none; }
+        .slow-resource-type {
+            font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+            padding: 2px 7px; border-radius: 6px; background: rgba(27,27,27,0.06); color: var(--slate);
+            flex-shrink: 0;
+        }
+        .slow-resource-url {
+            flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            color: var(--ink-soft);
+        }
+        .slow-resource-time {
+            font-weight: 600; flex-shrink: 0; font-variant-numeric: tabular-nums;
+        }
+        .slow-resource-time.slow { color: var(--red); }
+        .slow-resource-time.moderate { color: var(--amber); }
 
         /* Trend Badges */
         .trend-badge { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 6px; margin-left: 4px; }
@@ -592,6 +650,7 @@
                     <button class="export-share-btn" id="exec-toggle-btn" onclick="toggleExecutiveView()" title="Toggle executive summary">Executive View</button>
                     <button class="export-share-btn" onclick="exportCSV()" title="Export all issues to CSV">Export CSV</button>
                     <button class="export-share-btn" id="copy-summary-btn" onclick="copySummary()" title="Copy executive summary to clipboard">Copy Summary</button>
+                    <span class="refresh-countdown" id="refresh-countdown" title="Auto-refresh countdown"></span>
                     <button class="refresh-btn" id="refresh-btn" onclick="loadAll()">Refresh</button>
                 </div>
             </div>
@@ -672,6 +731,15 @@
             <div class="freshness-panel" id="freshness-panel" style="display:none">
                 <h3>Data Freshness</h3>
                 <div class="freshness-grid" id="freshness-grid"></div>
+            </div>
+
+            <!-- Severity Filter -->
+            <div class="filter-bar" id="filter-bar">
+                <label>Filter:</label>
+                <button class="filter-pill active" data-filter="all" onclick="setSeverityFilter('all')">All</button>
+                <button class="filter-pill" data-filter="critical" onclick="setSeverityFilter('critical')">Critical <span class="pill-count" id="filter-count-critical">0</span></button>
+                <button class="filter-pill" data-filter="warning" onclick="setSeverityFilter('warning')">Warning <span class="pill-count" id="filter-count-warning">0</span></button>
+                <button class="filter-pill" data-filter="info" onclick="setSeverityFilter('info')">Info <span class="pill-count" id="filter-count-info">0</span></button>
             </div>
 
             <!-- Section Cards -->
@@ -757,6 +825,80 @@
             return { hours: 168, days: 7 };
         }
 
+        // --- Auto-Refresh (5 minutes) ---
+        const AUTO_REFRESH_SECS = 300;
+        let refreshSecsLeft = AUTO_REFRESH_SECS;
+        let refreshTimerId = null;
+
+        function startRefreshTimer() {
+            clearInterval(refreshTimerId);
+            refreshSecsLeft = AUTO_REFRESH_SECS;
+            updateCountdown();
+            refreshTimerId = setInterval(() => {
+                if (document.hidden) return; // pause when tab not visible
+                refreshSecsLeft--;
+                if (refreshSecsLeft <= 0) {
+                    loadAll();
+                    // loadAll will call startRefreshTimer via its completion
+                    return;
+                }
+                updateCountdown();
+            }, 1000);
+        }
+
+        function updateCountdown() {
+            const el = document.getElementById('refresh-countdown');
+            if (!el) return;
+            const m = Math.floor(refreshSecsLeft / 60);
+            const s = refreshSecsLeft % 60;
+            el.textContent = m + ':' + (s < 10 ? '0' : '') + s;
+        }
+
+        // Reset timer when tab becomes visible again
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && refreshSecsLeft <= 0) loadAll();
+        });
+
+        // --- Severity Filter ---
+        let activeSevFilter = 'all';
+
+        function setSeverityFilter(sev) {
+            activeSevFilter = sev;
+            document.querySelectorAll('.filter-pill').forEach(p => p.classList.toggle('active', p.dataset.filter === sev));
+            applyFilter();
+        }
+
+        function applyFilter() {
+            document.querySelectorAll('.issue-row').forEach(row => {
+                if (activeSevFilter === 'all') {
+                    row.classList.remove('sev-hidden');
+                } else {
+                    row.classList.toggle('sev-hidden', row.dataset.sev !== activeSevFilter);
+                }
+            });
+            // Also hide/show "show more" buttons and cluster headers based on visible children
+            document.querySelectorAll('.cluster-body').forEach(body => {
+                const visibleRows = body.querySelectorAll('.issue-row:not(.sev-hidden)');
+                const header = body.previousElementSibling;
+                if (header && header.classList.contains('cluster-header')) {
+                    header.style.display = visibleRows.length === 0 ? 'none' : '';
+                }
+                body.style.display = visibleRows.length === 0 ? 'none' : '';
+            });
+        }
+
+        function updateFilterCounts() {
+            let counts = { critical: 0, warning: 0, info: 0 };
+            document.querySelectorAll('.issue-row').forEach(row => {
+                const s = row.dataset.sev;
+                if (s && counts[s] !== undefined) counts[s]++;
+            });
+            Object.entries(counts).forEach(([sev, c]) => {
+                const el = document.getElementById('filter-count-' + sev);
+                if (el) el.textContent = c;
+            });
+        }
+
         // --- True Impact Modeling ---
         let siteConversionRate = 0.025; // fallback default
         let siteAOV = 85.00;           // fallback default
@@ -838,9 +980,25 @@
             storageKey: 'site_intel_issue_status',
             data: JSON.parse(localStorage.getItem('site_intel_issue_status') || '{}'),
             getKey(source, issue) {
-                const fp = (typeof issue === 'object') ? (issue.file_path || issue.description || '') : '';
-                const title = (typeof issue === 'object') ? (issue.title || '') : issue;
-                return btoa(unescape(encodeURIComponent(source + '|' + title + '|' + fp))).slice(0, 40);
+                // Use stable identifiers that don't change when counts/wording change
+                if (typeof issue !== 'object') return btoa(unescape(encodeURIComponent(source + '|' + issue))).slice(0, 40);
+                let stable = '';
+                if (issue.requested_url || issue.url_path) {
+                    // 404/redirect issues: URL path is the stable identity
+                    stable = issue.requested_url || issue.url_path || '';
+                } else if (issue.file_path && issue.category) {
+                    // Code health: file + category (stable across re-scans)
+                    stable = issue.file_path + '|' + issue.category;
+                } else if (issue.file_path) {
+                    stable = issue.file_path;
+                } else if (issue._stableKey) {
+                    // Explicitly assigned stable key (CWV metrics, data quality checks)
+                    stable = issue._stableKey;
+                } else {
+                    // Fallback: title only (strip numbers to reduce churn)
+                    stable = (issue.title || '').replace(/[\d,.]+/g, '#');
+                }
+                return btoa(unescape(encodeURIComponent(source + '|' + stable))).slice(0, 40);
             },
             getStatus(source, issue) { return this.data[this.getKey(source, issue)] || null; },
             setStatus(source, issue, status, owner, dueDate) {
@@ -1118,7 +1276,7 @@
                 else if (older > 0 && recent < older * 0.7) trendHtml = ' <span class="trend-badge trend-down-good" title="Improving">&#9660;</span>';
             }
 
-            return '<div class="issue-row' + (isResolved ? ' resolved' : '') + '" style="cursor:pointer" onclick="openIssueDetail(\'' + listId + '\',' + idx + ')">' +
+            return '<div class="issue-row' + (isResolved ? ' resolved' : '') + '" data-sev="' + sev + '" style="cursor:pointer" onclick="openIssueDetail(\'' + listId + '\',' + idx + ')">' +
                 '<div class="issue-severity sev-' + sev + '"></div>' +
                 '<div class="issue-body">' +
                     '<div class="issue-title">' + esc(issue.title || issue.check_name || 'Issue') + ageHtml + trendHtml + confHtml + '</div>' +
@@ -1133,6 +1291,8 @@
             '</div>';
         }
 
+        const INITIAL_SHOW = 8;
+
         function renderIssues(listId, issues, emptyMsg, source) {
             const el = document.getElementById(listId);
             if (!el) return;
@@ -1140,14 +1300,20 @@
                 el.innerHTML = '<div class="empty-state">' + (emptyMsg || 'No issues found') + '</div>';
                 return;
             }
-            // Compute impact weights and sort
             issues.forEach(i => { i.impactWeight = computeImpactWeight(i, source); });
             issues.sort((a, b) => b.impactWeight - a.impactWeight);
-
-            // Store issues for detail panel
             issueStore[listId] = { issues: issues, source: source || 'Issue' };
 
-            el.innerHTML = issues.slice(0, 15).map((issue, idx) => renderIssueRow(issue, idx, listId)).join('');
+            let html = issues.slice(0, INITIAL_SHOW).map((issue, idx) => renderIssueRow(issue, idx, listId)).join('');
+            if (issues.length > INITIAL_SHOW) {
+                const hiddenId = listId + '_overflow';
+                html += '<div id="' + hiddenId + '" style="display:none">';
+                html += issues.slice(INITIAL_SHOW).map((issue, idx) => renderIssueRow(issue, idx + INITIAL_SHOW, listId)).join('');
+                html += '</div>';
+                html += '<button class="show-more-btn" id="' + listId + '_toggle" onclick="toggleShowAll(\'' + listId + '\')">' +
+                    'Show all ' + issues.length + ' issues &#9662;</button>';
+            }
+            el.innerHTML = html;
             if (!el.innerHTML.trim()) el.innerHTML = '<div class="empty-state">' + (emptyMsg || 'No issues found') + '</div>';
         }
 
@@ -1186,19 +1352,46 @@
             });
 
             let html = '';
+            const CLUSTER_SHOW = 6;
             sortedGroups.forEach(([key, items]) => {
                 const label = causeLabelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
                 const cid = listId + '_' + key.replace(/[^a-zA-Z0-9_-]/g, '_');
                 html += '<div class="cluster-header" onclick="document.getElementById(\'' + cid + '\').classList.toggle(\'collapsed\')">' +
                     '<span>' + esc(label) + '</span><span class="cluster-count">' + items.length + '</span></div>';
                 html += '<div class="cluster-body" id="' + cid + '">';
-                items.slice(0, 8).forEach(({ issue, idx }) => {
+                items.slice(0, CLUSTER_SHOW).forEach(({ issue, idx }) => {
                     html += renderIssueRow(issue, idx, listId);
                 });
+                if (items.length > CLUSTER_SHOW) {
+                    const overId = cid + '_overflow';
+                    html += '<div id="' + overId + '" style="display:none">';
+                    items.slice(CLUSTER_SHOW).forEach(({ issue, idx }) => {
+                        html += renderIssueRow(issue, idx, listId);
+                    });
+                    html += '</div>';
+                    html += '<button class="show-more-btn" id="' + overId + '_toggle" onclick="toggleShowAll(\'' + cid + '\')">' +
+                        'Show all ' + items.length + ' in group &#9662;</button>';
+                }
                 html += '</div>';
             });
             el.innerHTML = html;
             if (!el.innerHTML.trim()) el.innerHTML = '<div class="empty-state">' + (emptyMsg || 'No issues found') + '</div>';
+        }
+
+        function toggleShowAll(id) {
+            const overflow = document.getElementById(id + '_overflow');
+            if (!overflow) return;
+            const hidden = overflow.style.display === 'none';
+            overflow.style.display = hidden ? '' : 'none';
+            const btn = overflow.nextElementSibling;
+            if (btn && btn.classList.contains('show-more-btn')) {
+                if (hidden) {
+                    if (!btn.dataset.orig) btn.dataset.orig = btn.innerHTML;
+                    btn.innerHTML = 'Show fewer &#9652;';
+                } else {
+                    btn.innerHTML = btn.dataset.orig || 'Show all &#9662;';
+                }
+            }
         }
 
         function esc(str) {
@@ -1915,10 +2108,10 @@
                 healthChecks.forEach(check => {
                     const h = d[check.key];
                     if (h && h.status === 'critical') {
-                        issues.push({ severity: 'critical', title: check.label + ' is critical', description: h.message || h.detail || '', recommendation: 'Check ' + check.label.toLowerCase() + ' configuration' });
+                        issues.push({ severity: 'critical', title: check.label + ' is critical', description: h.message || h.detail || '', recommendation: 'Check ' + check.label.toLowerCase() + ' configuration', _stableKey: 'dq_' + check.key });
                         allCriticalIssues.push({ source: 'Data Quality', title: check.label + ' is critical' });
                     } else if (h && h.status === 'warning') {
-                        issues.push({ severity: 'warning', title: check.label + ' needs attention', description: h.message || h.detail || '', recommendation: 'Review ' + check.label.toLowerCase() });
+                        issues.push({ severity: 'warning', title: check.label + ' needs attention', description: h.message || h.detail || '', recommendation: 'Review ' + check.label.toLowerCase(), _stableKey: 'dq_' + check.key });
                     }
                 });
 
@@ -1930,7 +2123,7 @@
                         if (info && typeof info === 'object' && (info.stale || info.is_stale || info.status === 'stale')) {
                             const lagH = info.lag_hours || info.hours_since_update;
                             const sev = lagH > 48 ? 'critical' : 'warning';
-                            issues.push({ severity: sev, title: source + ' data is stale', description: 'Last update: ' + (lagH ? Math.round(lagH) + 'h ago' : 'unknown'), recommendation: 'Check sync for ' + source });
+                            issues.push({ severity: sev, title: source + ' data is stale', description: 'Last update: ' + (lagH ? Math.round(lagH) + 'h ago' : 'unknown'), recommendation: 'Check sync for ' + source, _stableKey: 'freshness_' + source });
                             if (sev === 'critical') allCriticalIssues.push({ source: 'Data Quality', title: source + ' data is stale (' + Math.round(lagH) + 'h)' });
                         }
                     });
@@ -1974,8 +2167,8 @@
                     const lcpSamples = typeof lcpRaw === 'object' ? lcpRaw.sample_size : undefined;
                     if (lcpVal) {
                         const lcpMs = lcpVal > 100 ? lcpVal : lcpVal * 1000;
-                        if (lcpMs > 4000) { issues.push({ severity: 'critical', title: 'LCP is poor: ' + (lcpMs / 1000).toFixed(1) + 's', description: 'Largest Contentful Paint should be under 2.5s', recommendation: 'Optimize images, reduce server response time', sample_size: lcpSamples }); allCriticalIssues.push({ source: 'Performance', title: 'LCP is ' + (lcpMs / 1000).toFixed(1) + 's (poor)' }); score -= 25; }
-                        else if (lcpMs > 2500) { issues.push({ severity: 'warning', title: 'LCP needs improvement: ' + (lcpMs / 1000).toFixed(1) + 's', description: 'Target under 2.5s for good experience', recommendation: 'Optimize largest image/text block', sample_size: lcpSamples }); score -= 10; }
+                        if (lcpMs > 4000) { issues.push({ severity: 'critical', title: 'LCP is poor: ' + (lcpMs / 1000).toFixed(1) + 's', description: 'Largest Contentful Paint should be under 2.5s', recommendation: 'Optimize images, reduce server response time', sample_size: lcpSamples, _stableKey: 'cwv_lcp' }); allCriticalIssues.push({ source: 'Performance', title: 'LCP is ' + (lcpMs / 1000).toFixed(1) + 's (poor)' }); score -= 25; }
+                        else if (lcpMs > 2500) { issues.push({ severity: 'warning', title: 'LCP needs improvement: ' + (lcpMs / 1000).toFixed(1) + 's', description: 'Target under 2.5s for good experience', recommendation: 'Optimize largest image/text block', sample_size: lcpSamples, _stableKey: 'cwv_lcp' }); score -= 10; }
                     }
                 }
 
@@ -1985,8 +2178,8 @@
                     const clsVal = typeof clsRaw === 'object' ? (clsRaw.p75 || clsRaw.value) : clsRaw;
                     const clsSamples = typeof clsRaw === 'object' ? clsRaw.sample_size : undefined;
                     if (clsVal) {
-                        if (clsVal > 0.25) { issues.push({ severity: 'critical', title: 'CLS is poor: ' + clsVal.toFixed(3), description: 'Cumulative Layout Shift should be under 0.1', recommendation: 'Set dimensions on images/ads, avoid dynamic content injection', sample_size: clsSamples }); score -= 20; }
-                        else if (clsVal > 0.1) { issues.push({ severity: 'warning', title: 'CLS needs improvement: ' + clsVal.toFixed(3), description: 'Target under 0.1', recommendation: 'Reserve space for dynamic content', sample_size: clsSamples }); score -= 8; }
+                        if (clsVal > 0.25) { issues.push({ severity: 'critical', title: 'CLS is poor: ' + clsVal.toFixed(3), description: 'Cumulative Layout Shift should be under 0.1', recommendation: 'Set dimensions on images/ads, avoid dynamic content injection', sample_size: clsSamples, _stableKey: 'cwv_cls' }); score -= 20; }
+                        else if (clsVal > 0.1) { issues.push({ severity: 'warning', title: 'CLS needs improvement: ' + clsVal.toFixed(3), description: 'Target under 0.1', recommendation: 'Reserve space for dynamic content', sample_size: clsSamples, _stableKey: 'cwv_cls' }); score -= 8; }
                     }
                 }
 
@@ -1996,8 +2189,8 @@
                     const inpVal = typeof inpRaw === 'object' ? (inpRaw.p75 || inpRaw.value) : inpRaw;
                     const inpSamples = typeof inpRaw === 'object' ? inpRaw.sample_size : undefined;
                     if (inpVal) {
-                        if (inpVal > 500) { issues.push({ severity: 'critical', title: 'INP is poor: ' + inpVal + 'ms', description: 'Interaction to Next Paint should be under 200ms', recommendation: 'Reduce JavaScript execution time, optimize event handlers', sample_size: inpSamples }); score -= 20; }
-                        else if (inpVal > 200) { issues.push({ severity: 'warning', title: 'INP needs improvement: ' + inpVal + 'ms', description: 'Target under 200ms', recommendation: 'Optimize interaction responsiveness', sample_size: inpSamples }); score -= 8; }
+                        if (inpVal > 500) { issues.push({ severity: 'critical', title: 'INP is poor: ' + inpVal + 'ms', description: 'Interaction to Next Paint should be under 200ms', recommendation: 'Reduce JavaScript execution time, optimize event handlers', sample_size: inpSamples, _stableKey: 'cwv_inp' }); score -= 20; }
+                        else if (inpVal > 200) { issues.push({ severity: 'warning', title: 'INP needs improvement: ' + inpVal + 'ms', description: 'Target under 200ms', recommendation: 'Optimize interaction responsiveness', sample_size: inpSamples, _stableKey: 'cwv_inp' }); score -= 8; }
                     }
                 }
 
@@ -2027,8 +2220,34 @@
                     });
                 }
 
+                // Slow resources (scripts, images, fonts loading >2s)
+                const slowRes = d.slow_resources || [];
+                if (Array.isArray(slowRes)) {
+                    slowRes.forEach(r => {
+                        const ms = r.avg_duration_ms || 0;
+                        const sev = ms > 5000 ? 'warning' : 'info';
+                        const url = r.resource_url || '';
+                        const shortUrl = url.split('/').pop().split('?')[0] || url.slice(0, 60);
+                        const typeLabel = (r.resource_type || 'resource').replace('xmlhttprequest', 'XHR');
+                        issues.push({
+                            severity: sev,
+                            title: 'Slow ' + typeLabel + ': ' + (ms / 1000).toFixed(1) + 's — ' + shortUrl,
+                            description: r.count + ' occurrence' + (r.count !== 1 ? 's' : '') + ' · avg ' + Math.round(ms) + 'ms',
+                            file_path: url,
+                            recommendation: typeLabel === 'script' ? 'Defer or async-load this script, or replace with lighter alternative' :
+                                typeLabel === 'img' ? 'Compress image, serve in WebP/AVIF, or lazy-load below the fold' :
+                                typeLabel === 'css' ? 'Inline critical CSS, defer non-critical stylesheet' :
+                                typeLabel === 'font' ? 'Use font-display: swap, preload critical fonts' :
+                                'Optimize or defer this resource to reduce page load time',
+                            _resourceType: typeLabel,
+                            _avgMs: ms
+                        });
+                        if (sev === 'warning') score -= 3;
+                    });
+                }
+
                 // If no CWV data at all, show neutral "No Data" state
-                const noData = !lcpRaw && !clsRaw && !inpRaw && errorPages.length === 0 && slow.length === 0;
+                const noData = !lcpRaw && !clsRaw && !inpRaw && errorPages.length === 0 && errorTypes.length === 0 && slow.length === 0 && slowRes.length === 0;
                 if (noData) {
                     issues.push({ severity: 'info', title: 'No performance data available', description: 'GA4 performance events may not be configured', recommendation: 'Ensure GA4 is tracking Core Web Vitals' });
                     score = null;
@@ -2248,8 +2467,8 @@
             document.getElementById('kpi-revenue').textContent = totalRevenueAtRisk > 0 ? '$' + Math.round(totalRevenueAtRisk).toLocaleString() + '/mo' : '$0';
             document.getElementById('kpi-total-issues').textContent = totalIssues;
 
-            // Change tracking via localStorage
-            const storageKey = 'site_intel_snapshot';
+            // Change tracking via localStorage (window-scoped)
+            const storageKey = 'site_intel_snapshot_' + currentTimeWindow;
             const prev = JSON.parse(localStorage.getItem(storageKey) || 'null');
             const newEl = document.getElementById('kpi-new-issues');
 
@@ -2292,7 +2511,7 @@
             const fixesEl = document.getElementById('exec-fixes');
 
             // 1. Score change vs history
-            const history = JSON.parse(localStorage.getItem('site_intel_scores_history') || '[]');
+            const history = JSON.parse(localStorage.getItem('site_intel_scores_' + currentTimeWindow) || '[]');
             let scoreCard = '';
             if (history.length >= 2) {
                 const oldest = history[0], latest = history[history.length - 1];
@@ -2304,7 +2523,7 @@
 
             // 2. Revenue at risk
             let revCard = '<div class="exec-card"><div class="exec-card-label">Revenue at Risk</div><div class="exec-card-value" style="color:var(--red)">$' + Math.round(totalRevenueAtRisk).toLocaleString() + '/mo</div>';
-            const prev = JSON.parse(localStorage.getItem('site_intel_snapshot') || 'null');
+            const prev = JSON.parse(localStorage.getItem('site_intel_snapshot_' + currentTimeWindow) || 'null');
             if (prev && prev.revenue !== undefined) {
                 const diff = totalRevenueAtRisk - prev.revenue;
                 const clr = diff > 0 ? 'var(--red)' : diff < 0 ? 'var(--green)' : 'var(--slate)';
@@ -2436,27 +2655,25 @@
             allCriticalIssues = [];
             totalRevenueAtRisk = 0;
 
-            // Fetch site-wide metrics for true impact modeling
-            await fetchSiteMetrics();
-
             // Cleanup stale localStorage entries (>90 days)
             issueTracker.cleanup();
 
-            // Load all sections in parallel
-            const dqPromise = loadDataQuality();
-            const spPromise = loadSitePerformance();
-            const chPromise = loadCodeHealth();
-            const rhPromise = loadRedirectHealth();
-
-            const [dqScore, spScore, chScore, rhScore] = await Promise.all([dqPromise, spPromise, chPromise, rhPromise]);
+            // Load site-wide metrics AND all sections in parallel
+            const [, dqScore, spScore, chScore, rhScore] = await Promise.all([
+                fetchSiteMetrics(),
+                loadDataQuality(),
+                loadSitePerformance(),
+                loadCodeHealth(),
+                loadRedirectHealth()
+            ]);
 
             // Calculate overall score
             const scores = [dqScore, spScore, chScore, rhScore].filter(s => s !== null);
             const overall = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
             setScoreRing(overall);
 
-            // --- Trend context ---
-            const historyKey = 'site_intel_scores_history';
+            // --- Trend context (window-scoped) ---
+            const historyKey = 'site_intel_scores_' + currentTimeWindow;
             const history = JSON.parse(localStorage.getItem(historyKey) || '[]');
             const today = new Date().toISOString().slice(0, 10);
             // Dedup by date - replace today's entry if exists
@@ -2501,8 +2718,15 @@
             const now = new Date();
             document.getElementById('last-refresh').textContent = 'Last refresh: ' + now.toLocaleTimeString();
 
+            // Update filter pill counts and re-apply active filter
+            updateFilterCounts();
+            applyFilter();
+
             btn.disabled = false;
             btn.textContent = 'Refresh';
+
+            // Restart auto-refresh countdown
+            startRefreshTimer();
         }
 
         // Load on page load

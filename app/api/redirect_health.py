@@ -15,6 +15,8 @@ from app.services.llm_service import LLMService
 from app.utils.logger import log
 
 
+import re
+
 class CreateRedirectRequest(BaseModel):
     from_path: str
     to_path: str
@@ -308,7 +310,10 @@ async def verify_url(
     full_url = base + (url if url.startswith("/") else "/" + url)
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=5.0) as client:
+            # Try HEAD first; fall back to GET if server returns 405
             resp = await client.head(full_url)
+            if resp.status_code == 405:
+                resp = await client.get(full_url)
             chain = [str(r.url) for r in resp.history] + [str(resp.url)]
             return {
                 "url": url,
@@ -344,6 +349,15 @@ async def create_redirect(body: CreateRedirectRequest):
     Create a 301 redirect in Shopify Admin.
     Used by Site Intelligence to fix 404 errors directly.
     """
+    # Validate paths are safe relative paths (no open redirect risk)
+    _PATH_RE = re.compile(r'^/[a-zA-Z0-9._~:/?#\[\]@!$&\'()*+,;=%-]+$')
+    if not body.from_path.startswith('/') or not _PATH_RE.match(body.from_path):
+        raise HTTPException(status_code=422, detail="from_path must be a relative path starting with /")
+    if not body.to_path.startswith('/') or not _PATH_RE.match(body.to_path):
+        raise HTTPException(status_code=422, detail="to_path must be a relative path starting with /")
+    if body.from_path == body.to_path:
+        raise HTTPException(status_code=422, detail="from_path and to_path must be different")
+
     try:
         from app.connectors.shopify_connector import ShopifyConnector
         import shopify as shopify_lib

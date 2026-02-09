@@ -21,6 +21,7 @@ from app.models.google_ads_data import GoogleAdsCampaign, GoogleAdsAdGroup, Goog
 from app.models.merchant_center_data import MerchantCenterProductStatus, MerchantCenterAccountStatus
 from app.config import get_settings
 from app.utils.logger import log
+from app.utils.cache import get_cached, set_cached, _MISS
 
 router = APIRouter(prefix="/data-quality", tags=["data-quality"])
 
@@ -41,6 +42,12 @@ async def get_data_quality_dashboard(
 
     This is your single source of truth for "can I trust my data?"
     """
+    # Cache for 120s — this endpoint runs ~10 SQL queries and takes ~0.5s
+    cache_key = "data_quality_dashboard"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
+
     service = DataQualityService(db)
 
     try:
@@ -81,6 +88,7 @@ async def get_data_quality_dashboard(
                 'empty_sources': freshness['empty_sources'],
             }
 
+        set_cached(cache_key, response, seconds=120)
         return response
 
     except Exception as e:
