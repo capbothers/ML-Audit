@@ -225,7 +225,7 @@ async def get_dashboard_data():
         roas = (ad_revenue / ad_cost) if ad_cost > 0 else 0
 
         # Refund stats (all-time)
-        refunded_orders = db.query(func.count(func.distinct(ShopifyRefund.order_id))).scalar() or 0
+        refunded_orders = db.query(func.count(func.distinct(ShopifyRefund.shopify_order_id))).scalar() or 0
         refund_records = db.query(func.count(ShopifyRefund.id)).scalar() or 0
 
         # Cart abandonment

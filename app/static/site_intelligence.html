@@ -344,6 +344,100 @@
             .health-hero { flex-direction: column; text-align: center; }
             .health-breakdown { grid-template-columns: repeat(2, 1fr); }
         }
+
+        /* Issue Detail Slide-over */
+        .detail-overlay {
+            position: fixed; inset: 0; background: rgba(27, 27, 27, 0.35);
+            z-index: 1000; opacity: 0; pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+        .detail-overlay.open { opacity: 1; pointer-events: auto; }
+
+        .detail-panel {
+            position: fixed; top: 0; right: 0; bottom: 0;
+            width: min(520px, 90vw); background: var(--card);
+            box-shadow: -8px 0 40px rgba(0,0,0,0.12);
+            z-index: 1001; transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex; flex-direction: column;
+        }
+        .detail-panel.open { transform: translateX(0); }
+
+        .detail-topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 22px; border-bottom: 1px solid var(--line);
+            background: var(--pearl);
+        }
+        .detail-topbar h2 { font-family: "Space Grotesk", sans-serif; font-size: 16px; font-weight: 600; }
+        .detail-close {
+            width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line);
+            background: var(--card); cursor: pointer; font-size: 16px;
+            display: flex; align-items: center; justify-content: center; color: var(--slate);
+        }
+        .detail-close:hover { background: var(--stone); color: var(--ink); }
+
+        .detail-content {
+            flex: 1; overflow-y: auto; padding: 22px;
+            display: flex; flex-direction: column; gap: 20px;
+        }
+
+        .detail-sev-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 500;
+        }
+        .detail-sev-badge.critical { background: var(--red-bg); color: var(--red); }
+        .detail-sev-badge.warning { background: var(--amber-bg); color: var(--amber); }
+        .detail-sev-badge.info { background: rgba(31, 111, 107, 0.1); color: var(--cass-teal); }
+
+        .detail-sev-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+        }
+        .detail-sev-dot.critical { background: var(--red); }
+        .detail-sev-dot.warning { background: var(--cass-gold); }
+        .detail-sev-dot.info { background: var(--cass-teal); }
+
+        .detail-title { font-family: "Space Grotesk", sans-serif; font-size: 20px; font-weight: 600; line-height: 1.3; }
+
+        .detail-section {
+            border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+        }
+        .detail-section-header {
+            padding: 10px 16px; background: var(--pearl);
+            font-size: 12px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.5px; color: var(--slate);
+        }
+        .detail-section-body { padding: 14px 16px; font-size: 13px; line-height: 1.6; color: var(--ink-soft); }
+
+        .detail-meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .detail-meta-item { padding: 10px 14px; border-radius: 10px; background: var(--pearl); }
+        .detail-meta-label { font-size: 11px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.5px; }
+        .detail-meta-value { font-size: 14px; font-weight: 500; margin-top: 2px; }
+
+        .detail-fix-step {
+            display: flex; align-items: flex-start; gap: 10px; padding: 8px 0;
+            border-bottom: 1px solid var(--line);
+        }
+        .detail-fix-step:last-child { border-bottom: none; }
+        .detail-step-num {
+            flex-shrink: 0; width: 22px; height: 22px; border-radius: 50%;
+            background: var(--cass-moss); color: #fff; font-size: 11px; font-weight: 600;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .detail-step-text { font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+
+        .detail-file-link {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border-radius: 8px; background: rgba(31, 111, 107, 0.08);
+            color: var(--cass-teal); font-family: monospace; font-size: 12px;
+            text-decoration: none; transition: background 0.15s;
+        }
+        .detail-file-link:hover { background: rgba(31, 111, 107, 0.15); }
+
+        .detail-impact-bar {
+            padding: 12px 16px; border-radius: 12px; background: var(--red-bg);
+            color: var(--red); font-weight: 500; font-size: 14px;
+            display: flex; align-items: center; gap: 8px;
+        }
     </style>
 </head>
 <body>
@@ -514,6 +608,16 @@
         </section>
     </div>
 
+    <!-- Issue Detail Slide-over Panel -->
+    <div class="detail-overlay" id="detail-overlay" onclick="closeIssueDetail()"></div>
+    <div class="detail-panel" id="detail-panel">
+        <div class="detail-topbar">
+            <h2 id="detail-source">Issue Detail</h2>
+            <button class="detail-close" onclick="closeIssueDetail()">&times;</button>
+        </div>
+        <div class="detail-content" id="detail-content"></div>
+    </div>
+
     <script>
         function toggleSection(id) {
             const body = document.getElementById(id + '-body');
@@ -559,20 +663,26 @@
             else arc.style.stroke = 'var(--red)';
         }
 
-        function renderIssues(listId, issues, emptyMsg) {
+        // Store all issues by section for detail panel access
+        const issueStore = {};
+
+        function renderIssues(listId, issues, emptyMsg, source) {
             const el = document.getElementById(listId);
             if (!el) return;
             if (!issues || issues.length === 0) {
                 el.innerHTML = '<div class="empty-state">' + (emptyMsg || 'No issues found') + '</div>';
                 return;
             }
-            el.innerHTML = issues.slice(0, 10).map(issue => {
+            // Store issues for detail panel
+            issueStore[listId] = { issues: issues, source: source || 'Issue' };
+
+            el.innerHTML = issues.slice(0, 10).map((issue, idx) => {
                 const sev = issue.severity || 'info';
                 let linkHtml = '';
                 if (issue.file_path) {
                     const fp = issue.file_path;
                     if (issue.github_url) {
-                        linkHtml = '<div class="issue-link"><a href="' + esc(issue.github_url) + '" target="_blank">' + esc(fp) + (issue.line_number ? ':' + issue.line_number : '') + '</a></div>';
+                        linkHtml = '<div class="issue-link"><a href="' + esc(issue.github_url) + '" target="_blank" onclick="event.stopPropagation()">' + esc(fp) + (issue.line_number ? ':' + issue.line_number : '') + '</a></div>';
                     } else if (fp.endsWith('.liquid') || fp.endsWith('.js') || fp.endsWith('.json') || fp.endsWith('.css')) {
                         linkHtml = '<div class="issue-file">' + esc(fp) + (issue.line_number ? ':' + issue.line_number : '') + '</div>';
                     } else {
@@ -581,7 +691,7 @@
                 }
                 let impactHtml = '';
                 if (issue.revenue_impact) impactHtml = '<div class="issue-detail" style="color:var(--red);font-weight:500">~$' + Math.round(issue.revenue_impact) + '/mo impact</div>';
-                return '<div class="issue-row">' +
+                return '<div class="issue-row" style="cursor:pointer" onclick="openIssueDetail(\'' + listId + '\',' + idx + ')">' +
                     '<div class="issue-severity sev-' + sev + '"></div>' +
                     '<div class="issue-body">' +
                         '<div class="issue-title">' + esc(issue.title || issue.check_name || 'Issue') + '</div>' +
@@ -590,6 +700,7 @@
                         linkHtml +
                         (issue.recommendation || issue.fix ? '<div class="issue-fix">' + esc(issue.recommendation || issue.fix) + '</div>' : '') +
                     '</div>' +
+                    '<span class="chevron" style="color:var(--slate);font-size:11px;align-self:center;flex-shrink:0">&#9654;</span>' +
                 '</div>';
             }).join('');
         }
@@ -599,6 +710,241 @@
             const d = document.createElement('div');
             d.textContent = str;
             return d.innerHTML;
+        }
+
+        // --- Issue Detail Panel ---
+
+        function openIssueDetail(listId, idx) {
+            const store = issueStore[listId];
+            if (!store || !store.issues[idx]) return;
+            const issue = store.issues[idx];
+            const source = store.source;
+
+            document.getElementById('detail-overlay').classList.add('open');
+            document.getElementById('detail-panel').classList.add('open');
+            document.getElementById('detail-source').textContent = source;
+            document.body.style.overflow = 'hidden';
+
+            const content = document.getElementById('detail-content');
+            content.innerHTML = buildDetailHTML(issue, source);
+        }
+
+        function closeIssueDetail() {
+            document.getElementById('detail-overlay').classList.remove('open');
+            document.getElementById('detail-panel').classList.remove('open');
+            document.body.style.overflow = '';
+        }
+
+        // Close on Escape key
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeIssueDetail(); });
+
+        function buildDetailHTML(issue, source) {
+            const sev = issue.severity || 'info';
+            const sevLabel = { critical: 'Critical', warning: 'Warning', info: 'Info' }[sev] || sev;
+            let html = '';
+
+            // Severity badge + title
+            html += '<div><span class="detail-sev-badge ' + sev + '">' +
+                '<span class="detail-sev-dot ' + sev + '"></span>' + sevLabel +
+                '</span></div>';
+            html += '<div class="detail-title">' + esc(issue.title || issue.check_name || 'Issue') + '</div>';
+
+            // Revenue impact bar
+            if (issue.revenue_impact) {
+                html += '<div class="detail-impact-bar">~$' + Math.round(issue.revenue_impact).toLocaleString() + '/mo estimated revenue at risk</div>';
+            }
+
+            // Meta grid
+            html += '<div class="detail-meta-grid">';
+            html += '<div class="detail-meta-item"><div class="detail-meta-label">Source</div><div class="detail-meta-value">' + esc(source) + '</div></div>';
+            html += '<div class="detail-meta-item"><div class="detail-meta-label">Severity</div><div class="detail-meta-value">' + esc(sevLabel) + '</div></div>';
+            if (issue.category) {
+                html += '<div class="detail-meta-item"><div class="detail-meta-label">Category</div><div class="detail-meta-value">' + esc(issue.category) + '</div></div>';
+            }
+            if (issue.file_path) {
+                html += '<div class="detail-meta-item"><div class="detail-meta-label">Location</div><div class="detail-meta-value" style="font-family:monospace;font-size:12px">' + esc(issue.file_path) + (issue.line_number ? ':' + issue.line_number : '') + '</div></div>';
+            }
+            html += '</div>';
+
+            // Evidence section
+            const evidence = buildEvidence(issue, source);
+            if (evidence) {
+                html += '<div class="detail-section">' +
+                    '<div class="detail-section-header">Evidence</div>' +
+                    '<div class="detail-section-body">' + evidence + '</div>' +
+                '</div>';
+            }
+
+            // Root cause section
+            const rootCause = buildRootCause(issue, source);
+            html += '<div class="detail-section">' +
+                '<div class="detail-section-header">Root Cause</div>' +
+                '<div class="detail-section-body">' + rootCause + '</div>' +
+            '</div>';
+
+            // Recommended fix section
+            const fixSteps = buildFixSteps(issue, source);
+            html += '<div class="detail-section">' +
+                '<div class="detail-section-header">Recommended Fix</div>' +
+                '<div class="detail-section-body">' + fixSteps + '</div>' +
+            '</div>';
+
+            // File link (if GitHub URL available)
+            if (issue.github_url) {
+                html += '<a class="detail-file-link" href="' + esc(issue.github_url) + '" target="_blank">View in GitHub &rarr;</a>';
+            } else if (issue.file_path && (issue.file_path.endsWith('.liquid') || issue.file_path.endsWith('.js') || issue.file_path.endsWith('.css') || issue.file_path.endsWith('.json'))) {
+                html += '<span class="detail-file-link">' + esc(issue.file_path) + (issue.line_number ? ':' + issue.line_number : '') + '</span>';
+            }
+
+            return html;
+        }
+
+        function buildEvidence(issue, source) {
+            const parts = [];
+            if (issue.description) parts.push('<p>' + esc(issue.description) + '</p>');
+
+            // Source-specific evidence
+            if (source === 'Redirects & 404s') {
+                if (issue.title && issue.title.startsWith('404:')) {
+                    parts.push('<p>This URL is being requested by users or bots but returns a 404 error. Each hit represents a lost visitor and potential lost revenue.</p>');
+                }
+                if (issue.revenue_impact) {
+                    parts.push('<p>Based on average conversion rate and order value, this 404 pattern costs approximately <strong>$' + Math.round(issue.revenue_impact) + '/month</strong> in lost sales.</p>');
+                }
+            } else if (source === 'Code Health') {
+                if (issue.category === 'liquid') {
+                    parts.push('<p>Found in Shopify Liquid template. This affects how the storefront renders for customers.</p>');
+                } else if (issue.category === 'javascript') {
+                    parts.push('<p>Found in JavaScript bundle. This can affect page interactivity and performance.</p>');
+                } else if (issue.category === 'security') {
+                    parts.push('<p>Security issues can expose the store to XSS attacks or data leaks.</p>');
+                }
+                if (issue.line_number) {
+                    parts.push('<p>Issue detected at <strong>line ' + issue.line_number + '</strong> in the file.</p>');
+                }
+            } else if (source === 'Site Performance') {
+                if (issue.title && issue.title.includes('LCP')) {
+                    parts.push('<p>LCP (Largest Contentful Paint) measures when the main content is visible. Google uses this as a Core Web Vital ranking factor.</p>');
+                } else if (issue.title && issue.title.includes('CLS')) {
+                    parts.push('<p>CLS (Cumulative Layout Shift) measures visual stability. High CLS causes elements to jump around during loading, frustrating users.</p>');
+                } else if (issue.title && issue.title.includes('INP')) {
+                    parts.push('<p>INP (Interaction to Next Paint) measures responsiveness. Slow INP means clicks/taps feel laggy to users.</p>');
+                }
+            } else if (source === 'Data Quality') {
+                if (issue.title && issue.title.includes('stale')) {
+                    parts.push('<p>Stale data means decisions are being made on outdated information. This can lead to missed opportunities or incorrect analysis.</p>');
+                }
+            }
+
+            return parts.length > 0 ? parts.join('') : '<p>This issue was detected during the latest automated scan.</p>';
+        }
+
+        function buildRootCause(issue, source) {
+            // Generate contextual root cause based on issue type
+            if (source === 'Redirects & 404s') {
+                if (issue.title && issue.title.startsWith('404:')) {
+                    return '<p>A page that was previously accessible is now returning a 404. This is commonly caused by:</p>' +
+                        '<ul style="margin:8px 0 0 18px"><li>Product or collection deleted from Shopify</li>' +
+                        '<li>URL handle changed without a redirect</li>' +
+                        '<li>Incoming links from external sites pointing to an old URL</li>' +
+                        '<li>Sitemap still listing removed pages</li></ul>';
+                }
+                if (issue.title && issue.title.includes('redirect chain')) {
+                    return '<p>Redirect chains occur when one redirect points to another redirect, creating a multi-hop path. This slows page loads and wastes search engine crawl budget.</p>';
+                }
+                if (issue.title && issue.title.includes('broken redirect')) {
+                    return '<p>A redirect rule exists but its destination page no longer exists, creating a redirect that leads to a 404. This is worse than a simple 404 because it gives a false promise of resolution.</p>';
+                }
+                return '<p>Redirect and 404 issues typically arise from URL changes, deleted content, or misconfigured routing rules.</p>';
+            }
+            if (source === 'Code Health') {
+                if (issue.title && issue.title.includes('include')) {
+                    return '<p>The <code>{% include %}</code> tag is deprecated in Shopify themes. It shares the parent scope and is slower than <code>{% render %}</code> which creates an isolated scope and enables better caching.</p>';
+                }
+                if (issue.title && issue.title.includes('console.log')) {
+                    return '<p>Debug logging statements left in production code. While not harmful, they clutter the browser console and may expose internal logic to users.</p>';
+                }
+                if (issue.title && issue.title.includes('alt text') || (issue.title && issue.title.includes('accessibility'))) {
+                    return '<p>Images without alt text are inaccessible to screen readers and miss SEO opportunities. Search engines use alt text to understand image content.</p>';
+                }
+                if (issue.category === 'security') {
+                    return '<p>Security vulnerabilities in theme code can allow attackers to inject malicious scripts (XSS), steal customer data, or manipulate the storefront.</p>';
+                }
+                return '<p>Code health issues arise from deprecated patterns, missing best practices, or technical debt accumulated over theme development.</p>';
+            }
+            if (source === 'Site Performance') {
+                if (issue.title && issue.title.includes('LCP')) {
+                    return '<p>Poor LCP is typically caused by large unoptimized images, slow server response, render-blocking CSS/JS, or client-side rendering of the main content.</p>';
+                }
+                if (issue.title && issue.title.includes('CLS')) {
+                    return '<p>Layout shifts happen when elements load without reserved space - typically images without dimensions, ads/banners injected dynamically, or web fonts causing text reflow.</p>';
+                }
+                if (issue.title && issue.title.includes('INP')) {
+                    return '<p>Slow interactions are caused by heavy JavaScript execution on the main thread, typically from third-party scripts, complex event handlers, or large DOM updates.</p>';
+                }
+                return '<p>Performance issues can stem from unoptimized assets, excessive scripts, slow server responses, or poor caching configuration.</p>';
+            }
+            if (source === 'Data Quality') {
+                if (issue.title && issue.title.includes('stale')) {
+                    return '<p>Data sync has not completed recently. This could be due to expired API credentials, rate limiting, a paused scheduler, or a connectivity issue with the data source.</p>';
+                }
+                if (issue.title && issue.title.includes('critical')) {
+                    return '<p>This data quality check is in a critical state, meaning the data source may be misconfigured, disconnected, or returning errors.</p>';
+                }
+                return '<p>Data quality issues indicate a gap between expected and actual data freshness or completeness.</p>';
+            }
+            return '<p>This issue was identified during automated analysis. Review the evidence above for specific context.</p>';
+        }
+
+        function buildFixSteps(issue, source) {
+            const steps = [];
+            const rec = issue.recommendation || issue.fix || '';
+
+            // Source-specific fix steps
+            if (source === 'Redirects & 404s' && issue.title && issue.title.startsWith('404:')) {
+                const url = issue.title.replace('404: ', '');
+                steps.push('Identify what page this URL originally pointed to (product, collection, or blog post)');
+                steps.push('In Shopify Admin, go to Online Store &rarr; Navigation &rarr; URL Redirects');
+                steps.push('Create a redirect from <code>' + esc(url) + '</code> to the most relevant live page');
+                steps.push('If the content is permanently removed, redirect to the parent collection or homepage');
+                if (rec) steps.push(esc(rec));
+            } else if (source === 'Code Health' && issue.title && issue.title.includes('include')) {
+                steps.push('Open the file <code>' + esc(issue.file_path || '') + '</code> in your theme editor');
+                steps.push('Replace <code>{% include \'snippet\' %}</code> with <code>{% render \'snippet\' %}</code>');
+                steps.push('Pass any needed variables explicitly: <code>{% render \'snippet\', product: product %}</code>');
+                steps.push('Test the page to ensure the rendered output is unchanged');
+            } else if (source === 'Site Performance' && issue.title && issue.title.includes('LCP')) {
+                steps.push('Identify the largest element on the page (usually a hero image or heading)');
+                steps.push('Optimize the hero image: convert to WebP, set appropriate dimensions, use srcset');
+                steps.push('Add <code>fetchpriority="high"</code> to the LCP image element');
+                steps.push('Remove render-blocking scripts and defer non-critical CSS');
+            } else if (source === 'Data Quality' && issue.title && issue.title.includes('stale')) {
+                steps.push('Check the scheduler is running: visit the monitoring dashboard');
+                steps.push('Verify API credentials are still valid for this data source');
+                steps.push('Try a manual sync via the API: <code>POST /sync/all</code>');
+                steps.push('Check server logs for error messages from the connector');
+            } else if (rec) {
+                // Fallback: split recommendation into steps if it has multiple sentences
+                const sentences = rec.split(/\.\s+/).filter(s => s.trim());
+                if (sentences.length > 1) {
+                    sentences.forEach(s => steps.push(esc(s.trim().replace(/\.$/, ''))));
+                } else {
+                    steps.push(esc(rec));
+                }
+            }
+
+            if (steps.length === 0) {
+                steps.push('Review the issue details and evidence above');
+                steps.push('Apply the appropriate fix based on the root cause');
+                steps.push('Verify the fix by refreshing this dashboard');
+            }
+
+            return steps.map((step, idx) =>
+                '<div class="detail-fix-step">' +
+                    '<span class="detail-step-num">' + (idx + 1) + '</span>' +
+                    '<span class="detail-step-text">' + step + '</span>' +
+                '</div>'
+            ).join('');
         }
 
         // Collect critical issues from all sections
@@ -676,7 +1022,7 @@
                 }
 
                 document.getElementById('dq-issues').textContent = issues.length || d.issues_found || 0;
-                renderIssues('dq-list', issues, 'All data sources are fresh and healthy');
+                renderIssues('dq-list', issues, 'All data sources are fresh and healthy', 'Data Quality');
 
                 // Render freshness panel
                 renderFreshness(d.freshness);
@@ -768,7 +1114,7 @@
                 setStatus('sp-status', score);
                 setBadge('sp-badge', score);
                 document.getElementById('sp-issues').textContent = issues.length;
-                renderIssues('sp-list', issues, 'Site performance looks healthy');
+                renderIssues('sp-list', issues, 'Site performance looks healthy', 'Site Performance');
                 return score;
             } catch (e) {
                 document.getElementById('sp-list').innerHTML = '<div class="empty-state">Could not load site performance</div>';
@@ -800,7 +1146,7 @@
                 setStatus('ch-status', score);
                 setBadge('ch-badge', score);
                 document.getElementById('ch-issues').textContent = total;
-                renderIssues('ch-list', issues, 'No code issues found. Theme looks clean!');
+                renderIssues('ch-list', issues, 'No code issues found. Theme looks clean!', 'Code Health');
                 return score;
             } catch (e) {
                 document.getElementById('ch-list').innerHTML = '<div class="empty-state">Could not load code health. Is GitHub connected?</div>';
@@ -874,7 +1220,7 @@
                 setStatus('rh-status', score);
                 setBadge('rh-badge', score);
                 document.getElementById('rh-issues').textContent = issues.length;
-                renderIssues('rh-list', issues, 'No redirect issues found');
+                renderIssues('rh-list', issues, 'No redirect issues found', 'Redirects & 404s');
                 return score;
             } catch (e) {
                 document.getElementById('rh-list').innerHTML = '<div class="empty-state">Could not load redirect health</div>';
