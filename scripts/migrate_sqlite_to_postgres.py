@@ -55,8 +55,12 @@ def get_table_counts(engine, tables: list[str]) -> dict[str, int]:
     return counts
 
 
-def migrate_table(src_engine, dst_engine, table: str) -> int:
-    """Truncate destination table, then batch-copy all rows. Returns rows copied."""
+def migrate_table(src_engine, dst_engine, table: str, resume: bool = False) -> int:
+    """Copy all rows from SQLite to Postgres. Returns rows copied.
+
+    If resume=True, uses INSERT ... ON CONFLICT DO NOTHING to skip existing rows.
+    Otherwise truncates destination first.
+    """
     with src_engine.connect() as src_conn:
         total = src_conn.execute(text(f'SELECT COUNT(*) FROM "{table}"')).scalar()
         if total == 0:
@@ -66,15 +70,13 @@ def migrate_table(src_engine, dst_engine, table: str) -> int:
         cols_result = src_conn.execute(text(f'PRAGMA table_info("{table}")'))
         columns = [row[1] for row in cols_result]
 
-    # Truncate destination
+    # Check table exists and get column info
     with dst_engine.connect() as dst_conn:
-        # Check table exists in Postgres
         pg_tables = inspect(dst_engine).get_table_names()
         if table not in pg_tables:
             print(f"  SKIP {table}: not in Postgres schema")
             return -1
 
-        # Get Postgres columns to find the intersection
         pg_col_info = {c["name"]: c for c in inspect(dst_engine).get_columns(table)}
         pg_cols = list(pg_col_info.keys())
         common_cols = [c for c in columns if c in pg_cols]
@@ -88,13 +90,29 @@ def migrate_table(src_engine, dst_engine, table: str) -> int:
             if str(pg_col_info[c]["type"]).upper() == "BOOLEAN"
         }
 
-        dst_conn.execute(text(f'TRUNCATE TABLE "{table}" CASCADE'))
-        dst_conn.commit()
+        # Get primary key columns for ON CONFLICT
+        pk_constraint = inspect(dst_engine).get_pk_constraint(table)
+        pk_cols = pk_constraint.get("constrained_columns", []) if pk_constraint else []
+
+        if resume:
+            existing = dst_conn.execute(text(f'SELECT COUNT(*) FROM "{table}"')).scalar()
+            print(f"(resuming, {existing:,} already in Postgres)...", end=" ", flush=True)
+        else:
+            dst_conn.execute(text(f'TRUNCATE TABLE "{table}" CASCADE'))
+            dst_conn.commit()
 
     # Batch copy
     col_list = ", ".join(f'"{c}"' for c in common_cols)
     param_list = ", ".join(f":{c}" for c in common_cols)
-    insert_sql = text(f'INSERT INTO "{table}" ({col_list}) VALUES ({param_list})')
+
+    if resume and pk_cols:
+        pk_list = ", ".join(f'"{c}"' for c in pk_cols)
+        insert_sql = text(
+            f'INSERT INTO "{table}" ({col_list}) VALUES ({param_list}) '
+            f'ON CONFLICT ({pk_list}) DO NOTHING'
+        )
+    else:
+        insert_sql = text(f'INSERT INTO "{table}" ({col_list}) VALUES ({param_list})')
 
     copied = 0
     with src_engine.connect() as src_conn:
@@ -135,6 +153,7 @@ def migrate_table(src_engine, dst_engine, table: str) -> int:
 def main():
     parser = argparse.ArgumentParser(description="Migrate SQLite → Postgres")
     parser.add_argument("--dry-run", action="store_true", help="Show counts only")
+    parser.add_argument("--resume", action="store_true", help="Skip truncate, use ON CONFLICT DO NOTHING")
     parser.add_argument("--tables", nargs="+", help="Migrate specific tables only")
     args = parser.parse_args()
 
@@ -190,7 +209,7 @@ def main():
         count = non_empty[table]
         print(f"  {table} ({count:,} rows)...", end=" ", flush=True)
         t0 = time.time()
-        copied = migrate_table(src, dst, table)
+        copied = migrate_table(src, dst, table, resume=args.resume)
         elapsed = time.time() - t0
         if copied >= 0:
             print(f"OK ({copied:,} copied, {elapsed:.1f}s)")

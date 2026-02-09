@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Site Intelligence - Cass Brothers</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        :root {
+            --ink: #1c1b1f;
+            --ink-soft: #3d3a40;
+            --slate: #6b6670;
+            --stone: #f4f2ee;
+            --pearl: #faf9f6;
+            --cass-black: #1b1b1b;
+            --cass-cream: #f7f3ed;
+            --cass-gold: #c49a4a;
+            --cass-moss: #2f3d33;
+            --cass-teal: #1f6f6b;
+            --card: #ffffff;
+            --line: rgba(27, 27, 27, 0.08);
+            --shadow: 0 18px 45px rgba(17, 18, 19, 0.08);
+            --red: #a63a3a;
+            --red-bg: rgba(166, 58, 58, 0.1);
+            --amber: #8b6b1f;
+            --amber-bg: rgba(196, 154, 74, 0.15);
+            --green: #2f6b3a;
+            --green-bg: rgba(47, 107, 58, 0.1);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "IBM Plex Sans", "Space Grotesk", sans-serif;
+            background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        .app-shell {
+            display: grid;
+            grid-template-columns: 240px minmax(0, 1fr);
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+        }
+
+        .brand-bar {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 28px;
+            background: var(--cass-black);
+            color: #f7f1e8;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+
+        .brand-mark {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-family: "Space Grotesk", sans-serif;
+            letter-spacing: 0.5px;
+        }
+
+        .brand-dot {
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: var(--cass-gold);
+            box-shadow: 0 0 0 4px rgba(196, 154, 74, 0.2);
+        }
+
+        .brand-bar input {
+            width: min(520px, 50vw);
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 999px;
+            padding: 10px 16px;
+            color: #f7f1e8;
+            outline: none;
+            font-size: 14px;
+        }
+
+        .brand-bar input::placeholder { color: rgba(247, 241, 232, 0.6); }
+
+        .brand-actions { display: flex; align-items: center; gap: 12px; font-size: 13px; }
+        .pill { padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.2); }
+
+        .side-nav {
+            grid-row: 2 / span 1;
+            padding: 28px 20px;
+            border-right: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.4) 100%);
+        }
+
+        .side-nav h2 {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--slate);
+            margin-bottom: 12px;
+        }
+
+        .nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 12px; border-radius: 12px; font-size: 14px;
+            color: var(--ink-soft); margin-bottom: 6px; cursor: pointer;
+            transition: all 0.2s ease; text-decoration: none;
+        }
+
+        .nav-item.active {
+            background: var(--cass-black); color: #f7f1e8;
+            box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+        }
+
+        .nav-item span { width: 8px; height: 8px; border-radius: 50%; background: var(--cass-gold); opacity: 0.7; }
+
+        .main-area {
+            grid-row: 2;
+            padding: 28px 32px 32px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto;
+        }
+
+        /* Header */
+        .overview {
+            display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        }
+        .overview h1 { font-family: "Space Grotesk", sans-serif; font-size: 26px; }
+        .time-pill { padding: 8px 14px; border-radius: 999px; background: rgba(27,27,27,0.06); font-size: 13px; color: var(--ink-soft); }
+
+        /* Health Score Hero */
+        .health-hero {
+            display: flex; align-items: center; gap: 28px;
+            background: var(--card); border-radius: 18px; padding: 24px 28px;
+            border: 1px solid var(--line); box-shadow: var(--shadow);
+        }
+
+        .score-ring {
+            position: relative; width: 100px; height: 100px; flex-shrink: 0;
+        }
+
+        .score-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+
+        .score-ring .bg { fill: none; stroke: #ede9e2; stroke-width: 8; }
+        .score-ring .fg { fill: none; stroke-width: 8; stroke-linecap: round; transition: stroke-dashoffset 0.8s ease; }
+
+        .score-number {
+            position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+            font-family: "Space Grotesk", sans-serif; font-size: 28px; font-weight: 700;
+        }
+
+        .health-breakdown { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+
+        .health-item { text-align: center; }
+        .health-item .hi-label { font-size: 12px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.5px; }
+        .health-item .hi-value { font-size: 22px; font-weight: 600; margin-top: 4px; }
+        .health-item .hi-status { font-size: 11px; margin-top: 4px; padding: 2px 8px; border-radius: 999px; display: inline-block; }
+
+        .status-good { background: var(--green-bg); color: var(--green); }
+        .status-warning { background: var(--amber-bg); color: var(--amber); }
+        .status-critical { background: var(--red-bg); color: var(--red); }
+
+        /* Critical Issues Banner */
+        .critical-banner {
+            background: var(--red-bg); border: 1px solid rgba(166,58,58,0.2);
+            border-radius: 14px; padding: 14px 18px;
+            display: none; gap: 10px; flex-direction: column;
+        }
+
+        .critical-banner.visible { display: flex; }
+
+        .critical-banner h3 { color: var(--red); font-size: 14px; font-family: "Space Grotesk", sans-serif; }
+
+        .critical-item {
+            font-size: 13px; color: var(--red); padding: 8px 12px;
+            background: rgba(255,255,255,0.6); border-radius: 10px;
+        }
+
+        /* Section Cards */
+        .section-card {
+            background: var(--card); border-radius: 18px; padding: 0;
+            border: 1px solid var(--line); box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .section-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px; cursor: pointer; user-select: none;
+            transition: background 0.15s;
+        }
+
+        .section-header:hover { background: rgba(0,0,0,0.02); }
+
+        .section-header h3 {
+            font-family: "Space Grotesk", sans-serif; font-size: 16px;
+            display: flex; align-items: center; gap: 10px;
+        }
+
+        .section-badge {
+            font-size: 11px; padding: 2px 8px; border-radius: 999px;
+            font-family: "IBM Plex Sans", sans-serif; font-weight: 500;
+        }
+
+        .section-score { font-size: 14px; color: var(--slate); display: flex; align-items: center; gap: 8px; }
+        .section-score strong { font-size: 18px; color: var(--ink); }
+
+        .chevron { transition: transform 0.2s; font-size: 12px; color: var(--slate); }
+        .section-header.collapsed .chevron { transform: rotate(-90deg); }
+
+        .section-body { padding: 0 20px 18px; }
+        .section-body.hidden { display: none; }
+
+        .issue-list { display: flex; flex-direction: column; gap: 8px; }
+
+        .issue-row {
+            display: flex; align-items: flex-start; gap: 10px;
+            padding: 10px 14px; border-radius: 12px; font-size: 13px;
+            border: 1px solid var(--line); background: var(--pearl);
+        }
+
+        .issue-severity {
+            flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; margin-top: 5px;
+        }
+
+        .sev-critical { background: var(--red); }
+        .sev-warning { background: var(--cass-gold); }
+        .sev-info { background: var(--cass-teal); }
+
+        .issue-body { flex: 1; }
+        .issue-title { font-weight: 500; color: var(--ink); }
+        .issue-detail { color: var(--slate); font-size: 12px; margin-top: 2px; }
+        .issue-file { font-family: monospace; font-size: 11px; color: var(--cass-teal); margin-top: 3px; }
+        .issue-fix { font-size: 12px; color: var(--cass-moss); margin-top: 4px; font-style: italic; }
+
+        .empty-state { text-align: center; padding: 20px; color: var(--slate); font-size: 13px; }
+
+        /* Two column grid for sections */
+        .sections-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 18px;
+        }
+
+        .sections-grid .section-card.full-width {
+            grid-column: 1 / -1;
+        }
+
+        /* Loading */
+        .loading { text-align: center; padding: 40px; color: var(--slate); }
+
+        .loading-spinner {
+            display: inline-block; width: 24px; height: 24px;
+            border: 3px solid #ede9e2; border-top-color: var(--cass-gold);
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Refresh button */
+        .refresh-btn {
+            padding: 8px 16px; border-radius: 12px;
+            background: var(--cass-moss); color: #f7f1e8;
+            border: none; font-size: 13px; cursor: pointer;
+            transition: background 0.2s;
+        }
+        .refresh-btn:hover { background: #35463b; }
+        .refresh-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+        @media (max-width: 1200px) {
+            .sections-grid { grid-template-columns: 1fr; }
+            .health-breakdown { grid-template-columns: repeat(2, 1fr); }
+        }
+
+        @media (max-width: 900px) {
+            .app-shell { grid-template-columns: 1fr; }
+            .side-nav { display: flex; gap: 12px; overflow-x: auto; padding: 16px; }
+            .main-area { padding: 20px; }
+            .health-hero { flex-direction: column; text-align: center; }
+            .health-breakdown { grid-template-columns: repeat(2, 1fr); }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <div class="brand-bar">
+            <div class="brand-mark">
+                <span class="brand-dot"></span>
+                <strong>Cass Brothers Intelligence</strong>
+            </div>
+            <input type="search" placeholder="Search reports, SKUs, or alerts..." />
+            <div class="brand-actions">
+                <span class="pill">Analytics</span>
+                <span class="pill">Live</span>
+            </div>
+        </div>
+
+        <aside class="side-nav">
+            <h2>Dashboards</h2>
+            <a class="nav-item" href="/dashboard"><span></span> Overview</a>
+            <a class="nav-item" href="/performance"><span></span> Performance</a>
+            <a class="nav-item" href="/seo-dashboard"><span></span> SEO &amp; Content</a>
+            <a class="nav-item" href="/ads-intelligence"><span></span> Ads Intelligence</a>
+            <a class="nav-item" href="/finance-dashboard"><span></span> Finance</a>
+            <a class="nav-item" href="/inventory"><span></span> Inventory</a>
+            <a class="nav-item" href="/pricing-intel"><span></span> Pricing Intel</a>
+            <a class="nav-item" href="/customer-intelligence"><span></span> Customer Intel</a>
+            <a class="nav-item" href="/merchant-center-intel"><span></span> Merchant Center</a>
+            <a class="nav-item" href="/strategic-intelligence"><span></span> Intelligence Brief</a>
+            <a class="nav-item active" href="/site-intelligence"><span></span> Site Intelligence</a>
+            <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
+                <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
+            </div>
+        </aside>
+
+        <section class="main-area">
+            <div class="overview">
+                <div>
+                    <h1>Site Intelligence</h1>
+                    <p class="time-pill" id="last-refresh">Loading...</p>
+                </div>
+                <button class="refresh-btn" id="refresh-btn" onclick="loadAll()">Refresh</button>
+            </div>
+
+            <!-- Overall Health Score -->
+            <div class="health-hero" id="health-hero">
+                <div class="score-ring">
+                    <svg viewBox="0 0 36 36">
+                        <circle class="bg" cx="18" cy="18" r="15.9"/>
+                        <circle class="fg" id="score-arc" cx="18" cy="18" r="15.9"
+                            stroke-dasharray="100 100" stroke-dashoffset="100"/>
+                    </svg>
+                    <div class="score-number" id="score-number">--</div>
+                </div>
+                <div class="health-breakdown">
+                    <div class="health-item">
+                        <div class="hi-label">Data Quality</div>
+                        <div class="hi-value" id="dq-score">--</div>
+                        <div class="hi-status" id="dq-status">...</div>
+                    </div>
+                    <div class="health-item">
+                        <div class="hi-label">Site Perf</div>
+                        <div class="hi-value" id="sp-score">--</div>
+                        <div class="hi-status" id="sp-status">...</div>
+                    </div>
+                    <div class="health-item">
+                        <div class="hi-label">Code Health</div>
+                        <div class="hi-value" id="ch-score">--</div>
+                        <div class="hi-status" id="ch-status">...</div>
+                    </div>
+                    <div class="health-item">
+                        <div class="hi-label">Redirects</div>
+                        <div class="hi-value" id="rh-score">--</div>
+                        <div class="hi-status" id="rh-status">...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Critical Issues -->
+            <div class="critical-banner" id="critical-banner">
+                <h3 id="critical-title">Critical Issues</h3>
+                <div id="critical-list"></div>
+            </div>
+
+            <!-- Section Cards -->
+            <div class="sections-grid">
+
+                <!-- Data Quality -->
+                <div class="section-card">
+                    <div class="section-header" onclick="toggleSection('dq')">
+                        <h3>Data Quality <span class="section-badge status-good" id="dq-badge">--</span></h3>
+                        <div class="section-score"><strong id="dq-issues">0</strong> issues <span class="chevron">&#9660;</span></div>
+                    </div>
+                    <div class="section-body" id="dq-body">
+                        <div class="issue-list" id="dq-list">
+                            <div class="loading"><div class="loading-spinner"></div><br>Loading data quality...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Site Performance -->
+                <div class="section-card">
+                    <div class="section-header" onclick="toggleSection('sp')">
+                        <h3>Site Performance <span class="section-badge status-good" id="sp-badge">--</span></h3>
+                        <div class="section-score"><strong id="sp-issues">0</strong> issues <span class="chevron">&#9660;</span></div>
+                    </div>
+                    <div class="section-body" id="sp-body">
+                        <div class="issue-list" id="sp-list">
+                            <div class="loading"><div class="loading-spinner"></div><br>Loading site performance...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Code Health -->
+                <div class="section-card">
+                    <div class="section-header" onclick="toggleSection('ch')">
+                        <h3>Code Health <span class="section-badge status-good" id="ch-badge">--</span></h3>
+                        <div class="section-score"><strong id="ch-issues">0</strong> issues <span class="chevron">&#9660;</span></div>
+                    </div>
+                    <div class="section-body" id="ch-body">
+                        <div class="issue-list" id="ch-list">
+                            <div class="loading"><div class="loading-spinner"></div><br>Loading code health...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Redirects & 404s -->
+                <div class="section-card">
+                    <div class="section-header" onclick="toggleSection('rh')">
+                        <h3>Redirects &amp; 404s <span class="section-badge status-good" id="rh-badge">--</span></h3>
+                        <div class="section-score"><strong id="rh-issues">0</strong> issues <span class="chevron">&#9660;</span></div>
+                    </div>
+                    <div class="section-body" id="rh-body">
+                        <div class="issue-list" id="rh-list">
+                            <div class="loading"><div class="loading-spinner"></div><br>Loading redirect health...</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+    </div>
+
+    <script>
+        function toggleSection(id) {
+            const body = document.getElementById(id + '-body');
+            const header = body.previousElementSibling;
+            body.classList.toggle('hidden');
+            header.classList.toggle('collapsed');
+        }
+
+        function setScore(elementId, score) {
+            const el = document.getElementById(elementId);
+            if (el) el.textContent = score !== null && score !== undefined ? Math.round(score) : '--';
+        }
+
+        function setStatus(elementId, score) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            if (score === null || score === undefined) { el.textContent = '...'; el.className = 'hi-status'; return; }
+            if (score >= 80) { el.textContent = 'Good'; el.className = 'hi-status status-good'; }
+            else if (score >= 50) { el.textContent = 'Warning'; el.className = 'hi-status status-warning'; }
+            else { el.textContent = 'Critical'; el.className = 'hi-status status-critical'; }
+        }
+
+        function setBadge(elementId, score) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            if (score === null || score === undefined) { el.textContent = '--'; el.className = 'section-badge'; return; }
+            const s = Math.round(score);
+            if (s >= 80) { el.textContent = s + '/100'; el.className = 'section-badge status-good'; }
+            else if (s >= 50) { el.textContent = s + '/100'; el.className = 'section-badge status-warning'; }
+            else { el.textContent = s + '/100'; el.className = 'section-badge status-critical'; }
+        }
+
+        function setScoreRing(score) {
+            const arc = document.getElementById('score-arc');
+            const num = document.getElementById('score-number');
+            if (!arc) return;
+            const s = Math.max(0, Math.min(100, Math.round(score || 0)));
+            const offset = 100 - s;
+            arc.style.strokeDashoffset = offset;
+            num.textContent = s;
+            if (s >= 80) arc.style.stroke = 'var(--green)';
+            else if (s >= 50) arc.style.stroke = 'var(--cass-gold)';
+            else arc.style.stroke = 'var(--red)';
+        }
+
+        function renderIssues(listId, issues, emptyMsg) {
+            const el = document.getElementById(listId);
+            if (!el) return;
+            if (!issues || issues.length === 0) {
+                el.innerHTML = '<div class="empty-state">' + (emptyMsg || 'No issues found') + '</div>';
+                return;
+            }
+            el.innerHTML = issues.slice(0, 8).map(issue => {
+                const sev = issue.severity || 'info';
+                return '<div class="issue-row">' +
+                    '<div class="issue-severity sev-' + sev + '"></div>' +
+                    '<div class="issue-body">' +
+                        '<div class="issue-title">' + esc(issue.title || issue.check_name || 'Issue') + '</div>' +
+                        (issue.description ? '<div class="issue-detail">' + esc(issue.description) + '</div>' : '') +
+                        (issue.file_path ? '<div class="issue-file">' + esc(issue.file_path) + (issue.line_number ? ':' + issue.line_number : '') + '</div>' : '') +
+                        (issue.recommendation || issue.fix ? '<div class="issue-fix">' + esc(issue.recommendation || issue.fix) + '</div>' : '') +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        function esc(str) {
+            if (!str) return '';
+            const d = document.createElement('div');
+            d.textContent = str;
+            return d.innerHTML;
+        }
+
+        // Collect critical issues from all sections
+        let allCriticalIssues = [];
+
+        function showCriticalBanner() {
+            const banner = document.getElementById('critical-banner');
+            const list = document.getElementById('critical-list');
+            const title = document.getElementById('critical-title');
+            if (allCriticalIssues.length === 0) { banner.classList.remove('visible'); return; }
+            title.textContent = allCriticalIssues.length + ' Critical Issue' + (allCriticalIssues.length > 1 ? 's' : '');
+            list.innerHTML = allCriticalIssues.slice(0, 5).map(i =>
+                '<div class="critical-item"><strong>' + esc(i.source) + ':</strong> ' + esc(i.title) + '</div>'
+            ).join('');
+            banner.classList.add('visible');
+        }
+
+        // --- Data Loaders ---
+
+        async function loadDataQuality() {
+            try {
+                const res = await fetch('/data-quality/dashboard');
+                const data = await res.json();
+                const d = data.data || data;
+
+                const score = d.overall_score ?? d.health_score ?? 75;
+                setScore('dq-score', score);
+                setStatus('dq-status', score);
+                setBadge('dq-badge', score);
+
+                // Build issues from freshness + discrepancies + alerts
+                const issues = [];
+                const freshness = d.freshness_report || d.freshness || [];
+                if (Array.isArray(freshness)) {
+                    freshness.filter(f => f.is_stale || f.status === 'stale').forEach(f => {
+                        const sev = f.lag_hours > 48 ? 'critical' : 'warning';
+                        issues.push({ severity: sev, title: (f.source || f.table) + ' data is stale', description: 'Last update: ' + (f.lag_hours ? Math.round(f.lag_hours) + 'h ago' : 'unknown'), recommendation: 'Check sync for ' + (f.source || f.table) });
+                        if (sev === 'critical') allCriticalIssues.push({ source: 'Data Quality', title: (f.source || f.table) + ' data is stale (' + Math.round(f.lag_hours) + 'h)' });
+                    });
+                }
+
+                const alerts = d.active_alerts || d.alerts || [];
+                if (Array.isArray(alerts)) {
+                    alerts.filter(a => a.status === 'active').forEach(a => {
+                        issues.push({ severity: a.severity || 'warning', title: a.title || a.alert_type, description: a.description, recommendation: a.recommended_action });
+                        if (a.severity === 'critical') allCriticalIssues.push({ source: 'Data Quality', title: a.title || a.alert_type });
+                    });
+                }
+
+                document.getElementById('dq-issues').textContent = issues.length;
+                renderIssues('dq-list', issues, 'All data sources are fresh and healthy');
+                return score;
+            } catch (e) {
+                document.getElementById('dq-list').innerHTML = '<div class="empty-state">Could not load data quality</div>';
+                return null;
+            }
+        }
+
+        async function loadSitePerformance() {
+            try {
+                const res = await fetch('/site-health/summary');
+                const data = await res.json();
+                const d = data.data || data;
+
+                const issues = [];
+
+                // Core Web Vitals
+                const cwv = d.core_web_vitals || {};
+                let score = 85;
+                if (cwv.lcp) {
+                    const lcpVal = cwv.lcp.p75 || cwv.lcp.value;
+                    if (lcpVal > 4000) { issues.push({ severity: 'critical', title: 'LCP is poor: ' + (lcpVal / 1000).toFixed(1) + 's', description: 'Largest Contentful Paint should be under 2.5s', recommendation: 'Optimize images, reduce server response time' }); allCriticalIssues.push({ source: 'Performance', title: 'LCP is ' + (lcpVal / 1000).toFixed(1) + 's (poor)' }); score -= 25; }
+                    else if (lcpVal > 2500) { issues.push({ severity: 'warning', title: 'LCP needs improvement: ' + (lcpVal / 1000).toFixed(1) + 's', description: 'Target under 2.5s for good experience', recommendation: 'Optimize largest image/text block' }); score -= 10; }
+                }
+                if (cwv.cls) {
+                    const clsVal = cwv.cls.p75 || cwv.cls.value;
+                    if (clsVal > 0.25) { issues.push({ severity: 'critical', title: 'CLS is poor: ' + clsVal.toFixed(3), description: 'Cumulative Layout Shift should be under 0.1', recommendation: 'Set dimensions on images/ads, avoid dynamic content injection' }); score -= 20; }
+                    else if (clsVal > 0.1) { issues.push({ severity: 'warning', title: 'CLS needs improvement: ' + clsVal.toFixed(3), description: 'Target under 0.1', recommendation: 'Reserve space for dynamic content' }); score -= 8; }
+                }
+
+                // Top errors
+                const errors = d.top_errors || d.top_error_pages || [];
+                if (Array.isArray(errors)) {
+                    errors.slice(0, 3).forEach(err => {
+                        issues.push({ severity: 'warning', title: err.error_type || err.message || 'JS Error', description: (err.count || err.occurrences || '') + ' occurrences', file_path: err.page_path || err.url, recommendation: 'Fix JavaScript error' });
+                    });
+                }
+
+                // Slow pages
+                const slow = d.slowest_pages || [];
+                if (Array.isArray(slow)) {
+                    slow.slice(0, 2).forEach(p => {
+                        issues.push({ severity: 'info', title: 'Slow page: ' + (p.lcp_p75 ? (p.lcp_p75 / 1000).toFixed(1) + 's LCP' : 'slow'), file_path: p.page_path || p.url, recommendation: 'Optimize page load' });
+                    });
+                }
+
+                score = Math.max(0, Math.min(100, score));
+                setScore('sp-score', score);
+                setStatus('sp-status', score);
+                setBadge('sp-badge', score);
+                document.getElementById('sp-issues').textContent = issues.length;
+                renderIssues('sp-list', issues, 'Site performance looks healthy');
+                return score;
+            } catch (e) {
+                document.getElementById('sp-list').innerHTML = '<div class="empty-state">Could not load site performance</div>';
+                return null;
+            }
+        }
+
+        async function loadCodeHealth() {
+            try {
+                const res = await fetch('/code/issues');
+                const data = await res.json();
+                const d = data.data || data;
+
+                const issues = d.issues || [];
+                const summary = d.summary || {};
+                const total = d.total_count || issues.length;
+                const critical = summary.critical || 0;
+                const warning = summary.warning || 0;
+
+                let score = 100 - (critical * 10) - (warning * 3);
+                score = Math.max(0, Math.min(100, score));
+
+                // Add critical code issues to global list
+                issues.filter(i => i.severity === 'critical').forEach(i => {
+                    allCriticalIssues.push({ source: 'Code Health', title: i.title || i.check_name });
+                });
+
+                setScore('ch-score', score);
+                setStatus('ch-status', score);
+                setBadge('ch-badge', score);
+                document.getElementById('ch-issues').textContent = total;
+                renderIssues('ch-list', issues, 'No code issues found. Theme looks clean!');
+                return score;
+            } catch (e) {
+                document.getElementById('ch-list').innerHTML = '<div class="empty-state">Could not load code health. Is GitHub connected?</div>';
+                return null;
+            }
+        }
+
+        async function loadRedirectHealth() {
+            try {
+                const res = await fetch('/redirects/dashboard');
+                const data = await res.json();
+                const d = data.data || data;
+
+                const issues = [];
+                let score = 90;
+
+                // 404 errors
+                const errors404 = d.top_404s || d.not_found_errors || [];
+                if (Array.isArray(errors404)) {
+                    errors404.slice(0, 4).forEach(e => {
+                        const hits = e.total_hits || e.hit_count || 0;
+                        const sev = hits > 100 ? 'critical' : hits > 20 ? 'warning' : 'info';
+                        issues.push({ severity: sev, title: '404: ' + (e.url_path || e.requested_url || e.url), description: hits + ' hits' + (e.estimated_lost_revenue ? ' / ~$' + Math.round(e.estimated_lost_revenue) + ' lost' : ''), recommendation: e.recommended_action || 'Create redirect or restore page' });
+                        if (sev === 'critical') { allCriticalIssues.push({ source: 'Redirects', title: '404 with ' + hits + ' hits: ' + (e.url_path || e.url) }); score -= 15; }
+                        else if (sev === 'warning') score -= 5;
+                    });
+                }
+
+                // Redirect chains
+                const chains = d.redirect_chains || [];
+                if (Array.isArray(chains)) {
+                    chains.slice(0, 3).forEach(c => {
+                        issues.push({ severity: c.severity || 'warning', title: 'Redirect chain (' + (c.chain_length || c.hops || '?') + ' hops)', description: (c.initial_url || c.source) + ' -> ' + (c.final_url || c.destination), recommendation: c.recommended_fix || 'Simplify to single redirect' });
+                        score -= 5;
+                    });
+                }
+
+                // Broken links
+                const broken = d.broken_links || [];
+                if (Array.isArray(broken)) {
+                    broken.slice(0, 3).forEach(b => {
+                        issues.push({ severity: b.priority === 'high' ? 'warning' : 'info', title: 'Broken link on ' + (b.source_page || 'page'), description: 'Links to: ' + (b.broken_url || b.url), recommendation: b.recommended_fix || 'Fix or remove broken link' });
+                    });
+                }
+
+                score = Math.max(0, Math.min(100, score));
+                setScore('rh-score', score);
+                setStatus('rh-status', score);
+                setBadge('rh-badge', score);
+                document.getElementById('rh-issues').textContent = issues.length;
+                renderIssues('rh-list', issues, 'No redirect issues found');
+                return score;
+            } catch (e) {
+                document.getElementById('rh-list').innerHTML = '<div class="empty-state">Could not load redirect health</div>';
+                return null;
+            }
+        }
+
+        async function loadAll() {
+            const btn = document.getElementById('refresh-btn');
+            btn.disabled = true;
+            btn.textContent = 'Loading...';
+            allCriticalIssues = [];
+
+            const [dqScore, spScore, chScore, rhScore] = await Promise.all([
+                loadDataQuality(),
+                loadSitePerformance(),
+                loadCodeHealth(),
+                loadRedirectHealth()
+            ]);
+
+            // Calculate overall score
+            const scores = [dqScore, spScore, chScore, rhScore].filter(s => s !== null);
+            const overall = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
+            setScoreRing(overall);
+
+            // Show critical banner
+            showCriticalBanner();
+
+            // Update timestamp
+            const now = new Date();
+            document.getElementById('last-refresh').textContent = 'Last refresh: ' + now.toLocaleTimeString();
+
+            btn.disabled = false;
+            btn.textContent = 'Refresh';
+        }
+
+        // Load on page load
+        loadAll();
+    </script>
+</body>
+</html>

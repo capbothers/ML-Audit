@@ -198,6 +198,12 @@ async def ads_intelligence_page():
     return FileResponse(os.path.join(static_dir, "ads_intelligence.html"))
 
 
+@app.get("/site-intelligence")
+async def site_intelligence_page():
+    """Serve the site intelligence dashboard"""
+    return FileResponse(os.path.join(static_dir, "site_intelligence.html"))
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API information"""
