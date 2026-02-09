@@ -163,6 +163,7 @@
         .status-good { background: var(--green-bg); color: var(--green); }
         .status-warning { background: var(--amber-bg); color: var(--amber); }
         .status-critical { background: var(--red-bg); color: var(--red); }
+        .status-nodata { background: rgba(107, 102, 112, 0.1); color: var(--slate); }
 
         /* Critical Issues Banner */
         .critical-banner {
@@ -995,23 +996,17 @@
                     }
                 });
 
-                // Freshness - could be object with table keys
+                // Freshness — API returns { sources: { table_name: { stale, lag_hours, ... } } }
                 const freshness = d.freshness || {};
-                if (typeof freshness === 'object' && !Array.isArray(freshness)) {
-                    Object.entries(freshness).forEach(([source, info]) => {
-                        if (info && (info.is_stale || info.status === 'stale')) {
+                const freshSources = freshness.sources || freshness;
+                if (typeof freshSources === 'object' && !Array.isArray(freshSources)) {
+                    Object.entries(freshSources).forEach(([source, info]) => {
+                        if (info && typeof info === 'object' && (info.stale || info.is_stale || info.status === 'stale')) {
                             const lagH = info.lag_hours || info.hours_since_update;
                             const sev = lagH > 48 ? 'critical' : 'warning';
                             issues.push({ severity: sev, title: source + ' data is stale', description: 'Last update: ' + (lagH ? Math.round(lagH) + 'h ago' : 'unknown'), recommendation: 'Check sync for ' + source });
                             if (sev === 'critical') allCriticalIssues.push({ source: 'Data Quality', title: source + ' data is stale (' + Math.round(lagH) + 'h)' });
                         }
-                    });
-                } else if (Array.isArray(freshness)) {
-                    freshness.filter(f => f.is_stale || f.status === 'stale').forEach(f => {
-                        const lagH = f.lag_hours || f.hours_since_update;
-                        const sev = lagH > 48 ? 'critical' : 'warning';
-                        issues.push({ severity: sev, title: (f.source || f.table) + ' data is stale', description: 'Last update: ' + (lagH ? Math.round(lagH) + 'h ago' : 'unknown'), recommendation: 'Check sync for ' + (f.source || f.table) });
-                        if (sev === 'critical') allCriticalIssues.push({ source: 'Data Quality', title: (f.source || f.table) + ' data is stale (' + Math.round(lagH) + 'h)' });
                     });
                 }
 
@@ -1081,7 +1076,7 @@
                 const errorPages = d.error_pages || [];
                 if (Array.isArray(errorPages)) {
                     errorPages.slice(0, 3).forEach(err => {
-                        const count = err.count || err.occurrences || err.total_events || '';
+                        const count = err.error_count || err.count || err.occurrences || '';
                         issues.push({ severity: 'warning', title: (err.status_code ? err.status_code + ' error' : 'Error') + (err.page_path ? ' on ' + err.page_path : ''), description: count + ' occurrences', file_path: err.page_path || err.url, recommendation: 'Investigate and fix error page' });
                     });
                 }
@@ -1103,16 +1098,24 @@
                     });
                 }
 
-                // If no CWV data at all, note it
-                if (!lcpRaw && !clsRaw && !inpRaw && errorPages.length === 0 && slow.length === 0) {
+                // If no CWV data at all, show neutral "No Data" state
+                const noData = !lcpRaw && !clsRaw && !inpRaw && errorPages.length === 0 && slow.length === 0;
+                if (noData) {
                     issues.push({ severity: 'info', title: 'No performance data available', description: 'GA4 performance events may not be configured', recommendation: 'Ensure GA4 is tracking Core Web Vitals' });
-                    score = 50; // unknown state
+                    score = null;
                 }
 
-                score = Math.max(0, Math.min(100, score));
-                setScore('sp-score', score);
-                setStatus('sp-status', score);
-                setBadge('sp-badge', score);
+                if (score !== null) score = Math.max(0, Math.min(100, score));
+                setScore('sp-score', noData ? '--' : score);
+                if (noData) {
+                    const statusEl = document.getElementById('sp-status');
+                    if (statusEl) { statusEl.textContent = 'No Data'; statusEl.className = 'hi-status status-nodata'; }
+                    const badgeEl = document.getElementById('sp-badge');
+                    if (badgeEl) { badgeEl.textContent = 'No Data'; badgeEl.className = 'section-badge status-nodata'; }
+                } else {
+                    setStatus('sp-status', score);
+                    setBadge('sp-badge', score);
+                }
                 document.getElementById('sp-issues').textContent = issues.length;
                 renderIssues('sp-list', issues, 'Site performance looks healthy', 'Site Performance');
                 return score;
@@ -1171,7 +1174,7 @@
                     errors404.slice(0, 4).forEach(e => {
                         const traffic = e.traffic || {};
                         const hits = traffic.total_hits || e.total_hits || e.hit_count || 0;
-                        const revenue = (e.revenue_impact || {}).estimated_monthly_loss || e.estimated_lost_revenue || 0;
+                        const revenue = (e.revenue_impact || {}).estimated_monthly_revenue_loss || e.estimated_lost_revenue || 0;
                         const sev = hits > 100 ? 'critical' : hits > 20 ? 'warning' : 'info';
                         issues.push({ severity: sev, title: '404: ' + (e.requested_url || e.url_path || e.url), description: hits + ' hits' + (revenue ? ' / ~$' + Math.round(revenue) + '/mo lost' : ''), revenue_impact: revenue, recommendation: (e.recommended_redirect || {}).action || e.recommended_action || 'Create redirect or restore page' });
                         totalRevenueAtRisk += revenue;
