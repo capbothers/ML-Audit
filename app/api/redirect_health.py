@@ -5,13 +5,19 @@ Endpoints for tracking broken links and redirect health.
 """
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel
 import httpx
 
 from app.models.base import get_db
 from app.services.redirect_health_service import RedirectHealthService
 from app.services.llm_service import LLMService
 from app.utils.logger import log
+
+
+class CreateRedirectRequest(BaseModel):
+    from_path: str
+    to_path: str
 
 router = APIRouter(prefix="/redirects", tags=["redirects"])
 
@@ -330,3 +336,41 @@ async def verify_url(
             "chain_length": 0,
             "error": str(e)
         }
+
+
+@router.post("/create")
+async def create_redirect(body: CreateRedirectRequest):
+    """
+    Create a 301 redirect in Shopify Admin.
+    Used by Site Intelligence to fix 404 errors directly.
+    """
+    try:
+        from app.connectors.shopify_connector import ShopifyConnector
+        import shopify as shopify_lib
+
+        connector = ShopifyConnector()
+        await connector.connect()
+
+        redirect = shopify_lib.Redirect()
+        redirect.path = body.from_path
+        redirect.target = body.to_path
+        success = redirect.save()
+
+        if success:
+            log.info(f"Created Shopify redirect: {body.from_path} -> {body.to_path}")
+            return {
+                "success": True,
+                "redirect": {
+                    "id": redirect.id,
+                    "path": redirect.path,
+                    "target": redirect.target
+                }
+            }
+        else:
+            errors = redirect.errors.full_messages() if hasattr(redirect, 'errors') else ['Unknown error']
+            raise HTTPException(status_code=400, detail=str(errors))
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Error creating redirect: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -5,13 +5,21 @@ Endpoints for analyzing Shopify theme code quality and health.
 """
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
+from pydantic import BaseModel
+import requests as http_requests
 
 from app.models.base import get_db
 from app.services.code_health_service import CodeHealthService
 from app.services.llm_service import LLMService
 from app.utils.logger import log
 from app.utils.cache import get_cached, set_cached, _MISS
+
+
+class CreateGitHubIssueRequest(BaseModel):
+    title: str
+    body: str
+    labels: List[str] = []
 
 router = APIRouter(prefix="/code", tags=["code"])
 
@@ -439,4 +447,58 @@ async def get_llm_code_insights(
 
     except Exception as e:
         log.error(f"Error generating LLM code insights: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/github-issue")
+async def create_github_issue(body: CreateGitHubIssueRequest):
+    """
+    Create a GitHub issue from a code health finding.
+    Used by Site Intelligence one-click actions.
+    """
+    try:
+        from app.config import get_settings
+        settings = get_settings()
+
+        if not settings.github_access_token or not settings.github_repo_owner or not settings.github_repo_name:
+            raise HTTPException(status_code=400, detail="GitHub credentials not configured")
+
+        repo = f"{settings.github_repo_owner}/{settings.github_repo_name}"
+        headers = {
+            'Authorization': f'token {settings.github_access_token}',
+            'Accept': 'application/vnd.github.v3+json'
+        }
+
+        payload = {
+            "title": body.title,
+            "body": body.body,
+            "labels": body.labels or ["site-intelligence", "auto-detected"]
+        }
+
+        response = http_requests.post(
+            f"https://api.github.com/repos/{repo}/issues",
+            headers=headers,
+            json=payload,
+            timeout=10
+        )
+
+        if response.status_code == 201:
+            issue_data = response.json()
+            log.info(f"Created GitHub issue #{issue_data['number']}: {body.title}")
+            return {
+                "success": True,
+                "issue": {
+                    "number": issue_data["number"],
+                    "url": issue_data["html_url"],
+                    "title": issue_data["title"]
+                }
+            }
+        else:
+            error_msg = response.json().get('message', 'Unknown error')
+            log.error(f"GitHub issue creation failed: {response.status_code} - {error_msg}")
+            raise HTTPException(status_code=response.status_code, detail=error_msg)
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Error creating GitHub issue: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

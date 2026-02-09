@@ -528,6 +528,17 @@
             font-size: 12px; text-decoration: none; transition: background 0.15s;
         }
         .evidence-link:hover { background: rgba(31,111,107,0.15); }
+        .executive-panel { background:var(--card);border-radius:18px;padding:24px 28px;border:1px solid var(--line);box-shadow:var(--shadow);display:none;margin-bottom:20px; }
+        .executive-panel.visible { display:block; }
+        .executive-panel h2 { font-family:"Space Grotesk",sans-serif;font-size:20px;margin-bottom:16px; }
+        .exec-grid { display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px; }
+        .exec-card { padding:16px 20px;border-radius:14px;border:1px solid var(--line);background:var(--pearl); }
+        .exec-card-label { font-size:12px;color:var(--slate);text-transform:uppercase;letter-spacing:0.5px; }
+        .exec-card-value { font-size:24px;font-weight:600;font-family:"Space Grotesk",sans-serif;margin-top:4px; }
+        .exec-card-detail { font-size:12px;color:var(--slate);margin-top:2px; }
+        .exec-fix-item { display:flex;align-items:flex-start;gap:12px;padding:10px 0;border-bottom:1px solid var(--line); }
+        .exec-fix-item:last-child { border-bottom:none; }
+        .exec-fix-badge { flex-shrink:0;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:500; }
     </style>
 </head>
 <body>
@@ -577,6 +588,7 @@
                         <button class="time-btn active" data-window="7d" onclick="setTimeWindow('7d')">7d</button>
                         <button class="time-btn" data-window="30d" onclick="setTimeWindow('30d')">30d</button>
                     </div>
+                    <button class="export-share-btn" id="exec-toggle-btn" onclick="toggleExecutiveView()" title="Toggle executive summary">Executive View</button>
                     <button class="export-share-btn" onclick="exportCSV()" title="Export all issues to CSV">Export CSV</button>
                     <button class="export-share-btn" id="copy-summary-btn" onclick="copySummary()" title="Copy executive summary to clipboard">Copy Summary</button>
                     <button class="refresh-btn" id="refresh-btn" onclick="loadAll()">Refresh</button>
@@ -637,6 +649,16 @@
             <div class="priorities-panel" id="priorities-panel" style="display:none">
                 <h3>Top Priorities</h3>
                 <div id="priorities-list"></div>
+            </div>
+
+            <!-- Executive Summary Panel -->
+            <div class="executive-panel" id="executive-panel">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+                    <h2>Executive Summary</h2>
+                    <span class="time-pill" id="exec-period">This Week</span>
+                </div>
+                <div class="exec-grid" id="exec-grid"></div>
+                <div id="exec-fixes"></div>
             </div>
 
             <!-- Critical Issues -->
@@ -755,24 +777,57 @@
         }
 
         function computeImpactWeight(issue, source) {
-            let w = 0;
-            // Revenue dimension (0-50 pts): real data when available
-            let realRevenue = 0;
-            if (issue.revenue_impact) {
-                realRevenue = issue.revenue_impact;
-            } else if (issue.traffic_hits && issue.traffic_hits > 0) {
-                realRevenue = issue.traffic_hits * siteConversionRate * siteAOV;
+            let dollarImpact = 0;
+            let confidenceScore = 0;
+
+            if (source === 'Redirects & 404s') {
+                const hits = issue.traffic_hits || 0;
+                if (issue.revenue_impact && issue.revenue_impact > 0) {
+                    dollarImpact = issue.revenue_impact;
+                    confidenceScore = 80;
+                } else if (hits > 0) {
+                    dollarImpact = hits * siteConversionRate * siteAOV;
+                    confidenceScore = hits >= 100 ? 60 : hits >= 20 ? 40 : 20;
+                } else {
+                    dollarImpact = issue.severity === 'critical' ? siteAOV * 3 : siteAOV;
+                    confidenceScore = 15;
+                }
+            } else if (source === 'Site Performance') {
+                const ss = issue.sample_size || 0;
+                let deltaFromGood = 0;
+                const title = issue.title || '';
+                if (title.includes('LCP')) {
+                    const m = title.match(/([\d.]+)\s*s/); if (m) deltaFromGood = Math.max(0, parseFloat(m[1]) * 1000 - 2500);
+                    if (!deltaFromGood) { const m2 = title.match(/([\d,]+)\s*ms/); if (m2) deltaFromGood = Math.max(0, parseInt(m2[1].replace(',','')) - 2500); }
+                } else if (title.includes('CLS')) {
+                    const m = title.match(/([\d.]+)/); if (m) deltaFromGood = Math.max(0, (parseFloat(m[1]) - 0.1) * 10000);
+                } else if (title.includes('INP')) {
+                    const m = title.match(/(\d+)\s*ms/); if (m) deltaFromGood = Math.max(0, parseInt(m[1]) - 200);
+                }
+                dollarImpact = (deltaFromGood / 100) * Math.sqrt(Math.max(1, ss)) * siteAOV * 0.01;
+                confidenceScore = ss >= 100 ? 70 : ss >= 30 ? 45 : 20;
+            } else if (source === 'Data Quality') {
+                const desc = issue.description || issue.title || '';
+                const lagMatch = desc.match(/(\d+)h?\s*ago/);
+                const lagHours = lagMatch ? parseInt(lagMatch[1]) : 0;
+                const thresholds = { shopify: 6, ga4: 72, analytics: 72, search: 96, ads: 48, merchant: 48 };
+                let threshold = 24;
+                const lower = (issue.title || '').toLowerCase();
+                Object.keys(thresholds).forEach(k => { if (lower.includes(k)) threshold = thresholds[k]; });
+                dollarImpact = lagHours > 0 ? (lagHours / threshold) * siteAOV * 5 : siteAOV;
+                confidenceScore = lagHours > 0 ? 50 : 10;
+            } else {
+                dollarImpact = issue.severity === 'critical' ? siteAOV * 2 : issue.severity === 'warning' ? siteAOV * 0.5 : siteAOV * 0.1;
+                confidenceScore = 30;
             }
-            if (realRevenue > 0) {
-                w += Math.min(50, realRevenue / 100);
-            }
-            // Severity dimension (0-40 pts): halved when real revenue data exists
-            const sevBase = issue.severity === 'critical' ? 40 : issue.severity === 'warning' ? 20 : 5;
-            w += realRevenue > 0 ? sevBase * 0.5 : sevBase;
-            // Source + CWV boosts
-            if (source === 'Redirects & 404s') w += 10;
-            if (issue.title && (issue.title.includes('LCP') || issue.title.includes('CLS') || issue.title.includes('INP'))) w += 10;
-            return Math.round(w);
+
+            issue.dollarImpact = Math.round(dollarImpact);
+            issue.confidenceLabel = confidenceScore >= 60 ? 'high' : confidenceScore >= 35 ? 'medium' : 'low';
+            issue.confidenceScore = confidenceScore;
+
+            // Backward-compatible 0-100 score
+            const sevBase = issue.severity === 'critical' ? 30 : issue.severity === 'warning' ? 15 : 5;
+            return Math.min(100, Math.round(dollarImpact / 50 + sevBase));
         }
 
         // --- Issue Tracker (localStorage) ---
@@ -813,18 +868,48 @@
             updateTimeline(source, issue) {
                 const key = this.getKey(source, issue);
                 const now = new Date().toISOString();
+                const today = now.slice(0, 10);
                 if (!this.data[key]) {
-                    this.data[key] = { status: '', owner: '', dueDate: null, updatedAt: now, firstSeenAt: now, lastSeenAt: now, seenCount: 1 };
+                    this.data[key] = { status: '', owner: '', dueDate: null, updatedAt: now, firstSeenAt: now, lastSeenAt: now, seenCount: 1, seenCountHistory: [{ date: today, count: 1 }] };
                 } else {
                     if (!this.data[key].firstSeenAt) this.data[key].firstSeenAt = now;
                     this.data[key].lastSeenAt = now;
                     this.data[key].seenCount = (this.data[key].seenCount || 0) + 1;
+                    const hist = this.data[key].seenCountHistory || [];
+                    const todayEntry = hist.find(h => h.date === today);
+                    if (todayEntry) todayEntry.count++;
+                    else hist.push({ date: today, count: 1 });
+                    this.data[key].seenCountHistory = hist.slice(-14);
                 }
             },
             getTimeline(source, issue) {
                 const entry = this.data[this.getKey(source, issue)];
                 if (!entry) return null;
-                return { firstSeenAt: entry.firstSeenAt, lastSeenAt: entry.lastSeenAt, seenCount: entry.seenCount || 0 };
+                return { firstSeenAt: entry.firstSeenAt, lastSeenAt: entry.lastSeenAt, seenCount: entry.seenCount || 0, seenCountHistory: entry.seenCountHistory || [] };
+            },
+            setVerification(source, issue, result) {
+                const key = this.getKey(source, issue);
+                if (!this.data[key]) return;
+                this.data[key].verifiedAt = new Date().toISOString();
+                this.data[key].verifiedResult = result.passed ? 'passed' : 'failed';
+                this.data[key].verifiedDetails = result.details || '';
+                this.saveAll();
+            },
+            getVerification(source, issue) {
+                const entry = this.data[this.getKey(source, issue)];
+                if (!entry || !entry.verifiedAt) return null;
+                return { verifiedAt: entry.verifiedAt, verifiedResult: entry.verifiedResult, verifiedDetails: entry.verifiedDetails };
+            },
+            setResolveSnapshot(source, issue, snapshot) {
+                const key = this.getKey(source, issue);
+                if (!this.data[key]) this.data[key] = { status: 'resolved', owner: '', dueDate: null, updatedAt: new Date().toISOString() };
+                this.data[key].snapshotAtResolve = snapshot;
+                this.data[key].resolvedAt = new Date().toISOString();
+                this.saveAll();
+            },
+            getResolveSnapshot(source, issue) {
+                const entry = this.data[this.getKey(source, issue)];
+                return entry ? entry.snapshotAtResolve || null : null;
             },
             saveAll() { localStorage.setItem(this.storageKey, JSON.stringify(this.data)); },
             cleanup() {
@@ -858,21 +943,51 @@
 
         function buildRelatedIssuesMap() {
             relatedIssuesMap = {};
+            templateClusterMap = {};
+            deployClusterMap = {};
+            causeClusterMap = {};
             Object.entries(issueStore).forEach(([listId, store]) => {
                 (store.issues || []).forEach((issue, idx) => {
+                    const entry = { listId, idx, title: issue.title || issue.check_name || 'Issue', source: store.source, severity: issue.severity || 'info' };
+
+                    // URL path clustering
                     const path = extractNormalizedPath(issue);
-                    if (!path) return;
-                    if (!relatedIssuesMap[path]) relatedIssuesMap[path] = [];
-                    relatedIssuesMap[path].push({
-                        listId: listId,
-                        idx: idx,
-                        title: issue.title || issue.check_name || 'Issue',
-                        source: store.source,
-                        severity: issue.severity || 'info'
-                    });
+                    if (path) {
+                        if (!relatedIssuesMap[path]) relatedIssuesMap[path] = [];
+                        relatedIssuesMap[path].push(entry);
+                    }
+
+                    // Template clustering (code health)
+                    if (store.source === 'Code Health' && issue.file_path) {
+                        const tm = issue.file_path.match(/(?:sections|snippets|templates|layout)\/([^/.]+)/);
+                        if (tm) {
+                            const tpl = tm[1];
+                            if (!templateClusterMap[tpl]) templateClusterMap[tpl] = [];
+                            templateClusterMap[tpl].push({ ...entry, file_path: issue.file_path });
+                        }
+                    }
+
+                    // Deploy-window clustering (same firstSeenAt date)
+                    const tl = issueTracker.getTimeline(store.source, issue);
+                    if (tl && tl.firstSeenAt) {
+                        const dateKey = tl.firstSeenAt.slice(0, 10);
+                        if (!deployClusterMap[dateKey]) deployClusterMap[dateKey] = [];
+                        deployClusterMap[dateKey].push({ ...entry, firstSeenAt: tl.firstSeenAt });
+                    }
+
+                    // Cause clustering (redirects)
+                    if (issue.likely_cause && issue.likely_cause !== 'unknown') {
+                        const cause = issue.likely_cause;
+                        if (!causeClusterMap[cause]) causeClusterMap[cause] = [];
+                        causeClusterMap[cause].push(entry);
+                    }
                 });
             });
         }
+
+        let templateClusterMap = {};
+        let deployClusterMap = {};
+        let causeClusterMap = {};
 
         // --- Trend Helpers ---
         function trendBadge(current, previous, higherIsBetter) {
@@ -957,10 +1072,17 @@
                 }
             }
             let impactHtml = '';
-            if (issue.revenue_impact) impactHtml = '<div class="issue-detail" style="color:var(--red);font-weight:500">~$' + Math.round(issue.revenue_impact) + '/mo impact</div>';
+            if (issue.dollarImpact > 0) {
+                const confCls = issue.confidenceLabel === 'high' ? 'high-conf' : issue.confidenceLabel === 'medium' ? 'med-conf' : 'low-conf';
+                impactHtml = '<div class="issue-detail" style="color:var(--red);font-weight:500">~$' + issue.dollarImpact.toLocaleString() + '/mo impact <span class="reliability-badge ' + confCls + '">' + issue.confidenceLabel + '</span></div>';
+            } else if (issue.revenue_impact) {
+                impactHtml = '<div class="issue-detail" style="color:var(--red);font-weight:500">~$' + Math.round(issue.revenue_impact) + '/mo impact</div>';
+            }
 
             let badgeHtml = '';
             if (tracked) badgeHtml = '<span class="issue-status-badge ' + tracked.status + '">' + tracked.status.replace('_', ' ') + '</span>';
+            const verif = issueTracker.getVerification(source, issue);
+            if (verif && verif.verifiedResult === 'passed') badgeHtml += ' <span class="issue-status-badge" style="background:var(--green-bg);color:var(--green)">VERIFIED</span>';
 
             // SLA overdue/due-soon badge
             let slaHtml = '';
@@ -979,18 +1101,26 @@
                 confHtml = ' <span class="reliability-badge ' + cls + '">n=' + issue.sample_size + '</span>';
             }
 
-            // NEW badge for issues first seen today
+            // NEW badge + trend arrow for issues
             let ageHtml = '';
             const tl = issueTracker.getTimeline(source, issue);
             if (tl && tl.firstSeenAt) {
                 const ageDays = Math.floor((Date.now() - new Date(tl.firstSeenAt).getTime()) / 86400000);
                 if (ageDays === 0) ageHtml = ' <span class="reliability-badge med-conf">NEW</span>';
             }
+            let trendHtml = '';
+            if (tl && tl.seenCountHistory && tl.seenCountHistory.length >= 3) {
+                const splitAt = Math.max(1, tl.seenCountHistory.length - 3);
+                const recent = tl.seenCountHistory.slice(splitAt).reduce((s, h) => s + h.count, 0);
+                const older = tl.seenCountHistory.slice(0, splitAt).reduce((s, h) => s + h.count, 0);
+                if (older > 0 && recent > older * 1.3) trendHtml = ' <span class="trend-badge trend-up-bad" title="Getting worse">&#9650;</span>';
+                else if (older > 0 && recent < older * 0.7) trendHtml = ' <span class="trend-badge trend-down-good" title="Improving">&#9660;</span>';
+            }
 
             return '<div class="issue-row' + (isResolved ? ' resolved' : '') + '" style="cursor:pointer" onclick="openIssueDetail(\'' + listId + '\',' + idx + ')">' +
                 '<div class="issue-severity sev-' + sev + '"></div>' +
                 '<div class="issue-body">' +
-                    '<div class="issue-title">' + esc(issue.title || issue.check_name || 'Issue') + ageHtml + confHtml + '</div>' +
+                    '<div class="issue-title">' + esc(issue.title || issue.check_name || 'Issue') + ageHtml + trendHtml + confHtml + '</div>' +
                     (issue.description ? '<div class="issue-detail">' + esc(issue.description) + '</div>' : '') +
                     impactHtml +
                     linkHtml +
@@ -1128,11 +1258,22 @@
                 '<input type="date" value="' + esc(curDue) + '" onchange="updateIssueDueDate(this.value)" title="Due date (SLA)" style="width:140px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);font-size:13px;background:var(--pearl);color:var(--ink)">' +
             '</div>';
 
-            // Verify fix button for resolved redirect issues
-            if (source === 'Redirects & 404s' && curStatus === 'resolved' && issue.title && issue.title.startsWith('404:')) {
-                const urlPath = issue.title.replace('404: ', '');
-                html += '<div id="verify-fix-area" style="padding:4px 0 8px">' +
-                    '<button class="action-btn primary" onclick="verifyFix(\'' + esc(urlPath) + '\',this)" style="width:100%">Verify Fix for ' + esc(urlPath) + '</button></div>';
+            // Verify fix area for resolved issues (all sources)
+            if (curStatus === 'resolved') {
+                const verif = issueTracker.getVerification(source, issue);
+                if (verif) {
+                    const vColor = verif.verifiedResult === 'passed' ? 'green' : 'amber';
+                    html += '<div id="verify-fix-area" style="padding:4px 0 8px"><div style="padding:8px 12px;background:var(--' + vColor + '-bg);color:var(--' + vColor + ');border-radius:10px;font-size:13px;font-weight:500">' +
+                        (verif.verifiedResult === 'passed' ? '&#10003; Verified ' : '&#10060; Not verified ') + new Date(verif.verifiedAt).toLocaleDateString() +
+                        (verif.verifiedDetails ? ' — ' + esc(verif.verifiedDetails) : '') + '</div></div>';
+                } else {
+                    let vLabel = 'Verify Fix';
+                    if (source === 'Redirects & 404s') vLabel = 'Verify Fix' + (issue.title && issue.title.startsWith('404:') ? ' for ' + issue.title.replace('404: ', '') : '');
+                    else if (source === 'Site Performance') vLabel = 'Check CWV Improvement';
+                    else if (source === 'Data Quality') vLabel = 'Check Data Freshness';
+                    html += '<div id="verify-fix-area" style="padding:4px 0 8px">' +
+                        '<button class="action-btn primary" onclick="verifyFix(\'' + esc(source) + '\', issueStore[\'' + esc(currentDetailListId) + '\'].issues[' + currentDetailIdx + '], this)" style="width:100%">' + esc(vLabel) + '</button></div>';
+                }
             }
 
             // Severity badge + title
@@ -1155,6 +1296,8 @@
             if (issue.confidence_level) html += '<div class="detail-meta-item"><div class="detail-meta-label">Confidence</div><div class="detail-meta-value">' + esc(issue.confidence_level) + '</div></div>';
             if (issue.sample_size !== undefined) html += '<div class="detail-meta-item"><div class="detail-meta-label">Sample Size</div><div class="detail-meta-value">' + issue.sample_size + ' events</div></div>';
             if (issue.impactWeight) html += '<div class="detail-meta-item"><div class="detail-meta-label">Impact Score</div><div class="detail-meta-value">' + issue.impactWeight + '/100</div></div>';
+            if (issue.dollarImpact > 0) html += '<div class="detail-meta-item"><div class="detail-meta-label">Est. Monthly Impact</div><div class="detail-meta-value" style="color:var(--red)">$' + issue.dollarImpact.toLocaleString() + '</div></div>';
+            if (issue.confidenceLabel) html += '<div class="detail-meta-item"><div class="detail-meta-label">Confidence</div><div class="detail-meta-value">' + issue.confidenceLabel.charAt(0).toUpperCase() + issue.confidenceLabel.slice(1) + ' (' + issue.confidenceScore + '%)</div></div>';
             html += '</div>';
 
             // Timeline section
@@ -1175,6 +1318,32 @@
                     '<div class="detail-meta-item"><div class="detail-meta-label">Times Seen</div><div class="detail-meta-value">' + (timeline.seenCount || 1) + '</div></div>' +
                     '<div class="detail-meta-item"><div class="detail-meta-label">Age</div><div class="detail-meta-value">' + ageLabel + '</div></div>' +
                     '</div></div></div>';
+
+                // Frequency trend sparkline
+                if (timeline.seenCountHistory && timeline.seenCountHistory.length >= 2) {
+                    const hist = timeline.seenCountHistory;
+                    const maxC = Math.max(...hist.map(h => h.count));
+                    const bars = hist.map(h => {
+                        const ht = Math.max(4, Math.round((h.count / maxC) * 24));
+                        return '<div style="width:8px;height:' + ht + 'px;background:var(--cass-gold);border-radius:2px" title="' + h.date + ': ' + h.count + '"></div>';
+                    }).join('');
+                    html += '<div class="detail-section"><div class="detail-section-header">Frequency Trend</div><div class="detail-section-body">' +
+                        '<div style="display:flex;align-items:flex-end;gap:2px;height:28px">' + bars + '</div>' +
+                        '<div style="font-size:11px;color:var(--slate);margin-top:4px">Daily detection frequency (last ' + hist.length + ' days)</div></div></div>';
+                }
+            }
+
+            // Blast radius
+            let blastHtml = '';
+            if (source === 'Redirects & 404s' && issue.traffic_hits) {
+                blastHtml += '<div class="detail-meta-item"><div class="detail-meta-label">Monthly Hits</div><div class="detail-meta-value">' + issue.traffic_hits.toLocaleString() + '</div></div>';
+                if (issue.referrers && issue.referrers.external_links_count) blastHtml += '<div class="detail-meta-item"><div class="detail-meta-label">External Links</div><div class="detail-meta-value">' + issue.referrers.external_links_count + '</div></div>';
+            }
+            if (source === 'Site Performance' && issue.sample_size) {
+                blastHtml += '<div class="detail-meta-item"><div class="detail-meta-label">Events Sampled</div><div class="detail-meta-value">' + issue.sample_size.toLocaleString() + '</div></div>';
+            }
+            if (blastHtml) {
+                html += '<div class="detail-section"><div class="detail-section-header">Blast Radius</div><div class="detail-section-body"><div class="detail-meta-grid">' + blastHtml + '</div></div></div>';
             }
 
             // Evidence section
@@ -1215,6 +1384,59 @@
                 }
             }
 
+            // Template cluster context
+            if (issue.file_path) {
+                const tplMatch = issue.file_path.match(/(?:sections|snippets|templates|layout)\/([^/.]+)/);
+                if (tplMatch && templateClusterMap[tplMatch[1]] && templateClusterMap[tplMatch[1]].length > 1) {
+                    const cluster = templateClusterMap[tplMatch[1]].filter(c => !(c.listId === currentDetailListId && c.idx === currentDetailIdx));
+                    if (cluster.length > 0) {
+                        html += '<div class="detail-section"><div class="detail-section-header">Template: ' + esc(tplMatch[1]) + ' (' + (cluster.length + 1) + ' issues)</div><div class="detail-section-body">';
+                        cluster.slice(0, 5).forEach(c => {
+                            const dot = c.severity === 'critical' ? 'var(--red)' : c.severity === 'warning' ? 'var(--cass-gold)' : 'var(--cass-teal)';
+                            html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openIssueDetail(\'' + c.listId + '\',' + c.idx + ')">' +
+                                '<span style="width:8px;height:8px;border-radius:50%;background:' + dot + ';flex-shrink:0"></span>' +
+                                '<span style="font-size:13px;flex:1">' + esc(c.title) + '</span></div>';
+                        });
+                        html += '</div></div>';
+                    }
+                }
+            }
+
+            // Deploy-window cluster (≥3 issues on same day = likely same deploy)
+            const issueTl = issueTracker.getTimeline(source, issue);
+            if (issueTl && issueTl.firstSeenAt) {
+                const dKey = issueTl.firstSeenAt.slice(0, 10);
+                const deployCluster = (deployClusterMap[dKey] || []).filter(c => !(c.listId === currentDetailListId && c.idx === currentDetailIdx));
+                if (deployCluster.length >= 2) {
+                    html += '<div class="detail-section"><div class="detail-section-header">Deploy Window: ' + dKey + ' (' + (deployCluster.length + 1) + ' issues)</div><div class="detail-section-body">' +
+                        '<p style="font-size:12px;color:var(--slate);margin-bottom:6px">These issues were first detected on the same day.</p>';
+                    deployCluster.slice(0, 5).forEach(c => {
+                        const dot = c.severity === 'critical' ? 'var(--red)' : c.severity === 'warning' ? 'var(--cass-gold)' : 'var(--cass-teal)';
+                        html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openIssueDetail(\'' + c.listId + '\',' + c.idx + ')">' +
+                            '<span style="width:8px;height:8px;border-radius:50%;background:' + dot + ';flex-shrink:0"></span>' +
+                            '<span style="font-size:13px;flex:1">' + esc(c.title) + '</span>' +
+                            '<span style="font-size:11px;color:var(--slate)">' + esc(c.source) + '</span></div>';
+                    });
+                    html += '</div></div>';
+                }
+            }
+
+            // Root cause cluster (redirect issues with same likely_cause)
+            if (issue.likely_cause && issue.likely_cause !== 'unknown' && causeClusterMap[issue.likely_cause] && causeClusterMap[issue.likely_cause].length > 1) {
+                const causeCluster = causeClusterMap[issue.likely_cause].filter(c => !(c.listId === currentDetailListId && c.idx === currentDetailIdx));
+                if (causeCluster.length > 0) {
+                    const causeLabel = (typeof causeLabelMap !== 'undefined' && causeLabelMap[issue.likely_cause]) || issue.likely_cause.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                    html += '<div class="detail-section"><div class="detail-section-header">Root Cause: ' + esc(causeLabel) + ' (' + (causeCluster.length + 1) + ' issues)</div><div class="detail-section-body">';
+                    causeCluster.slice(0, 5).forEach(c => {
+                        const dot = c.severity === 'critical' ? 'var(--red)' : c.severity === 'warning' ? 'var(--cass-gold)' : 'var(--cass-teal)';
+                        html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer" onclick="openIssueDetail(\'' + c.listId + '\',' + c.idx + ')">' +
+                            '<span style="width:8px;height:8px;border-radius:50%;background:' + dot + ';flex-shrink:0"></span>' +
+                            '<span style="font-size:13px;flex:1">' + esc(c.title) + '</span></div>';
+                    });
+                    html += '</div></div>';
+                }
+            }
+
             // Action buttons
             const actions = getActions(issue, source);
             if (actions.length > 0) {
@@ -1222,6 +1444,12 @@
                 actions.forEach(a => {
                     if (a.type === 'link') {
                         html += '<a class="action-btn' + (a.primary ? ' primary' : '') + '" href="' + esc(a.url) + '" target="_blank">' + esc(a.label) + '</a>';
+                    } else if (a.type === 'redirect_create') {
+                        html += '<div style="display:flex;gap:8px;align-items:center;width:100%">' +
+                            '<input type="text" id="redirect-target" placeholder="Target path e.g. /collections/all" style="flex:1;padding:8px 12px;border-radius:10px;border:1px solid var(--line);font-size:13px">' +
+                            '<button class="action-btn primary" onclick="createRedirect(\'' + esc(a.urlPath) + '\',document.getElementById(\'redirect-target\').value,this)">' + esc(a.label) + '</button></div>';
+                    } else if (a.type === 'github_issue') {
+                        html += '<button class="action-btn' + (a.primary ? ' primary' : '') + '" onclick="createGitHubIssue(this)">' + esc(a.label) + '</button>';
                     } else {
                         html += '<button class="action-btn' + (a.primary ? ' primary' : '') + '" onclick="executeAction(\'' + esc(a.endpoint) + '\',\'' + esc(a.label) + '\',this)">' + esc(a.label) + '</button>';
                     }
@@ -1239,9 +1467,32 @@
             const issue = store.issues[currentDetailIdx];
             const tracked = issueTracker.getStatus(store.source, issue);
             issueTracker.setStatus(store.source, issue, status, tracked ? tracked.owner : '');
+            // Capture baseline snapshot when marking as resolved
+            if (status === 'resolved') captureResolveSnapshot(store.source, issue);
             rerenderList(currentDetailListId);
-            // Re-render detail panel so auto-SLA date shows immediately
             document.getElementById('detail-content').innerHTML = buildDetailHTML(issue, store.source);
+        }
+
+        async function captureResolveSnapshot(source, issue) {
+            if (source === 'Site Performance') {
+                try {
+                    const res = await fetch('/site-health/summary?hours=168');
+                    const data = await res.json();
+                    const cwv = (data.data || data).core_web_vitals || {};
+                    issueTracker.setResolveSnapshot(source, issue, {
+                        type: 'cwv', LCP: cwv.LCP ? cwv.LCP.p75 : null, CLS: cwv.CLS ? cwv.CLS.p75 : null, INP: cwv.INP ? cwv.INP.p75 : null, capturedAt: new Date().toISOString()
+                    });
+                } catch (e) { /* silent */ }
+            } else if (source === 'Data Quality') {
+                try {
+                    const res = await fetch('/data-quality/dashboard');
+                    const data = await res.json();
+                    const freshness = (data.data || data).freshness || {};
+                    issueTracker.setResolveSnapshot(source, issue, {
+                        type: 'freshness', sources: freshness.sources || {}, capturedAt: new Date().toISOString()
+                    });
+                } catch (e) { /* silent */ }
+            }
         }
 
         function updateIssueOwner(owner) {
@@ -1264,25 +1515,85 @@
             rerenderList(currentDetailListId);
         }
 
-        async function verifyFix(urlPath, btn) {
+        async function verifyFix(source, issue, btn) {
+            if (source === 'Redirects & 404s' && issue.title && issue.title.startsWith('404:')) {
+                return verifyFix404(issue.title.replace('404: ', ''), btn);
+            } else if (source === 'Site Performance') {
+                return verifyCWVFix(source, issue, btn);
+            } else if (source === 'Data Quality') {
+                return verifyDataQualityFix(source, issue, btn);
+            }
+            btn.textContent = 'No verifier for this source';
+        }
+
+        async function verifyFix404(urlPath, btn) {
             btn.disabled = true;
-            btn.textContent = 'Checking...';
+            btn.textContent = 'Checking URL...';
+            const store = issueStore[currentDetailListId];
             try {
                 const res = await fetch('/redirects/verify-url?url=' + encodeURIComponent(urlPath));
                 const data = await res.json();
                 const area = document.getElementById('verify-fix-area');
-                if (data.is_healthy) {
+                const passed = data.is_healthy;
+                if (store) issueTracker.setVerification(store.source, store.issues[currentDetailIdx], { passed, details: 'Status ' + data.final_status_code + (data.chain_length > 1 ? ' via ' + data.chain_length + ' redirects' : '') });
+                if (passed) {
                     area.innerHTML = '<div style="padding:8px 12px;background:var(--green-bg);color:var(--green);border-radius:10px;font-size:13px;font-weight:500">' +
-                        '&#10003; Fix verified — returns ' + data.final_status_code + (data.chain_length > 1 ? ' (via ' + data.chain_length + ' redirects)' : '') + '</div>';
+                        '&#10003; Verified ' + new Date().toLocaleDateString() + ' — returns ' + data.final_status_code + (data.chain_length > 1 ? ' (via ' + data.chain_length + ' redirects)' : '') + '</div>';
                 } else {
                     area.innerHTML = '<div style="padding:8px 12px;background:var(--red-bg);color:var(--red);border-radius:10px;font-size:13px;font-weight:500">' +
                         '&#10007; Still broken — returns ' + (data.final_status_code || 'error') +
                         '</div><button class="action-btn" onclick="revertToOpen()" style="margin-top:6px;width:100%">Revert to Open</button>';
                 }
-            } catch (e) {
-                btn.textContent = 'Error — try again';
-                btn.disabled = false;
-            }
+                if (store) rerenderList(currentDetailListId);
+            } catch (e) { btn.textContent = 'Error — try again'; btn.disabled = false; }
+        }
+
+        async function verifyCWVFix(source, issue, btn) {
+            btn.disabled = true; btn.textContent = 'Checking CWV...';
+            const store = issueStore[currentDetailListId];
+            const snapshot = store ? issueTracker.getResolveSnapshot(store.source, issue) : null;
+            if (!snapshot || snapshot.type !== 'cwv') { btn.textContent = 'No baseline snapshot — resolve again to capture'; btn.disabled = false; return; }
+            try {
+                const res = await fetch('/site-health/summary?hours=168');
+                const data = await res.json();
+                const cwv = (data.data || data).core_web_vitals || {};
+                let improved = false, details = '';
+                ['LCP', 'CLS', 'INP'].forEach(m => {
+                    if (snapshot[m] !== null && snapshot[m] !== undefined && cwv[m]) {
+                        const before = snapshot[m], after = cwv[m].p75;
+                        if (after < before) { improved = true; details += m + ': ' + Math.round(before) + ' -> ' + Math.round(after) + ' (improved). '; }
+                        else details += m + ': ' + Math.round(before) + ' -> ' + Math.round(after) + '. ';
+                    }
+                });
+                if (store) issueTracker.setVerification(store.source, issue, { passed: improved, details });
+                const area = document.getElementById('verify-fix-area');
+                const color = improved ? 'green' : 'amber';
+                area.innerHTML = '<div style="padding:8px 12px;background:var(--' + color + '-bg);color:var(--' + color + ');border-radius:10px;font-size:13px;font-weight:500">' +
+                    (improved ? '&#10003; Verified ' : '&#10060; Not yet improved ') + new Date().toLocaleDateString() + ' — ' + esc(details) + '</div>';
+                if (store) rerenderList(currentDetailListId);
+            } catch (e) { btn.textContent = 'Error'; btn.disabled = false; }
+        }
+
+        async function verifyDataQualityFix(source, issue, btn) {
+            btn.disabled = true; btn.textContent = 'Checking freshness...';
+            const store = issueStore[currentDetailListId];
+            try {
+                const res = await fetch('/data-quality/dashboard');
+                const data = await res.json();
+                const d = data.data || data;
+                const freshness = d.freshness || {};
+                const sources = freshness.sources || {};
+                let sourceKey = null;
+                Object.keys(sources).forEach(k => { if ((issue.title || '').toLowerCase().includes(k.replace(/_/g, ' '))) sourceKey = k; });
+                const src = sourceKey ? sources[sourceKey] : null;
+                const isFresh = src && !src.stale && !src.is_stale;
+                if (store) issueTracker.setVerification(store.source, issue, { passed: isFresh, details: sourceKey ? (isFresh ? sourceKey + ' is now fresh' : sourceKey + ' still stale (' + (src.lag_hours || '?') + 'h)') : 'Source not identified' });
+                const area = document.getElementById('verify-fix-area');
+                const color = isFresh ? 'green' : 'red';
+                area.innerHTML = '<div style="padding:8px 12px;background:var(--' + color + '-bg);color:var(--' + color + ');border-radius:10px;font-size:13px;font-weight:500">' +
+                    (isFresh ? '&#10003; Verified ' + new Date().toLocaleDateString() + ' — data is now fresh' : '&#10007; Still stale — source not refreshed') + '</div>';
+                if (store) rerenderList(currentDetailListId);
+            } catch (e) { btn.textContent = 'Error'; btn.disabled = false; }
         }
 
         function revertToOpen() {
@@ -1336,10 +1647,13 @@
         function getActions(issue, source) {
             const actions = [];
             if (source === 'Redirects & 404s' && issue.title && issue.title.startsWith('404:')) {
-                actions.push({ label: 'Create Redirect', type: 'link', url: 'https://admin.shopify.com/store/cass-brothers/settings/redirects', primary: true });
+                const urlPath = issue.title.replace('404: ', '');
+                actions.push({ label: 'Create 301 Redirect', type: 'redirect_create', urlPath: urlPath, primary: true });
+                actions.push({ label: 'View in Shopify Admin', type: 'link', url: 'https://admin.shopify.com/store/cass-brothers/settings/redirects' });
             }
-            if (source === 'Code Health' && issue.github_url) {
-                actions.push({ label: 'Open in GitHub', type: 'link', url: issue.github_url });
+            if (source === 'Code Health') {
+                actions.push({ label: 'Create GitHub Issue', type: 'github_issue', primary: true });
+                if (issue.github_url) actions.push({ label: 'Open in GitHub', type: 'link', url: issue.github_url });
             }
             if (source === 'Data Quality' && issue.title && issue.title.includes('stale')) {
                 const syncSrc = detectSyncSource(issue.title);
@@ -1369,6 +1683,44 @@
                 if (res.ok) {
                     btn.textContent = 'Done!'; btn.style.background = 'var(--green)'; btn.style.color = '#fff';
                     setTimeout(() => loadAll(), 3000);
+                } else { btn.textContent = 'Failed'; btn.style.background = 'var(--red)'; btn.style.color = '#fff'; }
+            } catch (e) { btn.textContent = 'Error'; btn.style.background = 'var(--red)'; btn.style.color = '#fff'; }
+        }
+
+        async function createRedirect(fromPath, toPath, btn) {
+            if (!toPath || !toPath.startsWith('/')) { alert('Enter a valid target path starting with /'); return; }
+            if (!confirm('Create redirect: ' + fromPath + ' -> ' + toPath + '?')) return;
+            btn.disabled = true; btn.textContent = 'Creating...';
+            try {
+                const res = await fetch('/redirects/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from_path: fromPath, to_path: toPath }) });
+                const data = await res.json();
+                if (data.success) {
+                    btn.textContent = 'Created!'; btn.style.background = 'var(--green)'; btn.style.color = '#fff';
+                    const store = issueStore[currentDetailListId];
+                    if (store) {
+                        const key = issueTracker.getKey(store.source, store.issues[currentDetailIdx]);
+                        if (issueTracker.data[key]) { issueTracker.data[key].actionExecutedAt = new Date().toISOString(); issueTracker.data[key].actionType = 'redirect_created'; issueTracker.saveAll(); }
+                    }
+                } else { btn.textContent = 'Failed: ' + (data.detail || 'error'); btn.style.background = 'var(--red)'; btn.style.color = '#fff'; }
+            } catch (e) { btn.textContent = 'Error'; btn.style.background = 'var(--red)'; btn.style.color = '#fff'; }
+        }
+
+        async function createGitHubIssue(btn) {
+            const store = issueStore[currentDetailListId];
+            if (!store || currentDetailIdx === null) return;
+            const issue = store.issues[currentDetailIdx];
+            const title = '[Site Intelligence] ' + (issue.title || issue.check_name || 'Code issue');
+            const body = '## Auto-detected by Site Intelligence\n\n**Severity:** ' + (issue.severity || 'info') + '\n**Category:** ' + (issue.category || 'unknown') + '\n**File:** `' + (issue.file_path || 'N/A') + (issue.line_number ? ':' + issue.line_number : '') + '`\n\n### Description\n' + (issue.description || 'No description') + '\n\n### Recommendation\n' + (issue.recommendation || 'Review and fix') + '\n\n_Created from Site Intelligence dashboard._';
+            if (!confirm('Create GitHub issue: "' + title + '"?')) return;
+            btn.disabled = true; btn.textContent = 'Creating...';
+            try {
+                const res = await fetch('/code/github-issue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, body, labels: ['site-intelligence', issue.category || 'code-health'] }) });
+                const data = await res.json();
+                if (data.success) {
+                    btn.textContent = 'Created #' + data.issue.number; btn.style.background = 'var(--green)'; btn.style.color = '#fff';
+                    btn.onclick = () => window.open(data.issue.url, '_blank');
+                    const key = issueTracker.getKey(store.source, issue);
+                    if (issueTracker.data[key]) { issueTracker.data[key].actionExecutedAt = new Date().toISOString(); issueTracker.data[key].actionType = 'github_issue_created'; issueTracker.data[key].githubIssueUrl = data.issue.url; issueTracker.saveAll(); }
                 } else { btn.textContent = 'Failed'; btn.style.background = 'var(--red)'; btn.style.color = '#fff'; }
             } catch (e) { btn.textContent = 'Error'; btn.style.background = 'var(--red)'; btn.style.color = '#fff'; }
         }
@@ -1918,6 +2270,91 @@
             }));
         }
 
+        let executiveMode = false;
+
+        function toggleExecutiveView() {
+            executiveMode = !executiveMode;
+            const panel = document.getElementById('executive-panel');
+            const btn = document.getElementById('exec-toggle-btn');
+            if (executiveMode) {
+                panel.classList.add('visible');
+                btn.style.background = 'var(--cass-black)'; btn.style.color = '#f7f1e8';
+                renderExecutiveSummary();
+            } else {
+                panel.classList.remove('visible');
+                btn.style.background = ''; btn.style.color = '';
+            }
+        }
+
+        function renderExecutiveSummary() {
+            const grid = document.getElementById('exec-grid');
+            const fixesEl = document.getElementById('exec-fixes');
+
+            // 1. Score change vs history
+            const history = JSON.parse(localStorage.getItem('site_intel_scores_history') || '[]');
+            let scoreCard = '';
+            if (history.length >= 2) {
+                const oldest = history[0], latest = history[history.length - 1];
+                const changes = ['dq','sp','ch','rh'].map(s => (oldest[s] !== null && latest[s] !== null) ? latest[s] - oldest[s] : null).filter(c => c !== null);
+                const avg = changes.length > 0 ? Math.round(changes.reduce((a,b) => a+b, 0) / changes.length) : 0;
+                const clr = avg > 0 ? 'var(--green)' : avg < 0 ? 'var(--red)' : 'var(--slate)';
+                scoreCard = '<div class="exec-card"><div class="exec-card-label">Health Score Change</div><div class="exec-card-value" style="color:' + clr + '">' + (avg > 0 ? '+' : '') + avg + ' pts</div><div class="exec-card-detail">vs ' + history.length + ' days ago</div></div>';
+            }
+
+            // 2. Revenue at risk
+            let revCard = '<div class="exec-card"><div class="exec-card-label">Revenue at Risk</div><div class="exec-card-value" style="color:var(--red)">$' + Math.round(totalRevenueAtRisk).toLocaleString() + '/mo</div>';
+            const prev = JSON.parse(localStorage.getItem('site_intel_snapshot') || 'null');
+            if (prev && prev.revenue !== undefined) {
+                const diff = totalRevenueAtRisk - prev.revenue;
+                const clr = diff > 0 ? 'var(--red)' : diff < 0 ? 'var(--green)' : 'var(--slate)';
+                revCard += '<div class="exec-card-detail" style="color:' + clr + '">' + (diff > 0 ? '+' : '') + '$' + Math.round(Math.abs(diff)).toLocaleString() + ' vs last visit</div>';
+            }
+            revCard += '</div>';
+
+            // 3. In-progress count
+            let inProgress = 0;
+            Object.entries(issueStore).forEach(([, store]) => {
+                (store.issues || []).forEach(issue => {
+                    const t = issueTracker.getStatus(store.source, issue);
+                    if (t && (t.status === 'acknowledged' || t.status === 'investigating')) inProgress++;
+                });
+            });
+            const effortCard = '<div class="exec-card"><div class="exec-card-label">In Progress</div><div class="exec-card-value">' + inProgress + '</div><div class="exec-card-detail">Issues being worked on</div></div>';
+
+            // 4. Validated fixes
+            let verifiedCount = 0, verifiedImpact = 0;
+            const verifiedFixes = [];
+            Object.entries(issueStore).forEach(([, store]) => {
+                (store.issues || []).forEach(issue => {
+                    const v = issueTracker.getVerification(store.source, issue);
+                    if (v && v.verifiedResult === 'passed') {
+                        verifiedCount++;
+                        verifiedImpact += issue.dollarImpact || 0;
+                        verifiedFixes.push({ title: issue.title || issue.check_name, source: store.source, verifiedAt: v.verifiedAt, details: v.verifiedDetails, dollarImpact: issue.dollarImpact || 0 });
+                    }
+                });
+            });
+            const valCard = '<div class="exec-card"><div class="exec-card-label">Validated Fixes</div><div class="exec-card-value" style="color:var(--green)">' + verifiedCount + '</div><div class="exec-card-detail">$' + verifiedImpact.toLocaleString() + '/mo impact resolved</div></div>';
+
+            grid.innerHTML = scoreCard + revCard + effortCard + valCard;
+
+            // 5. Top validated fixes
+            if (verifiedFixes.length > 0) {
+                verifiedFixes.sort((a,b) => (b.dollarImpact || 0) - (a.dollarImpact || 0));
+                let fhtml = '<h3 style="font-family:Space Grotesk;font-size:15px;font-weight:600;margin-bottom:10px">Top Validated Fixes</h3>';
+                verifiedFixes.slice(0, 3).forEach(f => {
+                    fhtml += '<div class="exec-fix-item"><span class="exec-fix-badge" style="background:var(--green-bg);color:var(--green)">Verified</span><div>' +
+                        '<div style="font-weight:500;font-size:14px">' + esc(f.title) + '</div>' +
+                        '<div style="font-size:12px;color:var(--slate)">' + esc(f.source) + (f.dollarImpact ? ' &middot; $' + f.dollarImpact.toLocaleString() + '/mo saved' : '') + ' &middot; ' + new Date(f.verifiedAt).toLocaleDateString() + '</div>' +
+                        (f.details ? '<div style="font-size:12px;color:var(--cass-teal);margin-top:2px">' + esc(f.details) + '</div>' : '') +
+                        '</div></div>';
+                });
+                fixesEl.innerHTML = fhtml;
+            } else {
+                fixesEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--slate);font-size:13px">No verified fixes yet. Resolve issues and verify them to track validated outcomes here.</div>';
+            }
+        }
+
         function exportCSV() {
             const rows = [['Source', 'Severity', 'Title', 'Impact Score', 'Revenue Impact', 'Status', 'Owner', 'Due Date', 'First Seen', 'Category', 'File Path', 'Recommendation']];
             Object.entries(issueStore).forEach(([listId, store]) => {
@@ -2056,6 +2493,7 @@
             // Render new panels
             renderKPIs(totalIssues);
             renderPriorities();
+            if (executiveMode) renderExecutiveSummary();
             showCriticalBanner();
 
             // Update timestamp
