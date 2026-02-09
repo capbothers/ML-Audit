@@ -439,6 +439,87 @@
             color: var(--red); font-weight: 500; font-size: 14px;
             display: flex; align-items: center; gap: 8px;
         }
+
+        /* Reliability Badges */
+        .reliability-badge {
+            display: inline-flex; align-items: center; gap: 3px;
+            font-size: 10px; padding: 1px 7px; border-radius: 999px; font-weight: 500;
+        }
+        .reliability-badge.high-conf { background: var(--green-bg); color: var(--green); }
+        .reliability-badge.med-conf { background: var(--amber-bg); color: var(--amber); }
+        .reliability-badge.low-conf { background: rgba(107,102,112,0.1); color: var(--slate); }
+
+        /* Impact Score */
+        .impact-score { font-size: 10px; color: var(--slate); font-weight: 500; margin-top: 3px; }
+
+        /* Time Window Toggle */
+        .time-toggle { display: flex; gap: 4px; background: rgba(27,27,27,0.06); border-radius: 12px; padding: 3px; }
+        .time-btn {
+            padding: 6px 14px; border-radius: 10px; border: none;
+            background: transparent; font-size: 13px; cursor: pointer;
+            color: var(--ink-soft); font-weight: 500; transition: all 0.2s;
+        }
+        .time-btn.active { background: var(--cass-black); color: #f7f1e8; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+
+        /* Root-Cause Clustering */
+        .cluster-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 8px 14px; margin-top: 8px; border-radius: 10px;
+            background: rgba(27,27,27,0.04); font-size: 13px; font-weight: 600;
+            color: var(--ink-soft); cursor: pointer; user-select: none;
+        }
+        .cluster-header:first-child { margin-top: 0; }
+        .cluster-count { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(27,27,27,0.08); font-weight: 500; }
+        .cluster-body.collapsed { display: none; }
+
+        /* Trend Badges */
+        .trend-badge { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 500; padding: 1px 6px; border-radius: 6px; margin-left: 4px; }
+        .trend-up-good { color: var(--green); background: var(--green-bg); }
+        .trend-up-bad { color: var(--red); background: var(--red-bg); }
+        .trend-down-good { color: var(--green); background: var(--green-bg); }
+        .trend-down-bad { color: var(--red); background: var(--red-bg); }
+        .trend-flat { color: var(--slate); background: rgba(107,102,112,0.1); }
+
+        /* Owner + Status */
+        .status-controls { display: flex; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+        .status-controls select, .status-controls input {
+            padding: 8px 12px; border-radius: 10px; border: 1px solid var(--line);
+            font-size: 13px; background: var(--pearl); color: var(--ink); outline: none;
+        }
+        .issue-row.resolved { opacity: 0.45; }
+        .issue-status-badge {
+            flex-shrink: 0; font-size: 10px; padding: 2px 8px; border-radius: 999px;
+            text-transform: uppercase; letter-spacing: 0.5px; font-weight: 500;
+        }
+        .issue-status-badge.acknowledged { background: var(--amber-bg); color: var(--amber); }
+        .issue-status-badge.investigating { background: rgba(31,111,107,0.1); color: var(--cass-teal); }
+        .issue-status-badge.resolved { background: var(--green-bg); color: var(--green); }
+        .issue-status-badge.false_positive { background: rgba(107,102,112,0.1); color: var(--slate); }
+        .show-resolved-toggle { font-size: 12px; color: var(--cass-teal); cursor: pointer; padding: 6px 0; }
+
+        /* Action Buttons */
+        .action-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
+        .action-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 10px 16px; border-radius: 12px; border: 1px solid var(--line);
+            background: var(--pearl); color: var(--ink); font-size: 13px;
+            cursor: pointer; transition: all 0.2s; text-decoration: none;
+            font-family: "IBM Plex Sans", sans-serif;
+        }
+        .action-btn:hover { background: var(--stone); border-color: var(--cass-gold); }
+        .action-btn.primary { background: var(--cass-moss); color: #f7f1e8; border-color: var(--cass-moss); }
+        .action-btn.primary:hover { background: #35463b; }
+        .action-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        /* Evidence Links */
+        .evidence-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+        .evidence-link {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 12px; border-radius: 8px;
+            background: rgba(31,111,107,0.08); color: var(--cass-teal);
+            font-size: 12px; text-decoration: none; transition: background 0.15s;
+        }
+        .evidence-link:hover { background: rgba(31,111,107,0.15); }
     </style>
 </head>
 <body>
@@ -479,7 +560,14 @@
                     <h1>Site Intelligence</h1>
                     <p class="time-pill" id="last-refresh">Loading...</p>
                 </div>
-                <button class="refresh-btn" id="refresh-btn" onclick="loadAll()">Refresh</button>
+                <div style="display:flex;align-items:center;gap:12px">
+                    <div class="time-toggle" id="time-toggle">
+                        <button class="time-btn" data-window="24h" onclick="setTimeWindow('24h')">24h</button>
+                        <button class="time-btn active" data-window="7d" onclick="setTimeWindow('7d')">7d</button>
+                        <button class="time-btn" data-window="30d" onclick="setTimeWindow('30d')">30d</button>
+                    </div>
+                    <button class="refresh-btn" id="refresh-btn" onclick="loadAll()">Refresh</button>
+                </div>
             </div>
 
             <!-- Overall Health Score -->
@@ -495,22 +583,22 @@
                 <div class="health-breakdown">
                     <div class="health-item">
                         <div class="hi-label">Data Quality</div>
-                        <div class="hi-value" id="dq-score">--</div>
+                        <div class="hi-value" id="dq-score">--<span id="dq-trend"></span></div>
                         <div class="hi-status" id="dq-status">...</div>
                     </div>
                     <div class="health-item">
                         <div class="hi-label">Site Perf</div>
-                        <div class="hi-value" id="sp-score">--</div>
+                        <div class="hi-value" id="sp-score">--<span id="sp-trend"></span></div>
                         <div class="hi-status" id="sp-status">...</div>
                     </div>
                     <div class="health-item">
                         <div class="hi-label">Code Health</div>
-                        <div class="hi-value" id="ch-score">--</div>
+                        <div class="hi-value" id="ch-score">--<span id="ch-trend"></span></div>
                         <div class="hi-status" id="ch-status">...</div>
                     </div>
                     <div class="health-item">
                         <div class="hi-label">Redirects</div>
-                        <div class="hi-value" id="rh-score">--</div>
+                        <div class="hi-value" id="rh-score">--<span id="rh-trend"></span></div>
                         <div class="hi-status" id="rh-status">...</div>
                     </div>
                 </div>
@@ -620,6 +708,59 @@
     </div>
 
     <script>
+        // --- Time Window ---
+        let currentTimeWindow = '7d';
+        function setTimeWindow(w) {
+            currentTimeWindow = w;
+            document.querySelectorAll('.time-btn').forEach(b => b.classList.toggle('active', b.dataset.window === w));
+            loadAll();
+        }
+        function getWindowParams() {
+            if (currentTimeWindow === '24h') return { hours: 24, days: 1 };
+            if (currentTimeWindow === '30d') return { hours: 720, days: 30 };
+            return { hours: 168, days: 7 };
+        }
+
+        // --- Impact Scoring ---
+        function computeImpactWeight(issue, source) {
+            let w = 0;
+            if (issue.revenue_impact) w += Math.min(100, issue.revenue_impact / 50);
+            else if (issue.severity === 'critical') w += 80;
+            else if (issue.severity === 'warning') w += 40;
+            else w += 10;
+            if (source === 'Redirects & 404s') w += 20;
+            if (issue.title && (issue.title.includes('LCP') || issue.title.includes('CLS') || issue.title.includes('INP'))) w += 10;
+            if (issue.traffic_hits) w += Math.min(20, issue.traffic_hits / 50);
+            return Math.round(w);
+        }
+
+        // --- Issue Tracker (localStorage) ---
+        const issueTracker = {
+            storageKey: 'site_intel_issue_status',
+            data: JSON.parse(localStorage.getItem('site_intel_issue_status') || '{}'),
+            getKey(source, title) { return btoa(unescape(encodeURIComponent(source + '|' + title))).slice(0, 32); },
+            getStatus(source, title) { return this.data[this.getKey(source, title)] || null; },
+            setStatus(source, title, status, owner) {
+                const key = this.getKey(source, title);
+                if (!status) { delete this.data[key]; }
+                else { this.data[key] = { status, owner: owner || '', updatedAt: new Date().toISOString() }; }
+                localStorage.setItem(this.storageKey, JSON.stringify(this.data));
+            }
+        };
+        let showResolved = false;
+
+        // --- Trend Helpers ---
+        function trendBadge(current, previous, higherIsBetter) {
+            if (previous === null || previous === undefined || current === null || current === undefined) return '';
+            const pct = previous === 0 ? 0 : Math.round(((current - previous) / Math.abs(previous)) * 100);
+            if (Math.abs(pct) < 5) return '<span class="trend-badge trend-flat">Stable</span>';
+            const up = pct > 0;
+            const good = up === higherIsBetter;
+            const cls = up ? (good ? 'trend-up-good' : 'trend-up-bad') : (good ? 'trend-down-good' : 'trend-down-bad');
+            const arrow = up ? '&#9650;' : '&#9660;';
+            return '<span class="trend-badge ' + cls + '">' + arrow + ' ' + Math.abs(pct) + '%</span>';
+        }
+
         function toggleSection(id) {
             const body = document.getElementById(id + '-body');
             const header = body.previousElementSibling;
@@ -629,7 +770,12 @@
 
         function setScore(elementId, score) {
             const el = document.getElementById(elementId);
-            if (el) el.textContent = score !== null && score !== undefined ? Math.round(score) : '--';
+            if (!el) return;
+            const val = score !== null && score !== undefined ? Math.round(score) : '--';
+            // Preserve trend span by only updating the first text node
+            const first = el.firstChild;
+            if (first && first.nodeType === 3) { first.textContent = val; }
+            else { el.textContent = val; }
         }
 
         function setStatus(elementId, score) {
@@ -667,6 +813,53 @@
         // Store all issues by section for detail panel access
         const issueStore = {};
 
+        function renderIssueRow(issue, idx, listId) {
+            const sev = issue.severity || 'info';
+            const source = issueStore[listId] ? issueStore[listId].source : '';
+            const tracked = issueTracker.getStatus(source, issue.title || '');
+            const isResolved = tracked && (tracked.status === 'resolved' || tracked.status === 'false_positive');
+            if (isResolved && !showResolved) return '';
+
+            let linkHtml = '';
+            if (issue.file_path) {
+                const fp = issue.file_path;
+                if (issue.github_url) {
+                    linkHtml = '<div class="issue-link"><a href="' + esc(issue.github_url) + '" target="_blank" onclick="event.stopPropagation()">' + esc(fp) + (issue.line_number ? ':' + issue.line_number : '') + '</a></div>';
+                } else if (fp.endsWith('.liquid') || fp.endsWith('.js') || fp.endsWith('.json') || fp.endsWith('.css')) {
+                    linkHtml = '<div class="issue-file">' + esc(fp) + (issue.line_number ? ':' + issue.line_number : '') + '</div>';
+                } else {
+                    linkHtml = '<div class="issue-file">' + esc(fp) + '</div>';
+                }
+            }
+            let impactHtml = '';
+            if (issue.revenue_impact) impactHtml = '<div class="issue-detail" style="color:var(--red);font-weight:500">~$' + Math.round(issue.revenue_impact) + '/mo impact</div>';
+
+            let badgeHtml = '';
+            if (tracked) badgeHtml = '<span class="issue-status-badge ' + tracked.status + '">' + tracked.status.replace('_', ' ') + '</span>';
+
+            let confHtml = '';
+            if (issue.confidence_level) {
+                const cls = issue.confidence_level === 'high' ? 'high-conf' : issue.confidence_level === 'medium' ? 'med-conf' : 'low-conf';
+                confHtml = ' <span class="reliability-badge ' + cls + '">' + issue.confidence_level + '</span>';
+            } else if (issue.sample_size !== undefined) {
+                const cls = issue.sample_size >= 100 ? 'high-conf' : issue.sample_size >= 30 ? 'med-conf' : 'low-conf';
+                confHtml = ' <span class="reliability-badge ' + cls + '">n=' + issue.sample_size + '</span>';
+            }
+
+            return '<div class="issue-row' + (isResolved ? ' resolved' : '') + '" style="cursor:pointer" onclick="openIssueDetail(\'' + listId + '\',' + idx + ')">' +
+                '<div class="issue-severity sev-' + sev + '"></div>' +
+                '<div class="issue-body">' +
+                    '<div class="issue-title">' + esc(issue.title || issue.check_name || 'Issue') + confHtml + '</div>' +
+                    (issue.description ? '<div class="issue-detail">' + esc(issue.description) + '</div>' : '') +
+                    impactHtml +
+                    linkHtml +
+                    (issue.recommendation || issue.fix ? '<div class="issue-fix">' + esc(issue.recommendation || issue.fix) + '</div>' : '') +
+                '</div>' +
+                (badgeHtml ? badgeHtml : '') +
+                '<span class="chevron" style="color:var(--slate);font-size:11px;align-self:center;flex-shrink:0">&#9654;</span>' +
+            '</div>';
+        }
+
         function renderIssues(listId, issues, emptyMsg, source) {
             const el = document.getElementById(listId);
             if (!el) return;
@@ -674,36 +867,65 @@
                 el.innerHTML = '<div class="empty-state">' + (emptyMsg || 'No issues found') + '</div>';
                 return;
             }
+            // Compute impact weights and sort
+            issues.forEach(i => { i.impactWeight = computeImpactWeight(i, source); });
+            issues.sort((a, b) => b.impactWeight - a.impactWeight);
+
             // Store issues for detail panel
             issueStore[listId] = { issues: issues, source: source || 'Issue' };
 
-            el.innerHTML = issues.slice(0, 10).map((issue, idx) => {
-                const sev = issue.severity || 'info';
-                let linkHtml = '';
-                if (issue.file_path) {
-                    const fp = issue.file_path;
-                    if (issue.github_url) {
-                        linkHtml = '<div class="issue-link"><a href="' + esc(issue.github_url) + '" target="_blank" onclick="event.stopPropagation()">' + esc(fp) + (issue.line_number ? ':' + issue.line_number : '') + '</a></div>';
-                    } else if (fp.endsWith('.liquid') || fp.endsWith('.js') || fp.endsWith('.json') || fp.endsWith('.css')) {
-                        linkHtml = '<div class="issue-file">' + esc(fp) + (issue.line_number ? ':' + issue.line_number : '') + '</div>';
-                    } else {
-                        linkHtml = '<div class="issue-file">' + esc(fp) + '</div>';
-                    }
-                }
-                let impactHtml = '';
-                if (issue.revenue_impact) impactHtml = '<div class="issue-detail" style="color:var(--red);font-weight:500">~$' + Math.round(issue.revenue_impact) + '/mo impact</div>';
-                return '<div class="issue-row" style="cursor:pointer" onclick="openIssueDetail(\'' + listId + '\',' + idx + ')">' +
-                    '<div class="issue-severity sev-' + sev + '"></div>' +
-                    '<div class="issue-body">' +
-                        '<div class="issue-title">' + esc(issue.title || issue.check_name || 'Issue') + '</div>' +
-                        (issue.description ? '<div class="issue-detail">' + esc(issue.description) + '</div>' : '') +
-                        impactHtml +
-                        linkHtml +
-                        (issue.recommendation || issue.fix ? '<div class="issue-fix">' + esc(issue.recommendation || issue.fix) + '</div>' : '') +
-                    '</div>' +
-                    '<span class="chevron" style="color:var(--slate);font-size:11px;align-self:center;flex-shrink:0">&#9654;</span>' +
-                '</div>';
-            }).join('');
+            el.innerHTML = issues.slice(0, 15).map((issue, idx) => renderIssueRow(issue, idx, listId)).join('');
+            if (!el.innerHTML.trim()) el.innerHTML = '<div class="empty-state">' + (emptyMsg || 'No issues found') + '</div>';
+        }
+
+        // Root-cause clustering renderer
+        const causeLabelMap = {
+            deleted_product: 'Deleted Products', old_url_structure: 'Changed URLs',
+            broken_external: 'External Broken Links', unknown: 'Unknown Cause',
+            liquid: 'Liquid Templates', javascript: 'JavaScript', css: 'CSS',
+            json: 'JSON', security: 'Security', performance: 'Performance', accessibility: 'Accessibility'
+        };
+
+        function renderClusteredIssues(listId, issues, emptyMsg, source, groupKey) {
+            const el = document.getElementById(listId);
+            if (!el) return;
+            if (!issues || issues.length === 0) {
+                el.innerHTML = '<div class="empty-state">' + (emptyMsg || 'No issues found') + '</div>';
+                return;
+            }
+            issues.forEach(i => { i.impactWeight = computeImpactWeight(i, source); });
+            issues.sort((a, b) => b.impactWeight - a.impactWeight);
+            issueStore[listId] = { issues: issues, source: source || 'Issue' };
+
+            // Group by key
+            const groups = {};
+            issues.forEach((issue, idx) => {
+                const key = issue[groupKey] || 'other';
+                if (!groups[key]) groups[key] = [];
+                groups[key].push({ issue, idx });
+            });
+
+            // Sort groups by total weight
+            const sortedGroups = Object.entries(groups).sort((a, b) => {
+                const wa = a[1].reduce((s, i) => s + i.issue.impactWeight, 0);
+                const wb = b[1].reduce((s, i) => s + i.issue.impactWeight, 0);
+                return wb - wa;
+            });
+
+            let html = '';
+            sortedGroups.forEach(([key, items]) => {
+                const label = causeLabelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                const cid = listId + '_' + key;
+                html += '<div class="cluster-header" onclick="document.getElementById(\'' + cid + '\').classList.toggle(\'collapsed\')">' +
+                    '<span>' + esc(label) + '</span><span class="cluster-count">' + items.length + '</span></div>';
+                html += '<div class="cluster-body" id="' + cid + '">';
+                items.slice(0, 8).forEach(({ issue, idx }) => {
+                    html += renderIssueRow(issue, idx, listId);
+                });
+                html += '</div>';
+            });
+            el.innerHTML = html;
+            if (!el.innerHTML.trim()) el.innerHTML = '<div class="empty-state">' + (emptyMsg || 'No issues found') + '</div>';
         }
 
         function esc(str) {
@@ -715,9 +937,12 @@
 
         // --- Issue Detail Panel ---
 
+        let currentDetailListId = null, currentDetailIdx = null;
+
         function openIssueDetail(listId, idx) {
             const store = issueStore[listId];
             if (!store || !store.issues[idx]) return;
+            currentDetailListId = listId; currentDetailIdx = idx;
             const issue = store.issues[idx];
             const source = store.source;
 
@@ -742,7 +967,22 @@
         function buildDetailHTML(issue, source) {
             const sev = issue.severity || 'info';
             const sevLabel = { critical: 'Critical', warning: 'Warning', info: 'Info' }[sev] || sev;
+            const tracked = issueTracker.getStatus(source, issue.title || '');
+            const curStatus = tracked ? tracked.status : '';
+            const curOwner = tracked ? tracked.owner : '';
             let html = '';
+
+            // Status controls
+            html += '<div class="status-controls">' +
+                '<select onchange="updateIssueStatus(this.value)">' +
+                    '<option value=""' + (!curStatus ? ' selected' : '') + '>Open</option>' +
+                    '<option value="acknowledged"' + (curStatus === 'acknowledged' ? ' selected' : '') + '>Acknowledged</option>' +
+                    '<option value="investigating"' + (curStatus === 'investigating' ? ' selected' : '') + '>Investigating</option>' +
+                    '<option value="resolved"' + (curStatus === 'resolved' ? ' selected' : '') + '>Resolved</option>' +
+                    '<option value="false_positive"' + (curStatus === 'false_positive' ? ' selected' : '') + '>False Positive</option>' +
+                '</select>' +
+                '<input type="text" placeholder="Owner" value="' + esc(curOwner) + '" onchange="updateIssueOwner(this.value)">' +
+            '</div>';
 
             // Severity badge + title
             html += '<div><span class="detail-sev-badge ' + sev + '">' +
@@ -759,45 +999,127 @@
             html += '<div class="detail-meta-grid">';
             html += '<div class="detail-meta-item"><div class="detail-meta-label">Source</div><div class="detail-meta-value">' + esc(source) + '</div></div>';
             html += '<div class="detail-meta-item"><div class="detail-meta-label">Severity</div><div class="detail-meta-value">' + esc(sevLabel) + '</div></div>';
-            if (issue.category) {
-                html += '<div class="detail-meta-item"><div class="detail-meta-label">Category</div><div class="detail-meta-value">' + esc(issue.category) + '</div></div>';
-            }
-            if (issue.file_path) {
-                html += '<div class="detail-meta-item"><div class="detail-meta-label">Location</div><div class="detail-meta-value" style="font-family:monospace;font-size:12px">' + esc(issue.file_path) + (issue.line_number ? ':' + issue.line_number : '') + '</div></div>';
-            }
+            if (issue.category) html += '<div class="detail-meta-item"><div class="detail-meta-label">Category</div><div class="detail-meta-value">' + esc(issue.category) + '</div></div>';
+            if (issue.file_path) html += '<div class="detail-meta-item"><div class="detail-meta-label">Location</div><div class="detail-meta-value" style="font-family:monospace;font-size:12px">' + esc(issue.file_path) + (issue.line_number ? ':' + issue.line_number : '') + '</div></div>';
+            if (issue.confidence_level) html += '<div class="detail-meta-item"><div class="detail-meta-label">Confidence</div><div class="detail-meta-value">' + esc(issue.confidence_level) + '</div></div>';
+            if (issue.sample_size !== undefined) html += '<div class="detail-meta-item"><div class="detail-meta-label">Sample Size</div><div class="detail-meta-value">' + issue.sample_size + ' events</div></div>';
+            if (issue.impactWeight) html += '<div class="detail-meta-item"><div class="detail-meta-label">Impact Score</div><div class="detail-meta-value">' + issue.impactWeight + '/100</div></div>';
             html += '</div>';
 
             // Evidence section
             const evidence = buildEvidence(issue, source);
             if (evidence) {
-                html += '<div class="detail-section">' +
-                    '<div class="detail-section-header">Evidence</div>' +
-                    '<div class="detail-section-body">' + evidence + '</div>' +
-                '</div>';
+                html += '<div class="detail-section"><div class="detail-section-header">Evidence</div><div class="detail-section-body">' + evidence + '</div></div>';
             }
 
-            // Root cause section
-            const rootCause = buildRootCause(issue, source);
-            html += '<div class="detail-section">' +
-                '<div class="detail-section-header">Root Cause</div>' +
-                '<div class="detail-section-body">' + rootCause + '</div>' +
-            '</div>';
+            // Root cause
+            html += '<div class="detail-section"><div class="detail-section-header">Root Cause</div><div class="detail-section-body">' + buildRootCause(issue, source) + '</div></div>';
 
-            // Recommended fix section
-            const fixSteps = buildFixSteps(issue, source);
-            html += '<div class="detail-section">' +
-                '<div class="detail-section-header">Recommended Fix</div>' +
-                '<div class="detail-section-body">' + fixSteps + '</div>' +
-            '</div>';
+            // Fix steps
+            html += '<div class="detail-section"><div class="detail-section-header">Recommended Fix</div><div class="detail-section-body">' + buildFixSteps(issue, source) + '</div></div>';
 
-            // File link (if GitHub URL available)
-            if (issue.github_url) {
-                html += '<a class="detail-file-link" href="' + esc(issue.github_url) + '" target="_blank">View in GitHub &rarr;</a>';
-            } else if (issue.file_path && (issue.file_path.endsWith('.liquid') || issue.file_path.endsWith('.js') || issue.file_path.endsWith('.css') || issue.file_path.endsWith('.json'))) {
-                html += '<span class="detail-file-link">' + esc(issue.file_path) + (issue.line_number ? ':' + issue.line_number : '') + '</span>';
+            // Evidence links
+            const eLinks = buildEvidenceLinks(issue, source);
+            if (eLinks.length > 0) {
+                html += '<div class="detail-section"><div class="detail-section-header">Evidence &amp; Links</div><div class="detail-section-body"><div class="evidence-links">';
+                eLinks.forEach(l => { html += '<a class="evidence-link" href="' + esc(l.url) + '" target="_blank">' + esc(l.label) + ' &rarr;</a>'; });
+                html += '</div></div></div>';
+            }
+
+            // Action buttons
+            const actions = getActions(issue, source);
+            if (actions.length > 0) {
+                html += '<div class="action-buttons">';
+                actions.forEach(a => {
+                    if (a.type === 'link') {
+                        html += '<a class="action-btn' + (a.primary ? ' primary' : '') + '" href="' + esc(a.url) + '" target="_blank">' + esc(a.label) + '</a>';
+                    } else {
+                        html += '<button class="action-btn' + (a.primary ? ' primary' : '') + '" onclick="executeAction(\'' + esc(a.endpoint) + '\',\'' + esc(a.label) + '\',this)">' + esc(a.label) + '</button>';
+                    }
+                });
+                html += '</div>';
             }
 
             return html;
+        }
+
+        function updateIssueStatus(status) {
+            if (!currentDetailListId || currentDetailIdx === null) return;
+            const store = issueStore[currentDetailListId];
+            if (!store) return;
+            const issue = store.issues[currentDetailIdx];
+            const tracked = issueTracker.getStatus(store.source, issue.title || '');
+            issueTracker.setStatus(store.source, issue.title || '', status, tracked ? tracked.owner : '');
+        }
+
+        function updateIssueOwner(owner) {
+            if (!currentDetailListId || currentDetailIdx === null) return;
+            const store = issueStore[currentDetailListId];
+            if (!store) return;
+            const issue = store.issues[currentDetailIdx];
+            const tracked = issueTracker.getStatus(store.source, issue.title || '');
+            issueTracker.setStatus(store.source, issue.title || '', tracked ? tracked.status : 'acknowledged', owner);
+        }
+
+        function buildEvidenceLinks(issue, source) {
+            const links = [];
+            if (source === 'Redirects & 404s') {
+                links.push({ label: 'Shopify URL Redirects', url: 'https://admin.shopify.com/store/cass-brothers/settings/redirects' });
+                if (issue.title && issue.title.startsWith('404:')) {
+                    const path = issue.title.replace('404: ', '');
+                    links.push({ label: 'View 404 page', url: 'https://cassbrothers.com.au' + path });
+                }
+            }
+            if (source === 'Code Health' && issue.github_url) {
+                links.push({ label: 'View in GitHub', url: issue.github_url });
+            }
+            if (source === 'Site Performance' && issue.file_path) {
+                links.push({ label: 'PageSpeed Insights', url: 'https://pagespeed.web.dev/analysis?url=https://cassbrothers.com.au' + issue.file_path });
+            }
+            if (source === 'Data Quality') {
+                links.push({ label: 'Freshness Report', url: '/data-quality/freshness' });
+            }
+            return links;
+        }
+
+        function getActions(issue, source) {
+            const actions = [];
+            if (source === 'Redirects & 404s' && issue.title && issue.title.startsWith('404:')) {
+                actions.push({ label: 'Create Redirect', type: 'link', url: 'https://admin.shopify.com/store/cass-brothers/settings/redirects', primary: true });
+            }
+            if (source === 'Code Health' && issue.github_url) {
+                actions.push({ label: 'Open in GitHub', type: 'link', url: issue.github_url });
+            }
+            if (source === 'Data Quality' && issue.title && issue.title.includes('stale')) {
+                const syncSrc = detectSyncSource(issue.title);
+                actions.push({ label: 'Run Sync Now', type: 'api', endpoint: '/sync/' + syncSrc, primary: true });
+            }
+            if (source === 'Site Performance' && issue.file_path) {
+                actions.push({ label: 'PageSpeed Insights', type: 'link', url: 'https://pagespeed.web.dev/analysis?url=https://cassbrothers.com.au' + issue.file_path });
+            }
+            return actions;
+        }
+
+        function detectSyncSource(title) {
+            const t = title.toLowerCase();
+            if (t.includes('shopify')) return 'shopify';
+            if (t.includes('ga4') || t.includes('analytics') || t.includes('traffic')) return 'ga4';
+            if (t.includes('search_console') || t.includes('gsc')) return 'search-console';
+            if (t.includes('google_ads') || t.includes('ads_campaign')) return 'google-ads';
+            if (t.includes('merchant')) return 'merchant-center';
+            return 'all';
+        }
+
+        async function executeAction(endpoint, label, btn) {
+            if (!confirm('Run "' + label + '" now?')) return;
+            btn.disabled = true; btn.textContent = 'Running...';
+            try {
+                const res = await fetch(endpoint, { method: 'POST' });
+                if (res.ok) {
+                    btn.textContent = 'Done!'; btn.style.background = 'var(--green)'; btn.style.color = '#fff';
+                    setTimeout(() => loadAll(), 3000);
+                } else { btn.textContent = 'Failed'; btn.style.background = 'var(--red)'; btn.style.color = '#fff'; }
+            } catch (e) { btn.textContent = 'Error'; btn.style.background = 'var(--red)'; btn.style.color = '#fff'; }
         }
 
         function buildEvidence(issue, source) {
@@ -1031,7 +1353,7 @@
 
         async function loadSitePerformance() {
             try {
-                const res = await fetch('/site-health/summary');
+                const res = await fetch('/site-health/summary?hours=' + getWindowParams().hours);
                 const data = await res.json();
                 const d = data.data || data;
 
@@ -1045,10 +1367,11 @@
                 const lcpRaw = cwv.LCP || cwv.lcp;
                 if (lcpRaw !== null && lcpRaw !== undefined) {
                     const lcpVal = typeof lcpRaw === 'object' ? (lcpRaw.p75 || lcpRaw.value) : lcpRaw;
+                    const lcpSamples = typeof lcpRaw === 'object' ? lcpRaw.sample_size : undefined;
                     if (lcpVal) {
-                        const lcpMs = lcpVal > 100 ? lcpVal : lcpVal * 1000; // handle s vs ms
-                        if (lcpMs > 4000) { issues.push({ severity: 'critical', title: 'LCP is poor: ' + (lcpMs / 1000).toFixed(1) + 's', description: 'Largest Contentful Paint should be under 2.5s', recommendation: 'Optimize images, reduce server response time' }); allCriticalIssues.push({ source: 'Performance', title: 'LCP is ' + (lcpMs / 1000).toFixed(1) + 's (poor)' }); score -= 25; }
-                        else if (lcpMs > 2500) { issues.push({ severity: 'warning', title: 'LCP needs improvement: ' + (lcpMs / 1000).toFixed(1) + 's', description: 'Target under 2.5s for good experience', recommendation: 'Optimize largest image/text block' }); score -= 10; }
+                        const lcpMs = lcpVal > 100 ? lcpVal : lcpVal * 1000;
+                        if (lcpMs > 4000) { issues.push({ severity: 'critical', title: 'LCP is poor: ' + (lcpMs / 1000).toFixed(1) + 's', description: 'Largest Contentful Paint should be under 2.5s', recommendation: 'Optimize images, reduce server response time', sample_size: lcpSamples }); allCriticalIssues.push({ source: 'Performance', title: 'LCP is ' + (lcpMs / 1000).toFixed(1) + 's (poor)' }); score -= 25; }
+                        else if (lcpMs > 2500) { issues.push({ severity: 'warning', title: 'LCP needs improvement: ' + (lcpMs / 1000).toFixed(1) + 's', description: 'Target under 2.5s for good experience', recommendation: 'Optimize largest image/text block', sample_size: lcpSamples }); score -= 10; }
                     }
                 }
 
@@ -1056,9 +1379,10 @@
                 const clsRaw = cwv.CLS || cwv.cls;
                 if (clsRaw !== null && clsRaw !== undefined) {
                     const clsVal = typeof clsRaw === 'object' ? (clsRaw.p75 || clsRaw.value) : clsRaw;
+                    const clsSamples = typeof clsRaw === 'object' ? clsRaw.sample_size : undefined;
                     if (clsVal) {
-                        if (clsVal > 0.25) { issues.push({ severity: 'critical', title: 'CLS is poor: ' + clsVal.toFixed(3), description: 'Cumulative Layout Shift should be under 0.1', recommendation: 'Set dimensions on images/ads, avoid dynamic content injection' }); score -= 20; }
-                        else if (clsVal > 0.1) { issues.push({ severity: 'warning', title: 'CLS needs improvement: ' + clsVal.toFixed(3), description: 'Target under 0.1', recommendation: 'Reserve space for dynamic content' }); score -= 8; }
+                        if (clsVal > 0.25) { issues.push({ severity: 'critical', title: 'CLS is poor: ' + clsVal.toFixed(3), description: 'Cumulative Layout Shift should be under 0.1', recommendation: 'Set dimensions on images/ads, avoid dynamic content injection', sample_size: clsSamples }); score -= 20; }
+                        else if (clsVal > 0.1) { issues.push({ severity: 'warning', title: 'CLS needs improvement: ' + clsVal.toFixed(3), description: 'Target under 0.1', recommendation: 'Reserve space for dynamic content', sample_size: clsSamples }); score -= 8; }
                     }
                 }
 
@@ -1066,9 +1390,10 @@
                 const inpRaw = cwv.INP || cwv.inp;
                 if (inpRaw !== null && inpRaw !== undefined) {
                     const inpVal = typeof inpRaw === 'object' ? (inpRaw.p75 || inpRaw.value) : inpRaw;
+                    const inpSamples = typeof inpRaw === 'object' ? inpRaw.sample_size : undefined;
                     if (inpVal) {
-                        if (inpVal > 500) { issues.push({ severity: 'critical', title: 'INP is poor: ' + inpVal + 'ms', description: 'Interaction to Next Paint should be under 200ms', recommendation: 'Reduce JavaScript execution time, optimize event handlers' }); score -= 20; }
-                        else if (inpVal > 200) { issues.push({ severity: 'warning', title: 'INP needs improvement: ' + inpVal + 'ms', description: 'Target under 200ms', recommendation: 'Optimize interaction responsiveness' }); score -= 8; }
+                        if (inpVal > 500) { issues.push({ severity: 'critical', title: 'INP is poor: ' + inpVal + 'ms', description: 'Interaction to Next Paint should be under 200ms', recommendation: 'Reduce JavaScript execution time, optimize event handlers', sample_size: inpSamples }); score -= 20; }
+                        else if (inpVal > 200) { issues.push({ severity: 'warning', title: 'INP needs improvement: ' + inpVal + 'ms', description: 'Target under 200ms', recommendation: 'Optimize interaction responsiveness', sample_size: inpSamples }); score -= 8; }
                     }
                 }
 
@@ -1149,7 +1474,7 @@
                 setStatus('ch-status', score);
                 setBadge('ch-badge', score);
                 document.getElementById('ch-issues').textContent = total;
-                renderIssues('ch-list', issues, 'No code issues found. Theme looks clean!', 'Code Health');
+                renderClusteredIssues('ch-list', issues, 'No code issues found. Theme looks clean!', 'Code Health', 'category');
                 return score;
             } catch (e) {
                 document.getElementById('ch-list').innerHTML = '<div class="empty-state">Could not load code health. Is GitHub connected?</div>';
@@ -1159,7 +1484,7 @@
 
         async function loadRedirectHealth() {
             try {
-                const res = await fetch('/redirects/dashboard');
+                const res = await fetch('/redirects/dashboard?days=' + getWindowParams().days);
                 const data = await res.json();
                 const d = data.data || data;
 
@@ -1174,9 +1499,12 @@
                     errors404.slice(0, 4).forEach(e => {
                         const traffic = e.traffic || {};
                         const hits = traffic.total_hits || e.total_hits || e.hit_count || 0;
-                        const revenue = (e.revenue_impact || {}).estimated_monthly_revenue_loss || e.estimated_lost_revenue || 0;
+                        const revImpact = e.revenue_impact || {};
+                        const revenue = revImpact.estimated_monthly_revenue_loss || e.estimated_lost_revenue || 0;
+                        const confidence = revImpact.confidence_level || null;
+                        const cause = e.likely_cause || (e.requested_url && e.requested_url.includes('/products/') ? 'deleted_product' : 'unknown');
                         const sev = hits > 100 ? 'critical' : hits > 20 ? 'warning' : 'info';
-                        issues.push({ severity: sev, title: '404: ' + (e.requested_url || e.url_path || e.url), description: hits + ' hits' + (revenue ? ' / ~$' + Math.round(revenue) + '/mo lost' : ''), revenue_impact: revenue, recommendation: (e.recommended_redirect || {}).action || e.recommended_action || 'Create redirect or restore page' });
+                        issues.push({ severity: sev, title: '404: ' + (e.requested_url || e.url_path || e.url), description: hits + ' hits' + (revenue ? ' / ~$' + Math.round(revenue) + '/mo lost' : ''), revenue_impact: revenue, confidence_level: confidence, likely_cause: cause, traffic_hits: hits, recommendation: (e.recommended_redirect || {}).action || e.recommended_action || 'Create redirect or restore page' });
                         totalRevenueAtRisk += revenue;
                         if (sev === 'critical') { allCriticalIssues.push({ source: 'Redirects', title: '404 with ' + hits + ' hits: ' + (e.requested_url || e.url), revenue: revenue }); score -= 15; }
                         else if (sev === 'warning') score -= 5;
@@ -1186,11 +1514,11 @@
                 // Redirect issues from redirect_issues_summary
                 const redirectSummary = d.redirect_issues_summary || {};
                 if (redirectSummary.redirect_chains > 0) {
-                    issues.push({ severity: 'warning', title: redirectSummary.redirect_chains + ' redirect chain(s) detected', description: 'Multiple hops slow down page loads and waste crawl budget', recommendation: 'Simplify to single direct redirects' });
+                    issues.push({ severity: 'warning', title: redirectSummary.redirect_chains + ' redirect chain(s) detected', description: 'Multiple hops slow down page loads and waste crawl budget', recommendation: 'Simplify to single direct redirects', likely_cause: 'redirect_chain' });
                     score -= 5 * redirectSummary.redirect_chains;
                 }
                 if (redirectSummary.broken_redirects > 0) {
-                    issues.push({ severity: 'critical', title: redirectSummary.broken_redirects + ' broken redirect(s)', description: 'Redirects pointing to non-existent pages', recommendation: 'Fix redirect destinations' });
+                    issues.push({ severity: 'critical', title: redirectSummary.broken_redirects + ' broken redirect(s)', description: 'Redirects pointing to non-existent pages', recommendation: 'Fix redirect destinations', likely_cause: 'broken_redirect' });
                     allCriticalIssues.push({ source: 'Redirects', title: redirectSummary.broken_redirects + ' broken redirects' });
                     score -= 15;
                 }
@@ -1200,7 +1528,7 @@
                 const brokenLinks = brokenSummary.top_links || d.broken_links || [];
                 if (Array.isArray(brokenLinks)) {
                     brokenLinks.slice(0, 3).forEach(b => {
-                        issues.push({ severity: b.priority === 'high' ? 'warning' : 'info', title: 'Broken link on ' + (b.source_page || 'page'), description: 'Links to: ' + (b.broken_link || b.broken_url || b.url), recommendation: b.recommended_fix || 'Fix or remove broken link' });
+                        issues.push({ severity: b.priority === 'high' ? 'warning' : 'info', title: 'Broken link on ' + (b.source_page || 'page'), description: 'Links to: ' + (b.broken_link || b.broken_url || b.url), recommendation: b.recommended_fix || 'Fix or remove broken link', likely_cause: 'broken_external' });
                     });
                 }
 
@@ -1208,7 +1536,7 @@
                 const priorities = d.top_priorities || [];
                 if (Array.isArray(priorities) && issues.length === 0) {
                     priorities.slice(0, 3).forEach(p => {
-                        issues.push({ severity: p.priority === 'high' ? 'warning' : 'info', title: p.title, description: p.description, recommendation: p.action || '' });
+                        issues.push({ severity: p.priority === 'high' ? 'warning' : 'info', title: p.title, description: p.description, recommendation: p.action || '', likely_cause: 'unknown' });
                     });
                 }
 
@@ -1223,7 +1551,7 @@
                 setStatus('rh-status', score);
                 setBadge('rh-badge', score);
                 document.getElementById('rh-issues').textContent = issues.length;
-                renderIssues('rh-list', issues, 'No redirect issues found', 'Redirects & 404s');
+                renderClusteredIssues('rh-list', issues, 'No redirect issues found', 'Redirects & 404s', 'likely_cause');
                 return score;
             } catch (e) {
                 document.getElementById('rh-list').innerHTML = '<div class="empty-state">Could not load redirect health</div>';
@@ -1270,22 +1598,33 @@
             const panel = document.getElementById('priorities-panel');
             const list = document.getElementById('priorities-list');
 
-            // Build priority list from all critical issues + high revenue items
-            const items = allCriticalIssues
-                .map(i => ({ ...i, weight: (i.revenue || 0) + (i.source === 'Code Health' ? 5 : 10) }))
-                .sort((a, b) => b.weight - a.weight)
-                .slice(0, 3);
+            // Gather top issues from all issueStore sections by impactWeight
+            const allIssues = [];
+            Object.entries(issueStore).forEach(([listId, store]) => {
+                (store.issues || []).forEach(issue => {
+                    const tracked = issueTracker.getStatus(store.source, issue.title || '');
+                    const isResolved = tracked && (tracked.status === 'resolved' || tracked.status === 'false_positive');
+                    if (!isResolved) {
+                        allIssues.push({ ...issue, _source: store.source, _listId: listId });
+                    }
+                });
+            });
 
-            if (items.length === 0) { panel.style.display = 'none'; return; }
+            // Sort by impactWeight descending, take top 5
+            allIssues.sort((a, b) => (b.impactWeight || 0) - (a.impactWeight || 0));
+            const topItems = allIssues.slice(0, 5);
+
+            if (topItems.length === 0) { panel.style.display = 'none'; return; }
             panel.style.display = '';
 
-            list.innerHTML = items.map((item, idx) => {
+            list.innerHTML = topItems.map((item, idx) => {
+                const sev = item.severity || 'info';
                 return '<div class="priority-item">' +
                     '<div class="priority-num">' + (idx + 1) + '</div>' +
                     '<div class="priority-body">' +
-                        '<div class="priority-title">' + esc(item.title) + '</div>' +
-                        (item.revenue ? '<div class="priority-impact">~$' + Math.round(item.revenue) + '/mo at risk</div>' : '') +
-                        '<div class="priority-action">' + esc(item.source) + '</div>' +
+                        '<div class="priority-title">' + esc(item.title || item.check_name || 'Issue') + '</div>' +
+                        (item.revenue_impact ? '<div class="priority-impact">~$' + Math.round(item.revenue_impact) + '/mo at risk</div>' : '') +
+                        '<div class="priority-action">' + esc(item._source) + ' &middot; Impact: ' + (item.impactWeight || 0) + '</div>' +
                     '</div>' +
                 '</div>';
             }).join('');
@@ -1328,7 +1667,7 @@
             allCriticalIssues = [];
             totalRevenueAtRisk = 0;
 
-            // Load freshness early (comes from DQ endpoint)
+            // Load all sections in parallel
             const dqPromise = loadDataQuality();
             const spPromise = loadSitePerformance();
             const chPromise = loadCodeHealth();
@@ -1340,6 +1679,26 @@
             const scores = [dqScore, spScore, chScore, rhScore].filter(s => s !== null);
             const overall = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
             setScoreRing(overall);
+
+            // --- Trend context ---
+            const historyKey = 'site_intel_scores_history';
+            const history = JSON.parse(localStorage.getItem(historyKey) || '[]');
+            const today = new Date().toISOString().slice(0, 10);
+            // Dedup by date - replace today's entry if exists
+            const filtered = history.filter(h => h.date !== today);
+            filtered.push({ date: today, dq: dqScore, sp: spScore, ch: chScore, rh: rhScore });
+            // Keep last 7 entries
+            const trimmed = filtered.slice(-7);
+            localStorage.setItem(historyKey, JSON.stringify(trimmed));
+
+            // Compare current to oldest entry for trend badges
+            if (trimmed.length >= 2) {
+                const oldest = trimmed[0];
+                document.getElementById('dq-trend').innerHTML = trendBadge(dqScore, oldest.dq, true);
+                document.getElementById('sp-trend').innerHTML = trendBadge(spScore, oldest.sp, true);
+                document.getElementById('ch-trend').innerHTML = trendBadge(chScore, oldest.ch, true);
+                document.getElementById('rh-trend').innerHTML = trendBadge(rhScore, oldest.rh, true);
+            }
 
             // Count total issues
             const totalIssues = ['dq-issues', 'sp-issues', 'ch-issues', 'rh-issues']

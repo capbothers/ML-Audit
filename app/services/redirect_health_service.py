@@ -498,9 +498,9 @@ class RedirectHealthService:
             "high_priority_broken_links": len([l for l in broken_links if l['priority'] == 'high'])
         }
 
-    async def get_404_dashboard(self) -> Dict:
+    async def get_404_dashboard(self, days: int = 30) -> Dict:
         """Get complete 404 & redirect dashboard"""
-        analysis = await self.analyze_404_health()
+        analysis = await self.analyze_404_health(days=days)
 
         return {
             "overview": {

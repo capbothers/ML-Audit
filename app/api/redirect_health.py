@@ -17,6 +17,7 @@ router = APIRouter(prefix="/redirects", tags=["redirects"])
 
 @router.get("/dashboard")
 async def get_redirect_dashboard(
+    days: int = Query(30, description="Number of days to analyze"),
     db: Session = Depends(get_db)
 ):
     """
@@ -32,7 +33,7 @@ async def get_redirect_dashboard(
     """
     try:
         service = RedirectHealthService(db)
-        dashboard = await service.get_404_dashboard()
+        dashboard = await service.get_404_dashboard(days=days)
 
         return {
             "success": True,
