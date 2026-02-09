@@ -495,7 +495,8 @@
         .issue-status-badge.investigating { background: rgba(31,111,107,0.1); color: var(--cass-teal); }
         .issue-status-badge.resolved { background: var(--green-bg); color: var(--green); }
         .issue-status-badge.false_positive { background: rgba(107,102,112,0.1); color: var(--slate); }
-        .show-resolved-toggle { font-size: 12px; color: var(--cass-teal); cursor: pointer; padding: 6px 0; }
+        .show-resolved-toggle { font-size: 12px; color: var(--slate); cursor: pointer; padding: 6px 10px; display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+        .show-resolved-toggle input { cursor: pointer; }
 
         /* Action Buttons */
         .action-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); }
@@ -561,6 +562,9 @@
                     <p class="time-pill" id="last-refresh">Loading...</p>
                 </div>
                 <div style="display:flex;align-items:center;gap:12px">
+                    <label class="show-resolved-toggle" title="Show resolved & false-positive issues">
+                        <input type="checkbox" id="show-resolved-cb" onchange="toggleShowResolved(this.checked)"> Show resolved
+                    </label>
                     <div class="time-toggle" id="time-toggle">
                         <button class="time-btn" data-window="24h" onclick="setTimeWindow('24h')">24h</button>
                         <button class="time-btn active" data-window="7d" onclick="setTimeWindow('7d')">7d</button>
@@ -738,10 +742,15 @@
         const issueTracker = {
             storageKey: 'site_intel_issue_status',
             data: JSON.parse(localStorage.getItem('site_intel_issue_status') || '{}'),
-            getKey(source, title) { return btoa(unescape(encodeURIComponent(source + '|' + title))).slice(0, 32); },
-            getStatus(source, title) { return this.data[this.getKey(source, title)] || null; },
-            setStatus(source, title, status, owner) {
-                const key = this.getKey(source, title);
+            getKey(source, issue) {
+                // Use source + title + file_path/description for uniqueness
+                const fp = (typeof issue === 'object') ? (issue.file_path || issue.description || '') : '';
+                const title = (typeof issue === 'object') ? (issue.title || '') : issue;
+                return btoa(unescape(encodeURIComponent(source + '|' + title + '|' + fp))).slice(0, 40);
+            },
+            getStatus(source, issue) { return this.data[this.getKey(source, issue)] || null; },
+            setStatus(source, issue, status, owner) {
+                const key = this.getKey(source, issue);
                 if (!status) { delete this.data[key]; }
                 else { this.data[key] = { status, owner: owner || '', updatedAt: new Date().toISOString() }; }
                 localStorage.setItem(this.storageKey, JSON.stringify(this.data));
@@ -816,7 +825,7 @@
         function renderIssueRow(issue, idx, listId) {
             const sev = issue.severity || 'info';
             const source = issueStore[listId] ? issueStore[listId].source : '';
-            const tracked = issueTracker.getStatus(source, issue.title || '');
+            const tracked = issueTracker.getStatus(source, issue);
             const isResolved = tracked && (tracked.status === 'resolved' || tracked.status === 'false_positive');
             if (isResolved && !showResolved) return '';
 
@@ -895,7 +904,7 @@
             }
             issues.forEach(i => { i.impactWeight = computeImpactWeight(i, source); });
             issues.sort((a, b) => b.impactWeight - a.impactWeight);
-            issueStore[listId] = { issues: issues, source: source || 'Issue' };
+            issueStore[listId] = { issues: issues, source: source || 'Issue', clusteredBy: groupKey };
 
             // Group by key
             const groups = {};
@@ -915,7 +924,7 @@
             let html = '';
             sortedGroups.forEach(([key, items]) => {
                 const label = causeLabelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-                const cid = listId + '_' + key;
+                const cid = listId + '_' + key.replace(/[^a-zA-Z0-9_-]/g, '_');
                 html += '<div class="cluster-header" onclick="document.getElementById(\'' + cid + '\').classList.toggle(\'collapsed\')">' +
                     '<span>' + esc(label) + '</span><span class="cluster-count">' + items.length + '</span></div>';
                 html += '<div class="cluster-body" id="' + cid + '">';
@@ -967,7 +976,7 @@
         function buildDetailHTML(issue, source) {
             const sev = issue.severity || 'info';
             const sevLabel = { critical: 'Critical', warning: 'Warning', info: 'Info' }[sev] || sev;
-            const tracked = issueTracker.getStatus(source, issue.title || '');
+            const tracked = issueTracker.getStatus(source, issue);
             const curStatus = tracked ? tracked.status : '';
             const curOwner = tracked ? tracked.owner : '';
             let html = '';
@@ -1048,8 +1057,9 @@
             const store = issueStore[currentDetailListId];
             if (!store) return;
             const issue = store.issues[currentDetailIdx];
-            const tracked = issueTracker.getStatus(store.source, issue.title || '');
-            issueTracker.setStatus(store.source, issue.title || '', status, tracked ? tracked.owner : '');
+            const tracked = issueTracker.getStatus(store.source, issue);
+            issueTracker.setStatus(store.source, issue, status, tracked ? tracked.owner : '');
+            rerenderList(currentDetailListId);
         }
 
         function updateIssueOwner(owner) {
@@ -1057,8 +1067,26 @@
             const store = issueStore[currentDetailListId];
             if (!store) return;
             const issue = store.issues[currentDetailIdx];
-            const tracked = issueTracker.getStatus(store.source, issue.title || '');
-            issueTracker.setStatus(store.source, issue.title || '', tracked ? tracked.status : 'acknowledged', owner);
+            const tracked = issueTracker.getStatus(store.source, issue);
+            issueTracker.setStatus(store.source, issue, tracked ? tracked.status : 'acknowledged', owner);
+            rerenderList(currentDetailListId);
+        }
+
+        // Re-render a single issue list from its issueStore (preserves sort/cluster)
+        function rerenderList(listId) {
+            const store = issueStore[listId];
+            if (!store) return;
+            if (store.clusteredBy) {
+                renderClusteredIssues(listId, store.issues, '', store.source, store.clusteredBy);
+            } else {
+                renderIssues(listId, store.issues, '', store.source);
+            }
+        }
+
+        function toggleShowResolved(checked) {
+            showResolved = checked;
+            // Re-render all lists
+            Object.keys(issueStore).forEach(listId => rerenderList(listId));
         }
 
         function buildEvidenceLinks(issue, source) {
@@ -1602,7 +1630,7 @@
             const allIssues = [];
             Object.entries(issueStore).forEach(([listId, store]) => {
                 (store.issues || []).forEach(issue => {
-                    const tracked = issueTracker.getStatus(store.source, issue.title || '');
+                    const tracked = issueTracker.getStatus(store.source, issue);
                     const isResolved = tracked && (tracked.status === 'resolved' || tracked.status === 'false_positive');
                     if (!isResolved) {
                         allIssues.push({ ...issue, _source: store.source, _listId: listId });
