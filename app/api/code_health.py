@@ -11,6 +11,7 @@ from app.models.base import get_db
 from app.services.code_health_service import CodeHealthService
 from app.services.llm_service import LLMService
 from app.utils.logger import log
+from app.utils.cache import get_cached, set_cached, _MISS
 
 router = APIRouter(prefix="/code", tags=["code"])
 
@@ -346,10 +347,20 @@ async def get_code_issues(
     - recommendation: how to fix it
     """
     try:
-        service = CodeHealthService(db)
-        issues = await service.get_all_issues(severity=severity, category=category)
+        # Cache all issues for 1 hour (GitHub fetch is slow ~50s)
+        cache_key = "code_issues_all"
+        all_issues = get_cached(cache_key)
+        if all_issues is _MISS:
+            service = CodeHealthService(db)
+            all_issues = await service.get_all_issues()
+            set_cached(cache_key, all_issues, seconds=3600)
 
-        # Group by severity for summary
+        issues = all_issues
+        if severity:
+            issues = [i for i in issues if i['severity'] == severity]
+        if category:
+            issues = [i for i in issues if i['category'] == category]
+
         critical_count = len([i for i in issues if i['severity'] == 'critical'])
         warning_count = len([i for i in issues if i['severity'] == 'warning'])
         info_count = len([i for i in issues if i['severity'] == 'info'])
