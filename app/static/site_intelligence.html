@@ -238,6 +238,68 @@
 
         .empty-state { text-align: center; padding: 20px; color: var(--slate); font-size: 13px; }
 
+        .issue-link { font-size: 11px; margin-top: 3px; }
+        .issue-link a { color: var(--cass-teal); text-decoration: none; font-family: monospace; }
+        .issue-link a:hover { text-decoration: underline; }
+
+        /* KPI Strip */
+        .kpi-strip {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+            margin-bottom: 18px;
+        }
+        .kpi-item {
+            background: var(--card); border-radius: 14px; padding: 16px 20px;
+            border: 1px solid var(--line); box-shadow: var(--shadow);
+        }
+        .kpi-label { font-size: 12px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .kpi-value { font-size: 22px; font-weight: 600; font-family: "Space Grotesk", sans-serif; }
+        .kpi-revenue .kpi-value { color: var(--red); }
+        .kpi-issues .kpi-value { color: var(--ink); }
+        .kpi-new .kpi-value { color: var(--cass-gold); }
+
+        /* Priorities Panel */
+        .priorities-panel {
+            background: var(--card); border-radius: 16px; padding: 18px 22px;
+            border: 1px solid var(--line); box-shadow: var(--shadow); margin-bottom: 18px;
+        }
+        .priorities-panel h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; font-family: "Space Grotesk", sans-serif; }
+        .priority-item {
+            display: flex; align-items: flex-start; gap: 12px; padding: 10px 0;
+            border-bottom: 1px solid var(--line);
+        }
+        .priority-item:last-child { border-bottom: none; }
+        .priority-num {
+            flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
+            background: var(--cass-gold); color: #fff; font-weight: 600; font-size: 12px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .priority-body { flex: 1; }
+        .priority-title { font-weight: 500; font-size: 14px; }
+        .priority-impact { font-size: 12px; color: var(--red); font-weight: 500; margin-top: 2px; }
+        .priority-action { font-size: 12px; color: var(--slate); margin-top: 2px; }
+
+        /* Freshness Panel */
+        .freshness-panel {
+            background: var(--card); border-radius: 16px; padding: 18px 22px;
+            border: 1px solid var(--line); box-shadow: var(--shadow); margin-bottom: 18px;
+        }
+        .freshness-panel h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; font-family: "Space Grotesk", sans-serif; }
+        .freshness-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px;
+        }
+        .freshness-item {
+            padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line);
+            background: var(--pearl); font-size: 12px;
+        }
+        .freshness-source { font-weight: 500; color: var(--ink); margin-bottom: 3px; font-size: 13px; }
+        .freshness-age { color: var(--slate); }
+        .freshness-rows { color: var(--slate); font-size: 11px; }
+        .freshness-item.stale { border-color: rgba(166, 58, 58, 0.3); background: var(--red-bg); }
+        .freshness-item.fresh { border-color: rgba(47, 107, 58, 0.3); background: var(--green-bg); }
+        .freshness-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+        .freshness-dot.stale { background: var(--red); }
+        .freshness-dot.fresh { background: var(--green); }
+
         /* Two column grid for sections */
         .sections-grid {
             display: grid;
@@ -359,10 +421,38 @@
                 </div>
             </div>
 
+            <!-- KPI Impact Roll-up -->
+            <div class="kpi-strip" id="kpi-strip" style="display:none">
+                <div class="kpi-item kpi-revenue">
+                    <div class="kpi-label">Revenue at Risk</div>
+                    <div class="kpi-value" id="kpi-revenue">$0</div>
+                </div>
+                <div class="kpi-item kpi-issues">
+                    <div class="kpi-label">Total Issues</div>
+                    <div class="kpi-value" id="kpi-total-issues">0</div>
+                </div>
+                <div class="kpi-item kpi-new">
+                    <div class="kpi-label">New Since Last Visit</div>
+                    <div class="kpi-value" id="kpi-new-issues">--</div>
+                </div>
+            </div>
+
+            <!-- Top 3 Priorities -->
+            <div class="priorities-panel" id="priorities-panel" style="display:none">
+                <h3>Top Priorities</h3>
+                <div id="priorities-list"></div>
+            </div>
+
             <!-- Critical Issues -->
             <div class="critical-banner" id="critical-banner">
                 <h3 id="critical-title">Critical Issues</h3>
                 <div id="critical-list"></div>
+            </div>
+
+            <!-- Data Freshness -->
+            <div class="freshness-panel" id="freshness-panel" style="display:none">
+                <h3>Data Freshness</h3>
+                <div class="freshness-grid" id="freshness-grid"></div>
             </div>
 
             <!-- Section Cards -->
@@ -476,14 +566,28 @@
                 el.innerHTML = '<div class="empty-state">' + (emptyMsg || 'No issues found') + '</div>';
                 return;
             }
-            el.innerHTML = issues.slice(0, 8).map(issue => {
+            el.innerHTML = issues.slice(0, 10).map(issue => {
                 const sev = issue.severity || 'info';
+                let linkHtml = '';
+                if (issue.file_path) {
+                    const fp = issue.file_path;
+                    if (issue.github_url) {
+                        linkHtml = '<div class="issue-link"><a href="' + esc(issue.github_url) + '" target="_blank">' + esc(fp) + (issue.line_number ? ':' + issue.line_number : '') + '</a></div>';
+                    } else if (fp.endsWith('.liquid') || fp.endsWith('.js') || fp.endsWith('.json') || fp.endsWith('.css')) {
+                        linkHtml = '<div class="issue-file">' + esc(fp) + (issue.line_number ? ':' + issue.line_number : '') + '</div>';
+                    } else {
+                        linkHtml = '<div class="issue-file">' + esc(fp) + '</div>';
+                    }
+                }
+                let impactHtml = '';
+                if (issue.revenue_impact) impactHtml = '<div class="issue-detail" style="color:var(--red);font-weight:500">~$' + Math.round(issue.revenue_impact) + '/mo impact</div>';
                 return '<div class="issue-row">' +
                     '<div class="issue-severity sev-' + sev + '"></div>' +
                     '<div class="issue-body">' +
                         '<div class="issue-title">' + esc(issue.title || issue.check_name || 'Issue') + '</div>' +
                         (issue.description ? '<div class="issue-detail">' + esc(issue.description) + '</div>' : '') +
-                        (issue.file_path ? '<div class="issue-file">' + esc(issue.file_path) + (issue.line_number ? ':' + issue.line_number : '') + '</div>' : '') +
+                        impactHtml +
+                        linkHtml +
                         (issue.recommendation || issue.fix ? '<div class="issue-fix">' + esc(issue.recommendation || issue.fix) + '</div>' : '') +
                     '</div>' +
                 '</div>';
@@ -573,6 +677,10 @@
 
                 document.getElementById('dq-issues').textContent = issues.length || d.issues_found || 0;
                 renderIssues('dq-list', issues, 'All data sources are fresh and healthy');
+
+                // Render freshness panel
+                renderFreshness(d.freshness);
+
                 return score;
             } catch (e) {
                 document.getElementById('dq-list').innerHTML = '<div class="empty-state">Could not load data quality</div>';
@@ -719,8 +827,9 @@
                         const hits = traffic.total_hits || e.total_hits || e.hit_count || 0;
                         const revenue = (e.revenue_impact || {}).estimated_monthly_loss || e.estimated_lost_revenue || 0;
                         const sev = hits > 100 ? 'critical' : hits > 20 ? 'warning' : 'info';
-                        issues.push({ severity: sev, title: '404: ' + (e.requested_url || e.url_path || e.url), description: hits + ' hits' + (revenue ? ' / ~$' + Math.round(revenue) + '/mo lost' : ''), recommendation: (e.recommended_redirect || {}).action || e.recommended_action || 'Create redirect or restore page' });
-                        if (sev === 'critical') { allCriticalIssues.push({ source: 'Redirects', title: '404 with ' + hits + ' hits: ' + (e.requested_url || e.url) }); score -= 15; }
+                        issues.push({ severity: sev, title: '404: ' + (e.requested_url || e.url_path || e.url), description: hits + ' hits' + (revenue ? ' / ~$' + Math.round(revenue) + '/mo lost' : ''), revenue_impact: revenue, recommendation: (e.recommended_redirect || {}).action || e.recommended_action || 'Create redirect or restore page' });
+                        totalRevenueAtRisk += revenue;
+                        if (sev === 'critical') { allCriticalIssues.push({ source: 'Redirects', title: '404 with ' + hits + ' hits: ' + (e.requested_url || e.url), revenue: revenue }); score -= 15; }
                         else if (sev === 'warning') score -= 5;
                     });
                 }
@@ -773,25 +882,124 @@
             }
         }
 
+        // Track revenue at risk from redirects
+        let totalRevenueAtRisk = 0;
+
+        function renderFreshness(freshness) {
+            const panel = document.getElementById('freshness-panel');
+            const grid = document.getElementById('freshness-grid');
+            if (!freshness || !freshness.sources) { panel.style.display = 'none'; return; }
+            panel.style.display = '';
+
+            const sourceNames = {
+                'shopify_orders': 'Shopify Orders',
+                'shopify_order_items': 'Order Items',
+                'ga4_daily_summary': 'GA4 Analytics',
+                'ga4_traffic_sources': 'GA4 Traffic',
+                'search_console_queries': 'GSC Queries',
+                'search_console_pages': 'GSC Pages',
+                'google_ads_campaigns': 'Google Ads',
+                'merchant_center_statuses': 'Merchant Center'
+            };
+
+            const entries = Object.entries(freshness.sources);
+            grid.innerHTML = entries.map(([key, s]) => {
+                const name = sourceNames[key] || key.replace(/_/g, ' ');
+                const isStale = s.stale || s.status === 'stale';
+                const lagH = Math.round(s.lag_hours || 0);
+                const rows = s.rows || 0;
+                const age = lagH < 1 ? 'Just now' : lagH < 24 ? lagH + 'h ago' : Math.round(lagH / 24) + 'd ago';
+                return '<div class="freshness-item ' + (isStale ? 'stale' : 'fresh') + '">' +
+                    '<div class="freshness-source"><span class="freshness-dot ' + (isStale ? 'stale' : 'fresh') + '"></span>' + esc(name) + '</div>' +
+                    '<div class="freshness-age">' + age + '</div>' +
+                    '<div class="freshness-rows">' + rows.toLocaleString() + ' rows</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        function renderPriorities() {
+            const panel = document.getElementById('priorities-panel');
+            const list = document.getElementById('priorities-list');
+
+            // Build priority list from all critical issues + high revenue items
+            const items = allCriticalIssues
+                .map(i => ({ ...i, weight: (i.revenue || 0) + (i.source === 'Code Health' ? 5 : 10) }))
+                .sort((a, b) => b.weight - a.weight)
+                .slice(0, 3);
+
+            if (items.length === 0) { panel.style.display = 'none'; return; }
+            panel.style.display = '';
+
+            list.innerHTML = items.map((item, idx) => {
+                return '<div class="priority-item">' +
+                    '<div class="priority-num">' + (idx + 1) + '</div>' +
+                    '<div class="priority-body">' +
+                        '<div class="priority-title">' + esc(item.title) + '</div>' +
+                        (item.revenue ? '<div class="priority-impact">~$' + Math.round(item.revenue) + '/mo at risk</div>' : '') +
+                        '<div class="priority-action">' + esc(item.source) + '</div>' +
+                    '</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        function renderKPIs(totalIssues) {
+            const strip = document.getElementById('kpi-strip');
+            strip.style.display = '';
+
+            document.getElementById('kpi-revenue').textContent = totalRevenueAtRisk > 0 ? '$' + Math.round(totalRevenueAtRisk).toLocaleString() + '/mo' : '$0';
+            document.getElementById('kpi-total-issues').textContent = totalIssues;
+
+            // Change tracking via localStorage
+            const storageKey = 'site_intel_snapshot';
+            const prev = JSON.parse(localStorage.getItem(storageKey) || 'null');
+            const newEl = document.getElementById('kpi-new-issues');
+
+            if (prev && prev.totalIssues !== undefined) {
+                const diff = totalIssues - prev.totalIssues;
+                if (diff > 0) { newEl.textContent = '+' + diff; newEl.style.color = 'var(--red)'; }
+                else if (diff < 0) { newEl.textContent = diff; newEl.style.color = 'var(--green)'; }
+                else { newEl.textContent = 'None'; newEl.style.color = 'var(--green)'; }
+            } else {
+                newEl.textContent = 'First visit';
+                newEl.style.color = 'var(--slate)';
+            }
+
+            // Save current snapshot
+            localStorage.setItem(storageKey, JSON.stringify({
+                totalIssues: totalIssues,
+                revenue: totalRevenueAtRisk,
+                timestamp: new Date().toISOString()
+            }));
+        }
+
         async function loadAll() {
             const btn = document.getElementById('refresh-btn');
             btn.disabled = true;
             btn.textContent = 'Loading...';
             allCriticalIssues = [];
+            totalRevenueAtRisk = 0;
 
-            const [dqScore, spScore, chScore, rhScore] = await Promise.all([
-                loadDataQuality(),
-                loadSitePerformance(),
-                loadCodeHealth(),
-                loadRedirectHealth()
-            ]);
+            // Load freshness early (comes from DQ endpoint)
+            const dqPromise = loadDataQuality();
+            const spPromise = loadSitePerformance();
+            const chPromise = loadCodeHealth();
+            const rhPromise = loadRedirectHealth();
+
+            const [dqScore, spScore, chScore, rhScore] = await Promise.all([dqPromise, spPromise, chPromise, rhPromise]);
 
             // Calculate overall score
             const scores = [dqScore, spScore, chScore, rhScore].filter(s => s !== null);
             const overall = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0;
             setScoreRing(overall);
 
-            // Show critical banner
+            // Count total issues
+            const totalIssues = ['dq-issues', 'sp-issues', 'ch-issues', 'rh-issues']
+                .map(id => parseInt(document.getElementById(id).textContent) || 0)
+                .reduce((a, b) => a + b, 0);
+
+            // Render new panels
+            renderKPIs(totalIssues);
+            renderPriorities();
             showCriticalBanner();
 
             // Update timestamp
