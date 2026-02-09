@@ -332,6 +332,13 @@
         }
         .refresh-btn:hover { background: #35463b; }
         .refresh-btn:disabled { background: #ccc; cursor: not-allowed; }
+        .export-share-btn {
+            padding: 8px 14px; border-radius: 12px;
+            background: var(--card); color: var(--ink-soft);
+            border: 1px solid var(--line); font-size: 12px; cursor: pointer;
+            transition: all 0.2s; white-space: nowrap;
+        }
+        .export-share-btn:hover { border-color: var(--cass-gold); color: var(--ink); }
 
         @media (max-width: 1200px) {
             .sections-grid { grid-template-columns: 1fr; }
@@ -570,6 +577,8 @@
                         <button class="time-btn active" data-window="7d" onclick="setTimeWindow('7d')">7d</button>
                         <button class="time-btn" data-window="30d" onclick="setTimeWindow('30d')">30d</button>
                     </div>
+                    <button class="export-share-btn" onclick="exportCSV()" title="Export all issues to CSV">Export CSV</button>
+                    <button class="export-share-btn" id="copy-summary-btn" onclick="copySummary()" title="Copy executive summary to clipboard">Copy Summary</button>
                     <button class="refresh-btn" id="refresh-btn" onclick="loadAll()">Refresh</button>
                 </div>
             </div>
@@ -725,38 +734,145 @@
             return { hours: 168, days: 7 };
         }
 
-        // --- Impact Scoring ---
+        // --- True Impact Modeling ---
+        let siteConversionRate = 0.025; // fallback default
+        let siteAOV = 85.00;           // fallback default
+
+        async function fetchSiteMetrics() {
+            try {
+                const res = await fetch('/monitor/metrics/live');
+                if (!res.ok) return;
+                const data = await res.json();
+                const m = data.metrics || data;
+                if (m.orders_today > 0 && m.revenue_today > 0) {
+                    siteAOV = m.revenue_today / m.orders_today;
+                }
+                if (m.conversion_rate) {
+                    const cr = typeof m.conversion_rate === 'string' ? parseFloat(m.conversion_rate) : m.conversion_rate;
+                    if (!isNaN(cr) && cr > 0) siteConversionRate = cr > 1 ? cr / 100 : cr;
+                }
+            } catch (e) { /* keep defaults */ }
+        }
+
         function computeImpactWeight(issue, source) {
             let w = 0;
-            if (issue.revenue_impact) w += Math.min(100, issue.revenue_impact / 50);
-            else if (issue.severity === 'critical') w += 80;
-            else if (issue.severity === 'warning') w += 40;
-            else w += 10;
-            if (source === 'Redirects & 404s') w += 20;
+            // Revenue dimension (0-50 pts): real data when available
+            let realRevenue = 0;
+            if (issue.revenue_impact) {
+                realRevenue = issue.revenue_impact;
+            } else if (issue.traffic_hits && issue.traffic_hits > 0) {
+                realRevenue = issue.traffic_hits * siteConversionRate * siteAOV;
+            }
+            if (realRevenue > 0) {
+                w += Math.min(50, realRevenue / 100);
+            }
+            // Severity dimension (0-40 pts): halved when real revenue data exists
+            const sevBase = issue.severity === 'critical' ? 40 : issue.severity === 'warning' ? 20 : 5;
+            w += realRevenue > 0 ? sevBase * 0.5 : sevBase;
+            // Source + CWV boosts
+            if (source === 'Redirects & 404s') w += 10;
             if (issue.title && (issue.title.includes('LCP') || issue.title.includes('CLS') || issue.title.includes('INP'))) w += 10;
-            if (issue.traffic_hits) w += Math.min(20, issue.traffic_hits / 50);
             return Math.round(w);
         }
 
         // --- Issue Tracker (localStorage) ---
+        const slaDefaults = { critical: 3, warning: 7, info: 14 }; // days
+
         const issueTracker = {
             storageKey: 'site_intel_issue_status',
             data: JSON.parse(localStorage.getItem('site_intel_issue_status') || '{}'),
             getKey(source, issue) {
-                // Use source + title + file_path/description for uniqueness
                 const fp = (typeof issue === 'object') ? (issue.file_path || issue.description || '') : '';
                 const title = (typeof issue === 'object') ? (issue.title || '') : issue;
                 return btoa(unescape(encodeURIComponent(source + '|' + title + '|' + fp))).slice(0, 40);
             },
             getStatus(source, issue) { return this.data[this.getKey(source, issue)] || null; },
-            setStatus(source, issue, status, owner) {
+            setStatus(source, issue, status, owner, dueDate) {
                 const key = this.getKey(source, issue);
-                if (!status) { delete this.data[key]; }
-                else { this.data[key] = { status, owner: owner || '', updatedAt: new Date().toISOString() }; }
+                const existing = this.data[key] || {};
+                const newDue = dueDate !== undefined ? dueDate : existing.dueDate || null;
+                // Auto-assign SLA on acknowledge if no due date set
+                let finalDue = newDue;
+                if (status === 'acknowledged' && !finalDue && typeof issue === 'object') {
+                    const sev = issue.severity || 'info';
+                    const days = slaDefaults[sev] || 14;
+                    const d = new Date(); d.setDate(d.getDate() + days);
+                    finalDue = d.toISOString().slice(0, 10);
+                }
+                if (!status) {
+                    // Clear status but keep timeline
+                    if (existing.firstSeenAt) {
+                        this.data[key] = { ...existing, status: '', owner: '', dueDate: null, updatedAt: new Date().toISOString() };
+                    } else { delete this.data[key]; }
+                } else {
+                    this.data[key] = { ...existing, status, owner: owner || existing.owner || '', dueDate: finalDue, updatedAt: new Date().toISOString() };
+                }
                 localStorage.setItem(this.storageKey, JSON.stringify(this.data));
+            },
+            // Timeline tracking
+            updateTimeline(source, issue) {
+                const key = this.getKey(source, issue);
+                const now = new Date().toISOString();
+                if (!this.data[key]) {
+                    this.data[key] = { status: '', owner: '', dueDate: null, updatedAt: now, firstSeenAt: now, lastSeenAt: now, seenCount: 1 };
+                } else {
+                    if (!this.data[key].firstSeenAt) this.data[key].firstSeenAt = now;
+                    this.data[key].lastSeenAt = now;
+                    this.data[key].seenCount = (this.data[key].seenCount || 0) + 1;
+                }
+            },
+            getTimeline(source, issue) {
+                const entry = this.data[this.getKey(source, issue)];
+                if (!entry) return null;
+                return { firstSeenAt: entry.firstSeenAt, lastSeenAt: entry.lastSeenAt, seenCount: entry.seenCount || 0 };
+            },
+            saveAll() { localStorage.setItem(this.storageKey, JSON.stringify(this.data)); },
+            cleanup() {
+                const cutoff = Date.now() - 90 * 86400000;
+                Object.keys(this.data).forEach(key => {
+                    const e = this.data[key];
+                    if (e.lastSeenAt && new Date(e.lastSeenAt).getTime() < cutoff) delete this.data[key];
+                });
+                this.saveAll();
             }
         };
         let showResolved = false;
+        let relatedIssuesMap = {};
+
+        function extractNormalizedPath(issue) {
+            if (!issue) return null;
+            // Extract path from file_path
+            if (issue.file_path) return issue.file_path.replace(/^\/+/, '/').toLowerCase();
+            // Extract path from 404 titles like "404: /products/foo"
+            if (issue.title) {
+                const m = issue.title.match(/(?:404|301|302|redirect)[:\s]+\s*(\/\S+)/i);
+                if (m) return m[1].toLowerCase().replace(/\?.*$/, '');
+            }
+            // Extract path from url field
+            if (issue.url) {
+                try { return new URL(issue.url, 'https://x.com').pathname.toLowerCase(); }
+                catch (e) { return issue.url.startsWith('/') ? issue.url.toLowerCase() : null; }
+            }
+            return null;
+        }
+
+        function buildRelatedIssuesMap() {
+            relatedIssuesMap = {};
+            Object.entries(issueStore).forEach(([listId, store]) => {
+                (store.issues || []).forEach((issue, idx) => {
+                    const path = extractNormalizedPath(issue);
+                    if (!path) return;
+                    if (!relatedIssuesMap[path]) relatedIssuesMap[path] = [];
+                    relatedIssuesMap[path].push({
+                        listId: listId,
+                        idx: idx,
+                        title: issue.title || issue.check_name || 'Issue',
+                        source: store.source,
+                        severity: issue.severity || 'info'
+                    });
+                });
+            });
+        }
 
         // --- Trend Helpers ---
         function trendBadge(current, previous, higherIsBetter) {
@@ -846,6 +962,14 @@
             let badgeHtml = '';
             if (tracked) badgeHtml = '<span class="issue-status-badge ' + tracked.status + '">' + tracked.status.replace('_', ' ') + '</span>';
 
+            // SLA overdue/due-soon badge
+            let slaHtml = '';
+            if (tracked && tracked.dueDate) {
+                const hoursLeft = (new Date(tracked.dueDate + 'T23:59:59') - new Date()) / 3600000;
+                if (hoursLeft < 0) slaHtml = '<span class="issue-status-badge" style="background:var(--red-bg);color:var(--red)">OVERDUE</span>';
+                else if (hoursLeft < 24) slaHtml = '<span class="issue-status-badge" style="background:var(--amber-bg);color:var(--amber)">DUE SOON</span>';
+            }
+
             let confHtml = '';
             if (issue.confidence_level) {
                 const cls = issue.confidence_level === 'high' ? 'high-conf' : issue.confidence_level === 'medium' ? 'med-conf' : 'low-conf';
@@ -855,15 +979,24 @@
                 confHtml = ' <span class="reliability-badge ' + cls + '">n=' + issue.sample_size + '</span>';
             }
 
+            // NEW badge for issues first seen today
+            let ageHtml = '';
+            const tl = issueTracker.getTimeline(source, issue);
+            if (tl && tl.firstSeenAt) {
+                const ageDays = Math.floor((Date.now() - new Date(tl.firstSeenAt).getTime()) / 86400000);
+                if (ageDays === 0) ageHtml = ' <span class="reliability-badge med-conf">NEW</span>';
+            }
+
             return '<div class="issue-row' + (isResolved ? ' resolved' : '') + '" style="cursor:pointer" onclick="openIssueDetail(\'' + listId + '\',' + idx + ')">' +
                 '<div class="issue-severity sev-' + sev + '"></div>' +
                 '<div class="issue-body">' +
-                    '<div class="issue-title">' + esc(issue.title || issue.check_name || 'Issue') + confHtml + '</div>' +
+                    '<div class="issue-title">' + esc(issue.title || issue.check_name || 'Issue') + ageHtml + confHtml + '</div>' +
                     (issue.description ? '<div class="issue-detail">' + esc(issue.description) + '</div>' : '') +
                     impactHtml +
                     linkHtml +
                     (issue.recommendation || issue.fix ? '<div class="issue-fix">' + esc(issue.recommendation || issue.fix) + '</div>' : '') +
                 '</div>' +
+                (slaHtml ? slaHtml : '') +
                 (badgeHtml ? badgeHtml : '') +
                 '<span class="chevron" style="color:var(--slate);font-size:11px;align-self:center;flex-shrink:0">&#9654;</span>' +
             '</div>';
@@ -981,7 +1114,8 @@
             const curOwner = tracked ? tracked.owner : '';
             let html = '';
 
-            // Status controls
+            // Status controls with SLA date picker
+            const curDue = tracked ? (tracked.dueDate || '') : '';
             html += '<div class="status-controls">' +
                 '<select onchange="updateIssueStatus(this.value)">' +
                     '<option value=""' + (!curStatus ? ' selected' : '') + '>Open</option>' +
@@ -990,8 +1124,16 @@
                     '<option value="resolved"' + (curStatus === 'resolved' ? ' selected' : '') + '>Resolved</option>' +
                     '<option value="false_positive"' + (curStatus === 'false_positive' ? ' selected' : '') + '>False Positive</option>' +
                 '</select>' +
-                '<input type="text" placeholder="Owner" value="' + esc(curOwner) + '" onchange="updateIssueOwner(this.value)">' +
+                '<input type="text" placeholder="Owner" value="' + esc(curOwner) + '" onchange="updateIssueOwner(this.value)" style="flex:1">' +
+                '<input type="date" value="' + esc(curDue) + '" onchange="updateIssueDueDate(this.value)" title="Due date (SLA)" style="width:140px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);font-size:13px;background:var(--pearl);color:var(--ink)">' +
             '</div>';
+
+            // Verify fix button for resolved redirect issues
+            if (source === 'Redirects & 404s' && curStatus === 'resolved' && issue.title && issue.title.startsWith('404:')) {
+                const urlPath = issue.title.replace('404: ', '');
+                html += '<div id="verify-fix-area" style="padding:4px 0 8px">' +
+                    '<button class="action-btn primary" onclick="verifyFix(\'' + esc(urlPath) + '\',this)" style="width:100%">Verify Fix for ' + esc(urlPath) + '</button></div>';
+            }
 
             // Severity badge + title
             html += '<div><span class="detail-sev-badge ' + sev + '">' +
@@ -1015,6 +1157,26 @@
             if (issue.impactWeight) html += '<div class="detail-meta-item"><div class="detail-meta-label">Impact Score</div><div class="detail-meta-value">' + issue.impactWeight + '/100</div></div>';
             html += '</div>';
 
+            // Timeline section
+            const timeline = issueTracker.getTimeline(source, issue);
+            if (timeline && timeline.firstSeenAt) {
+                const firstDate = new Date(timeline.firstSeenAt).toLocaleDateString();
+                const lastDate = new Date(timeline.lastSeenAt).toLocaleDateString();
+                const daysSince = Math.floor((Date.now() - new Date(timeline.firstSeenAt).getTime()) / 86400000);
+                let ageLabel = '';
+                if (daysSince === 0) ageLabel = '<span style="color:var(--cass-gold);font-weight:500">New today</span>';
+                else if (daysSince <= 2) ageLabel = '<span style="color:var(--cass-gold);font-weight:500">New (' + daysSince + 'd)</span>';
+                else if (daysSince > 14) ageLabel = '<span style="color:var(--red);font-weight:500">Persistent (' + daysSince + 'd)</span>';
+                else ageLabel = '<span style="color:var(--slate)">Recurring (' + daysSince + 'd)</span>';
+                html += '<div class="detail-section"><div class="detail-section-header">Timeline</div><div class="detail-section-body">' +
+                    '<div class="detail-meta-grid">' +
+                    '<div class="detail-meta-item"><div class="detail-meta-label">First Seen</div><div class="detail-meta-value">' + firstDate + '</div></div>' +
+                    '<div class="detail-meta-item"><div class="detail-meta-label">Last Seen</div><div class="detail-meta-value">' + lastDate + '</div></div>' +
+                    '<div class="detail-meta-item"><div class="detail-meta-label">Times Seen</div><div class="detail-meta-value">' + (timeline.seenCount || 1) + '</div></div>' +
+                    '<div class="detail-meta-item"><div class="detail-meta-label">Age</div><div class="detail-meta-value">' + ageLabel + '</div></div>' +
+                    '</div></div></div>';
+            }
+
             // Evidence section
             const evidence = buildEvidence(issue, source);
             if (evidence) {
@@ -1033,6 +1195,24 @@
                 html += '<div class="detail-section"><div class="detail-section-header">Evidence &amp; Links</div><div class="detail-section-body"><div class="evidence-links">';
                 eLinks.forEach(l => { html += '<a class="evidence-link" href="' + esc(l.url) + '" target="_blank">' + esc(l.label) + ' &rarr;</a>'; });
                 html += '</div></div></div>';
+            }
+
+            // Related issues cross-reference
+            const currentPath = extractNormalizedPath(issue);
+            if (currentPath && relatedIssuesMap[currentPath]) {
+                const related = relatedIssuesMap[currentPath].filter(r => !(r.listId === currentDetailListId && r.idx === currentDetailIdx));
+                if (related.length > 0) {
+                    html += '<div class="detail-section"><div class="detail-section-header">Related Issues (' + related.length + ')</div><div class="detail-section-body">';
+                    related.forEach(r => {
+                        const sevDot = r.severity === 'critical' ? 'var(--red)' : r.severity === 'warning' ? 'var(--cass-gold)' : 'var(--cass-teal)';
+                        html += '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);cursor:pointer" ' +
+                            'onclick="openIssueDetail(\'' + r.listId + '\',' + r.idx + ')">' +
+                            '<span style="width:8px;height:8px;border-radius:50%;background:' + sevDot + ';flex-shrink:0"></span>' +
+                            '<span style="font-size:13px;flex:1">' + esc(r.title) + '</span>' +
+                            '<span style="font-size:11px;color:var(--slate)">' + esc(r.source) + '</span></div>';
+                    });
+                    html += '</div></div>';
+                }
             }
 
             // Action buttons
@@ -1060,6 +1240,8 @@
             const tracked = issueTracker.getStatus(store.source, issue);
             issueTracker.setStatus(store.source, issue, status, tracked ? tracked.owner : '');
             rerenderList(currentDetailListId);
+            // Re-render detail panel so auto-SLA date shows immediately
+            document.getElementById('detail-content').innerHTML = buildDetailHTML(issue, store.source);
         }
 
         function updateIssueOwner(owner) {
@@ -1070,6 +1252,47 @@
             const tracked = issueTracker.getStatus(store.source, issue);
             issueTracker.setStatus(store.source, issue, tracked ? tracked.status : 'acknowledged', owner);
             rerenderList(currentDetailListId);
+        }
+
+        function updateIssueDueDate(dueDate) {
+            if (!currentDetailListId || currentDetailIdx === null) return;
+            const store = issueStore[currentDetailListId];
+            if (!store) return;
+            const issue = store.issues[currentDetailIdx];
+            const tracked = issueTracker.getStatus(store.source, issue);
+            issueTracker.setStatus(store.source, issue, tracked ? tracked.status : '', tracked ? tracked.owner : '', dueDate || null);
+            rerenderList(currentDetailListId);
+        }
+
+        async function verifyFix(urlPath, btn) {
+            btn.disabled = true;
+            btn.textContent = 'Checking...';
+            try {
+                const res = await fetch('/redirects/verify-url?url=' + encodeURIComponent(urlPath));
+                const data = await res.json();
+                const area = document.getElementById('verify-fix-area');
+                if (data.is_healthy) {
+                    area.innerHTML = '<div style="padding:8px 12px;background:var(--green-bg);color:var(--green);border-radius:10px;font-size:13px;font-weight:500">' +
+                        '&#10003; Fix verified — returns ' + data.final_status_code + (data.chain_length > 1 ? ' (via ' + data.chain_length + ' redirects)' : '') + '</div>';
+                } else {
+                    area.innerHTML = '<div style="padding:8px 12px;background:var(--red-bg);color:var(--red);border-radius:10px;font-size:13px;font-weight:500">' +
+                        '&#10007; Still broken — returns ' + (data.final_status_code || 'error') +
+                        '</div><button class="action-btn" onclick="revertToOpen()" style="margin-top:6px;width:100%">Revert to Open</button>';
+                }
+            } catch (e) {
+                btn.textContent = 'Error — try again';
+                btn.disabled = false;
+            }
+        }
+
+        function revertToOpen() {
+            if (!currentDetailListId || currentDetailIdx === null) return;
+            const store = issueStore[currentDetailListId];
+            if (!store) return;
+            const issue = store.issues[currentDetailIdx];
+            issueTracker.setStatus(store.source, issue, '', '');
+            rerenderList(currentDetailListId);
+            document.getElementById('detail-content').innerHTML = buildDetailHTML(issue, store.source);
         }
 
         // Re-render a single issue list from its issueStore (preserves sort/cluster)
@@ -1638,8 +1861,15 @@
                 });
             });
 
-            // Sort by impactWeight descending, take top 5
-            allIssues.sort((a, b) => (b.impactWeight || 0) - (a.impactWeight || 0));
+            // Sort by impactWeight descending (overdue issues get 1.5x boost), take top 5
+            allIssues.sort((a, b) => {
+                let wa = a.impactWeight || 0, wb = b.impactWeight || 0;
+                const ta = issueTracker.getStatus(a._source, a);
+                const tb = issueTracker.getStatus(b._source, b);
+                if (ta && ta.dueDate && new Date(ta.dueDate + 'T23:59:59') < new Date()) wa *= 1.5;
+                if (tb && tb.dueDate && new Date(tb.dueDate + 'T23:59:59') < new Date()) wb *= 1.5;
+                return wb - wa;
+            });
             const topItems = allIssues.slice(0, 5);
 
             if (topItems.length === 0) { panel.style.display = 'none'; return; }
@@ -1688,12 +1918,91 @@
             }));
         }
 
+        function exportCSV() {
+            const rows = [['Source', 'Severity', 'Title', 'Impact Score', 'Revenue Impact', 'Status', 'Owner', 'Due Date', 'First Seen', 'Category', 'File Path', 'Recommendation']];
+            Object.entries(issueStore).forEach(([listId, store]) => {
+                (store.issues || []).forEach(issue => {
+                    const tracked = issueTracker.getStatus(store.source, issue) || {};
+                    const tl = issueTracker.getTimeline(store.source, issue) || {};
+                    rows.push([
+                        store.source,
+                        issue.severity || 'info',
+                        (issue.title || issue.check_name || '').replace(/"/g, '""'),
+                        issue.impactWeight || 0,
+                        issue.revenue_impact || '',
+                        tracked.status || 'open',
+                        tracked.owner || '',
+                        tracked.dueDate || '',
+                        tl.firstSeenAt ? new Date(tl.firstSeenAt).toLocaleDateString() : '',
+                        issue.category || '',
+                        issue.file_path || '',
+                        (issue.recommendation || issue.fix || '').replace(/"/g, '""')
+                    ]);
+                });
+            });
+            const csv = rows.map(r => r.map(c => '"' + c + '"').join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'site-intelligence-' + new Date().toISOString().slice(0, 10) + '.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function copySummary() {
+            let totalIssues = 0, critCount = 0, warnCount = 0, infoCount = 0;
+            const sourceStats = {};
+            Object.entries(issueStore).forEach(([listId, store]) => {
+                const issues = store.issues || [];
+                totalIssues += issues.length;
+                issues.forEach(i => {
+                    if (i.severity === 'critical') critCount++;
+                    else if (i.severity === 'warning') warnCount++;
+                    else infoCount++;
+                });
+                sourceStats[store.source] = issues.length;
+            });
+
+            const allSorted = [];
+            Object.entries(issueStore).forEach(([listId, store]) => {
+                (store.issues || []).forEach(issue => allSorted.push({ ...issue, _source: store.source }));
+            });
+            allSorted.sort((a, b) => (b.impactWeight || 0) - (a.impactWeight || 0));
+            const top3 = allSorted.slice(0, 3);
+
+            let text = 'SITE INTELLIGENCE SUMMARY — ' + new Date().toLocaleDateString() + '\n';
+            text += '='.repeat(50) + '\n\n';
+            text += 'Total Issues: ' + totalIssues + ' (Critical: ' + critCount + ', Warning: ' + warnCount + ', Info: ' + infoCount + ')\n';
+            text += 'Revenue at Risk: $' + Math.round(totalRevenueAtRisk).toLocaleString() + '/mo\n\n';
+            text += 'By Source:\n';
+            Object.entries(sourceStats).forEach(([src, cnt]) => { text += '  - ' + src + ': ' + cnt + ' issues\n'; });
+            text += '\nTop 3 Priorities:\n';
+            top3.forEach((item, i) => {
+                text += '  ' + (i + 1) + '. ' + (item.title || item.check_name || 'Issue') + ' [' + item._source + ']';
+                if (item.revenue_impact) text += ' (~$' + Math.round(item.revenue_impact) + '/mo)';
+                text += '\n';
+            });
+
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.getElementById('copy-summary-btn');
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = 'Copy Summary'; }, 2000);
+            });
+        }
+
         async function loadAll() {
             const btn = document.getElementById('refresh-btn');
             btn.disabled = true;
             btn.textContent = 'Loading...';
             allCriticalIssues = [];
             totalRevenueAtRisk = 0;
+
+            // Fetch site-wide metrics for true impact modeling
+            await fetchSiteMetrics();
+
+            // Cleanup stale localStorage entries (>90 days)
+            issueTracker.cleanup();
 
             // Load all sections in parallel
             const dqPromise = loadDataQuality();
@@ -1727,6 +2036,17 @@
                 document.getElementById('ch-trend').innerHTML = trendBadge(chScore, oldest.ch, true);
                 document.getElementById('rh-trend').innerHTML = trendBadge(rhScore, oldest.rh, true);
             }
+
+            // Sweep all current issues for timeline tracking
+            Object.entries(issueStore).forEach(([listId, store]) => {
+                (store.issues || []).forEach(issue => {
+                    issueTracker.updateTimeline(store.source, issue);
+                });
+            });
+            issueTracker.saveAll();
+
+            // Build cross-source related issues map
+            buildRelatedIssuesMap();
 
             // Count total issues
             const totalIssues = ['dq-issues', 'sp-issues', 'ch-issues', 'rh-issues']

@@ -6,6 +6,7 @@ Endpoints for tracking broken links and redirect health.
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional
+import httpx
 
 from app.models.base import get_db
 from app.services.redirect_health_service import RedirectHealthService
@@ -285,3 +286,47 @@ async def get_llm_redirect_insights(
     except Exception as e:
         log.error(f"Error generating LLM redirect insights: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/verify-url")
+async def verify_url(
+    url: str = Query(..., description="URL path to verify (e.g. /products/old-item)")
+):
+    """
+    Verify whether a URL now returns a healthy status (200 or proper redirect).
+
+    Used by the Site Intelligence dashboard to confirm that resolved redirect
+    issues have actually been fixed.
+    """
+    base = "https://cassbrothers.com.au"
+    full_url = base + (url if url.startswith("/") else "/" + url)
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=5.0) as client:
+            resp = await client.head(full_url)
+            chain = [str(r.url) for r in resp.history] + [str(resp.url)]
+            return {
+                "url": url,
+                "final_status_code": resp.status_code,
+                "is_healthy": resp.status_code < 400,
+                "redirect_chain": chain,
+                "chain_length": len(chain)
+            }
+    except httpx.TimeoutException:
+        return {
+            "url": url,
+            "final_status_code": 0,
+            "is_healthy": False,
+            "redirect_chain": [],
+            "chain_length": 0,
+            "error": "Request timed out (5s)"
+        }
+    except Exception as e:
+        log.error(f"Error verifying URL {url}: {str(e)}")
+        return {
+            "url": url,
+            "final_status_code": 0,
+            "is_healthy": False,
+            "redirect_chain": [],
+            "chain_length": 0,
+            "error": str(e)
+        }
