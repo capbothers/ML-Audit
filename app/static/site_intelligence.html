@@ -520,31 +520,58 @@
                 const data = await res.json();
                 const d = data.data || data;
 
-                const score = d.overall_score ?? d.health_score ?? 75;
+                const score = d.quality_score ?? d.overall_score ?? 75;
                 setScore('dq-score', score);
                 setStatus('dq-status', score);
                 setBadge('dq-badge', score);
 
-                // Build issues from freshness + discrepancies + alerts
                 const issues = [];
-                const freshness = d.freshness_report || d.freshness || [];
-                if (Array.isArray(freshness)) {
+
+                // Build issues from health checks
+                const healthChecks = [
+                    { key: 'sync_health', label: 'Data Sync' },
+                    { key: 'tracking_health', label: 'Conversion Tracking' },
+                    { key: 'utm_health', label: 'UTM Tracking' },
+                    { key: 'feed_health', label: 'Merchant Center Feed' },
+                    { key: 'link_health', label: 'Google Ads Link' }
+                ];
+                healthChecks.forEach(check => {
+                    const h = d[check.key];
+                    if (h && h.status === 'critical') {
+                        issues.push({ severity: 'critical', title: check.label + ' is critical', description: h.message || h.detail || '', recommendation: 'Check ' + check.label.toLowerCase() + ' configuration' });
+                        allCriticalIssues.push({ source: 'Data Quality', title: check.label + ' is critical' });
+                    } else if (h && h.status === 'warning') {
+                        issues.push({ severity: 'warning', title: check.label + ' needs attention', description: h.message || h.detail || '', recommendation: 'Review ' + check.label.toLowerCase() });
+                    }
+                });
+
+                // Freshness - could be object with table keys
+                const freshness = d.freshness || {};
+                if (typeof freshness === 'object' && !Array.isArray(freshness)) {
+                    Object.entries(freshness).forEach(([source, info]) => {
+                        if (info && (info.is_stale || info.status === 'stale')) {
+                            const lagH = info.lag_hours || info.hours_since_update;
+                            const sev = lagH > 48 ? 'critical' : 'warning';
+                            issues.push({ severity: sev, title: source + ' data is stale', description: 'Last update: ' + (lagH ? Math.round(lagH) + 'h ago' : 'unknown'), recommendation: 'Check sync for ' + source });
+                            if (sev === 'critical') allCriticalIssues.push({ source: 'Data Quality', title: source + ' data is stale (' + Math.round(lagH) + 'h)' });
+                        }
+                    });
+                } else if (Array.isArray(freshness)) {
                     freshness.filter(f => f.is_stale || f.status === 'stale').forEach(f => {
-                        const sev = f.lag_hours > 48 ? 'critical' : 'warning';
-                        issues.push({ severity: sev, title: (f.source || f.table) + ' data is stale', description: 'Last update: ' + (f.lag_hours ? Math.round(f.lag_hours) + 'h ago' : 'unknown'), recommendation: 'Check sync for ' + (f.source || f.table) });
-                        if (sev === 'critical') allCriticalIssues.push({ source: 'Data Quality', title: (f.source || f.table) + ' data is stale (' + Math.round(f.lag_hours) + 'h)' });
+                        const lagH = f.lag_hours || f.hours_since_update;
+                        const sev = lagH > 48 ? 'critical' : 'warning';
+                        issues.push({ severity: sev, title: (f.source || f.table) + ' data is stale', description: 'Last update: ' + (lagH ? Math.round(lagH) + 'h ago' : 'unknown'), recommendation: 'Check sync for ' + (f.source || f.table) });
+                        if (sev === 'critical') allCriticalIssues.push({ source: 'Data Quality', title: (f.source || f.table) + ' data is stale (' + Math.round(lagH) + 'h)' });
                     });
                 }
 
-                const alerts = d.active_alerts || d.alerts || [];
-                if (Array.isArray(alerts)) {
-                    alerts.filter(a => a.status === 'active').forEach(a => {
-                        issues.push({ severity: a.severity || 'warning', title: a.title || a.alert_type, description: a.description, recommendation: a.recommended_action });
-                        if (a.severity === 'critical') allCriticalIssues.push({ source: 'Data Quality', title: a.title || a.alert_type });
-                    });
+                // Overall summary message as fallback
+                if (issues.length === 0 && d.summary && d.summary.status === 'critical') {
+                    issues.push({ severity: 'critical', title: d.summary.message || 'Data quality is critical', description: d.issues_found + ' issues found', recommendation: 'Review data quality dashboard for details' });
+                    allCriticalIssues.push({ source: 'Data Quality', title: d.summary.message || 'Score: ' + score + '/100' });
                 }
 
-                document.getElementById('dq-issues').textContent = issues.length;
+                document.getElementById('dq-issues').textContent = issues.length || d.issues_found || 0;
                 renderIssues('dq-list', issues, 'All data sources are fresh and healthy');
                 return score;
             } catch (e) {
@@ -561,25 +588,55 @@
 
                 const issues = [];
 
-                // Core Web Vitals
+                // Core Web Vitals — API returns uppercase keys: LCP, CLS, INP, TTFB
                 const cwv = d.core_web_vitals || {};
                 let score = 85;
-                if (cwv.lcp) {
-                    const lcpVal = cwv.lcp.p75 || cwv.lcp.value;
-                    if (lcpVal > 4000) { issues.push({ severity: 'critical', title: 'LCP is poor: ' + (lcpVal / 1000).toFixed(1) + 's', description: 'Largest Contentful Paint should be under 2.5s', recommendation: 'Optimize images, reduce server response time' }); allCriticalIssues.push({ source: 'Performance', title: 'LCP is ' + (lcpVal / 1000).toFixed(1) + 's (poor)' }); score -= 25; }
-                    else if (lcpVal > 2500) { issues.push({ severity: 'warning', title: 'LCP needs improvement: ' + (lcpVal / 1000).toFixed(1) + 's', description: 'Target under 2.5s for good experience', recommendation: 'Optimize largest image/text block' }); score -= 10; }
-                }
-                if (cwv.cls) {
-                    const clsVal = cwv.cls.p75 || cwv.cls.value;
-                    if (clsVal > 0.25) { issues.push({ severity: 'critical', title: 'CLS is poor: ' + clsVal.toFixed(3), description: 'Cumulative Layout Shift should be under 0.1', recommendation: 'Set dimensions on images/ads, avoid dynamic content injection' }); score -= 20; }
-                    else if (clsVal > 0.1) { issues.push({ severity: 'warning', title: 'CLS needs improvement: ' + clsVal.toFixed(3), description: 'Target under 0.1', recommendation: 'Reserve space for dynamic content' }); score -= 8; }
+
+                // LCP (value in ms or seconds)
+                const lcpRaw = cwv.LCP || cwv.lcp;
+                if (lcpRaw !== null && lcpRaw !== undefined) {
+                    const lcpVal = typeof lcpRaw === 'object' ? (lcpRaw.p75 || lcpRaw.value) : lcpRaw;
+                    if (lcpVal) {
+                        const lcpMs = lcpVal > 100 ? lcpVal : lcpVal * 1000; // handle s vs ms
+                        if (lcpMs > 4000) { issues.push({ severity: 'critical', title: 'LCP is poor: ' + (lcpMs / 1000).toFixed(1) + 's', description: 'Largest Contentful Paint should be under 2.5s', recommendation: 'Optimize images, reduce server response time' }); allCriticalIssues.push({ source: 'Performance', title: 'LCP is ' + (lcpMs / 1000).toFixed(1) + 's (poor)' }); score -= 25; }
+                        else if (lcpMs > 2500) { issues.push({ severity: 'warning', title: 'LCP needs improvement: ' + (lcpMs / 1000).toFixed(1) + 's', description: 'Target under 2.5s for good experience', recommendation: 'Optimize largest image/text block' }); score -= 10; }
+                    }
                 }
 
-                // Top errors
-                const errors = d.top_errors || d.top_error_pages || [];
-                if (Array.isArray(errors)) {
-                    errors.slice(0, 3).forEach(err => {
-                        issues.push({ severity: 'warning', title: err.error_type || err.message || 'JS Error', description: (err.count || err.occurrences || '') + ' occurrences', file_path: err.page_path || err.url, recommendation: 'Fix JavaScript error' });
+                // CLS
+                const clsRaw = cwv.CLS || cwv.cls;
+                if (clsRaw !== null && clsRaw !== undefined) {
+                    const clsVal = typeof clsRaw === 'object' ? (clsRaw.p75 || clsRaw.value) : clsRaw;
+                    if (clsVal) {
+                        if (clsVal > 0.25) { issues.push({ severity: 'critical', title: 'CLS is poor: ' + clsVal.toFixed(3), description: 'Cumulative Layout Shift should be under 0.1', recommendation: 'Set dimensions on images/ads, avoid dynamic content injection' }); score -= 20; }
+                        else if (clsVal > 0.1) { issues.push({ severity: 'warning', title: 'CLS needs improvement: ' + clsVal.toFixed(3), description: 'Target under 0.1', recommendation: 'Reserve space for dynamic content' }); score -= 8; }
+                    }
+                }
+
+                // INP
+                const inpRaw = cwv.INP || cwv.inp;
+                if (inpRaw !== null && inpRaw !== undefined) {
+                    const inpVal = typeof inpRaw === 'object' ? (inpRaw.p75 || inpRaw.value) : inpRaw;
+                    if (inpVal) {
+                        if (inpVal > 500) { issues.push({ severity: 'critical', title: 'INP is poor: ' + inpVal + 'ms', description: 'Interaction to Next Paint should be under 200ms', recommendation: 'Reduce JavaScript execution time, optimize event handlers' }); score -= 20; }
+                        else if (inpVal > 200) { issues.push({ severity: 'warning', title: 'INP needs improvement: ' + inpVal + 'ms', description: 'Target under 200ms', recommendation: 'Optimize interaction responsiveness' }); score -= 8; }
+                    }
+                }
+
+                // Error pages
+                const errorPages = d.error_pages || [];
+                if (Array.isArray(errorPages)) {
+                    errorPages.slice(0, 3).forEach(err => {
+                        const count = err.count || err.occurrences || err.total_events || '';
+                        issues.push({ severity: 'warning', title: (err.status_code ? err.status_code + ' error' : 'Error') + (err.page_path ? ' on ' + err.page_path : ''), description: count + ' occurrences', file_path: err.page_path || err.url, recommendation: 'Investigate and fix error page' });
+                    });
+                }
+
+                // Error types
+                const errorTypes = d.error_types || [];
+                if (Array.isArray(errorTypes)) {
+                    errorTypes.slice(0, 3).forEach(err => {
+                        issues.push({ severity: 'warning', title: err.error_type || err.type || 'Error', description: (err.count || '') + ' occurrences', recommendation: 'Fix this error type' });
                     });
                 }
 
@@ -587,8 +644,15 @@
                 const slow = d.slowest_pages || [];
                 if (Array.isArray(slow)) {
                     slow.slice(0, 2).forEach(p => {
-                        issues.push({ severity: 'info', title: 'Slow page: ' + (p.lcp_p75 ? (p.lcp_p75 / 1000).toFixed(1) + 's LCP' : 'slow'), file_path: p.page_path || p.url, recommendation: 'Optimize page load' });
+                        const lcp = p.lcp_p75 || p.avg_lcp || p.lcp;
+                        issues.push({ severity: 'info', title: 'Slow page' + (lcp ? ': ' + (lcp > 100 ? (lcp / 1000).toFixed(1) : lcp.toFixed(1)) + 's LCP' : ''), file_path: p.page_path || p.url || p.path, recommendation: 'Optimize page load' });
                     });
+                }
+
+                // If no CWV data at all, note it
+                if (!lcpRaw && !clsRaw && !inpRaw && errorPages.length === 0 && slow.length === 0) {
+                    issues.push({ severity: 'info', title: 'No performance data available', description: 'GA4 performance events may not be configured', recommendation: 'Ensure GA4 is tracking Core Web Vitals' });
+                    score = 50; // unknown state
                 }
 
                 score = Math.max(0, Math.min(100, score));
@@ -644,34 +708,56 @@
 
                 const issues = [];
                 let score = 90;
+                const overview = d.overview || {};
 
-                // 404 errors
-                const errors404 = d.top_404s || d.not_found_errors || [];
+                // 404 errors from 404_summary.top_errors
+                const summary404 = d['404_summary'] || {};
+                const errors404 = summary404.top_errors || d.top_404s || [];
                 if (Array.isArray(errors404)) {
                     errors404.slice(0, 4).forEach(e => {
-                        const hits = e.total_hits || e.hit_count || 0;
+                        const traffic = e.traffic || {};
+                        const hits = traffic.total_hits || e.total_hits || e.hit_count || 0;
+                        const revenue = (e.revenue_impact || {}).estimated_monthly_loss || e.estimated_lost_revenue || 0;
                         const sev = hits > 100 ? 'critical' : hits > 20 ? 'warning' : 'info';
-                        issues.push({ severity: sev, title: '404: ' + (e.url_path || e.requested_url || e.url), description: hits + ' hits' + (e.estimated_lost_revenue ? ' / ~$' + Math.round(e.estimated_lost_revenue) + ' lost' : ''), recommendation: e.recommended_action || 'Create redirect or restore page' });
-                        if (sev === 'critical') { allCriticalIssues.push({ source: 'Redirects', title: '404 with ' + hits + ' hits: ' + (e.url_path || e.url) }); score -= 15; }
+                        issues.push({ severity: sev, title: '404: ' + (e.requested_url || e.url_path || e.url), description: hits + ' hits' + (revenue ? ' / ~$' + Math.round(revenue) + '/mo lost' : ''), recommendation: (e.recommended_redirect || {}).action || e.recommended_action || 'Create redirect or restore page' });
+                        if (sev === 'critical') { allCriticalIssues.push({ source: 'Redirects', title: '404 with ' + hits + ' hits: ' + (e.requested_url || e.url) }); score -= 15; }
                         else if (sev === 'warning') score -= 5;
                     });
                 }
 
-                // Redirect chains
-                const chains = d.redirect_chains || [];
-                if (Array.isArray(chains)) {
-                    chains.slice(0, 3).forEach(c => {
-                        issues.push({ severity: c.severity || 'warning', title: 'Redirect chain (' + (c.chain_length || c.hops || '?') + ' hops)', description: (c.initial_url || c.source) + ' -> ' + (c.final_url || c.destination), recommendation: c.recommended_fix || 'Simplify to single redirect' });
-                        score -= 5;
+                // Redirect issues from redirect_issues_summary
+                const redirectSummary = d.redirect_issues_summary || {};
+                if (redirectSummary.redirect_chains > 0) {
+                    issues.push({ severity: 'warning', title: redirectSummary.redirect_chains + ' redirect chain(s) detected', description: 'Multiple hops slow down page loads and waste crawl budget', recommendation: 'Simplify to single direct redirects' });
+                    score -= 5 * redirectSummary.redirect_chains;
+                }
+                if (redirectSummary.broken_redirects > 0) {
+                    issues.push({ severity: 'critical', title: redirectSummary.broken_redirects + ' broken redirect(s)', description: 'Redirects pointing to non-existent pages', recommendation: 'Fix redirect destinations' });
+                    allCriticalIssues.push({ source: 'Redirects', title: redirectSummary.broken_redirects + ' broken redirects' });
+                    score -= 15;
+                }
+
+                // Broken links from broken_links_summary.top_links
+                const brokenSummary = d.broken_links_summary || {};
+                const brokenLinks = brokenSummary.top_links || d.broken_links || [];
+                if (Array.isArray(brokenLinks)) {
+                    brokenLinks.slice(0, 3).forEach(b => {
+                        issues.push({ severity: b.priority === 'high' ? 'warning' : 'info', title: 'Broken link on ' + (b.source_page || 'page'), description: 'Links to: ' + (b.broken_link || b.broken_url || b.url), recommendation: b.recommended_fix || 'Fix or remove broken link' });
                     });
                 }
 
-                // Broken links
-                const broken = d.broken_links || [];
-                if (Array.isArray(broken)) {
-                    broken.slice(0, 3).forEach(b => {
-                        issues.push({ severity: b.priority === 'high' ? 'warning' : 'info', title: 'Broken link on ' + (b.source_page || 'page'), description: 'Links to: ' + (b.broken_url || b.url), recommendation: b.recommended_fix || 'Fix or remove broken link' });
+                // Top priorities as additional context
+                const priorities = d.top_priorities || [];
+                if (Array.isArray(priorities) && issues.length === 0) {
+                    priorities.slice(0, 3).forEach(p => {
+                        issues.push({ severity: p.priority === 'high' ? 'warning' : 'info', title: p.title, description: p.description, recommendation: p.action || '' });
                     });
+                }
+
+                // Revenue impact
+                const totalRevenueLoss = overview.total_revenue_loss || 0;
+                if (totalRevenueLoss > 500) {
+                    score -= 10;
                 }
 
                 score = Math.max(0, Math.min(100, score));
