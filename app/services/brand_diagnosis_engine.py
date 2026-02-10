@@ -317,19 +317,26 @@ class BrandDiagnosisEngine:
 
         oos_pids = [r.shopify_product_id for r in oos if r.shopify_product_id]
 
-        # Gate 1: is_purchasable = false (product not in Shopify catalog)
+        # Gate 1: is_purchasable = false
+        # A product is NOT purchasable if:
+        #   (a) status is not 'active' (draft, archived, unlisted), OR
+        #   (b) status is 'active' but published_at is NULL (not visible to customers)
         if oos_pids:
-            unpublished = (
+            from sqlalchemy import or_
+            not_purchasable = (
                 self.db.query(func.count(ShopifyProduct.id))
                 .filter(
                     ShopifyProduct.shopify_product_id.in_(oos_pids),
-                    ShopifyProduct.status != 'active',
+                    or_(
+                        ShopifyProduct.status != 'active',
+                        ShopifyProduct.published_at.is_(None),
+                    ),
                 )
                 .scalar()
             ) or 0
-            if unpublished > 0:
+            if not_purchasable > 0:
                 gate_passed = True
-                gate_reasons.append(f"{unpublished} OOS products are inactive/unpublished")
+                gate_reasons.append(f"{not_purchasable} OOS products are inactive/unpublished")
 
         # Gate 2: Product removed from ads (had ads previously, now zero)
         if oos_pids:
@@ -871,6 +878,7 @@ class BrandDiagnosisEngine:
         rpi = self._refund_subquery()
         q = self.db.query(
             func.sum(ShopifyOrderItem.total_price).label("revenue"),
+            func.sum(func.coalesce(ShopifyOrderItem.total_discount, literal_column("0"))).label("discounts"),
             func.sum(func.coalesce(rpi.c.refund_amount, literal_column("0"))).label("refunds"),
             func.sum(ShopifyOrderItem.quantity).label("units"),
             func.sum(func.coalesce(rpi.c.refund_qty, literal_column("0"))).label("refund_units"),
@@ -884,6 +892,14 @@ class BrandDiagnosisEngine:
             ).label("total_cogs"),
             func.sum(
                 case(
+                    (and_(ShopifyOrderItem.cost_per_item.isnot(None),
+                          rpi.c.refund_qty.isnot(None)),
+                     ShopifyOrderItem.cost_per_item * rpi.c.refund_qty),
+                    else_=literal_column("0"),
+                )
+            ).label("refund_cogs"),
+            func.sum(
+                case(
                     (ShopifyOrderItem.cost_per_item.isnot(None),
                      ShopifyOrderItem.quantity),
                     else_=literal_column("0"),
@@ -895,27 +911,30 @@ class BrandDiagnosisEngine:
             ShopifyOrderItem.vendor == brand,
             ShopifyOrderItem.order_date >= start,
             ShopifyOrderItem.order_date < end,
-            ShopifyOrderItem.financial_status.in_(["paid", "partially_refunded"]),
+            ShopifyOrderItem.financial_status.in_(["paid", "partially_refunded", "refunded"]),
         )
         r = q.first()
 
         gross_rev = _f(r.revenue) if r else 0
+        discounts = _f(r.discounts) if r else 0
         refunds = _f(r.refunds) if r else 0
-        net_rev = gross_rev - refunds
+        net_rev = gross_rev - discounts - refunds
         gross_cogs = _f(r.total_cogs) if r else 0
+        refund_cogs = _f(r.refund_cogs) if r else 0
+        net_cogs = gross_cogs - refund_cogs
         units = (r.units or 0) if r else 0
         refund_units = int(r.refund_units or 0) if r else 0
         net_units = units - refund_units
         units_costed = int(r.units_with_cost or 0) if r else 0
         cost_coverage = round(units_costed / units * 100, 1) if units > 0 else 0
-        margin = round((net_rev - gross_cogs) / net_rev * 100, 1) if net_rev > 0 and gross_cogs > 0 else 0
+        margin = round((net_rev - net_cogs) / net_rev * 100, 1) if net_rev > 0 and net_cogs > 0 else 0
 
         return {
             "revenue": round(net_rev, 2),
             "refunds": round(refunds, 2),
             "units": net_units,
             "orders": (r.orders or 0) if r else 0,
-            "total_cogs": round(gross_cogs, 2),
+            "total_cogs": round(net_cogs, 2),
             "gross_margin_pct": margin,
             "cost_coverage_pct": cost_coverage,
         }
@@ -928,6 +947,7 @@ class BrandDiagnosisEngine:
                 ShopifyOrderItem.title,
                 ShopifyOrderItem.sku,
                 func.sum(ShopifyOrderItem.total_price).label("revenue"),
+                func.sum(func.coalesce(ShopifyOrderItem.total_discount, literal_column("0"))).label("discounts"),
                 func.sum(func.coalesce(rpi.c.refund_amount, literal_column("0"))).label("refunds"),
                 func.sum(ShopifyOrderItem.quantity).label("units"),
                 func.sum(func.coalesce(rpi.c.refund_qty, literal_column("0"))).label("refund_units"),
@@ -938,7 +958,7 @@ class BrandDiagnosisEngine:
                 ShopifyOrderItem.vendor == brand,
                 ShopifyOrderItem.order_date >= start,
                 ShopifyOrderItem.order_date < end,
-                ShopifyOrderItem.financial_status.in_(["paid", "partially_refunded"]),
+                ShopifyOrderItem.financial_status.in_(["paid", "partially_refunded", "refunded"]),
             )
             .group_by(
                 ShopifyOrderItem.shopify_product_id,
@@ -950,8 +970,9 @@ class BrandDiagnosisEngine:
         results = []
         for r in rows:
             gross = _f(r.revenue)
+            disc = _f(r.discounts)
             ref = _f(r.refunds)
-            net = gross - ref
+            net = gross - disc - ref
             net_units = (r.units or 0) - int(r.refund_units or 0)
             results.append({
                 "product_id": r.shopify_product_id,

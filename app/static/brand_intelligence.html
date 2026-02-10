@@ -620,6 +620,7 @@
             padding: 0 18px 18px;
             font-size: 13px;
         }
+        .diag-panel.collapsed .diag-body { display: none; }
 
         .diag-stat-row {
             display: flex;
@@ -648,6 +649,7 @@
         .gauge-green { background: var(--green); }
         .gauge-amber { background: var(--cass-gold); }
         .gauge-red { background: var(--red); }
+        .gauge-muted { background: #ccc; }
 
         /* Funnel */
         .funnel { display: flex; align-items: center; gap: 8px; margin: 12px 0; }
@@ -1213,7 +1215,7 @@
             var diag = data.diagnostics || {};
             html += '<div class="diag-grid">';
             html += renderPricingDiag(diag.pricing);
-            html += renderStockDiag(diag.stock);
+            html += renderStockingPriorities(diag.stocking_priorities);
             html += renderAdsDiag(diag.ads);
             html += renderDemandDiag(diag.demand);
             html += renderConversionDiag(diag.conversion);
@@ -1340,41 +1342,74 @@
             return '<div style="width:' + pct + '%;background:' + color + ';border-radius:3px" title="' + label + ': ' + count + '"></div>';
         }
 
-        function renderStockDiag(d) {
-            if (!d) return '';
-            var badgeCls = d.oos_rate > 20 ? 'background:var(--red-bg);color:var(--red)' : d.oos_rate > 5 ? 'background:var(--amber-bg);color:var(--amber)' : 'background:var(--green-bg);color:var(--green)';
-            var badgeTxt = d.oos_count + ' OOS';
+        function renderStockingPriorities(sp) {
+            if (!sp) return '';
+            var hasData = sp.priorities && sp.priorities.length > 0;
+            var count = hasData ? sp.priorities.length : 0;
 
-            var html = '<div class="diag-panel">'
+            var badgeCls, badgeTxt;
+            if (count > 5) {
+                badgeCls = 'background:var(--red-bg);color:var(--red)';
+                badgeTxt = count + ' to restock';
+            } else if (count > 0) {
+                badgeCls = 'background:var(--amber-bg);color:var(--amber)';
+                badgeTxt = count + ' to restock';
+            } else {
+                badgeCls = 'background:var(--green-bg);color:var(--green)';
+                badgeTxt = '0 to restock';
+            }
+
+            var panelClass = count === 0 ? 'diag-panel collapsed' : 'diag-panel';
+            var html = '<div class="' + panelClass + '">'
                 + '<div class="diag-header" onclick="this.parentElement.classList.toggle(\'collapsed\')">'
-                + '<span class="diag-title">Stock Health</span>'
+                + '<span class="diag-title">Stocking Priorities</span>'
                 + '<span class="diag-badge" style="' + badgeCls + '">' + badgeTxt + '</span></div>'
                 + '<div class="diag-body">';
 
-            html += '<div class="diag-stat-row"><span class="diag-stat-label">Total SKUs</span><span class="diag-stat-value">' + d.total_skus + '</span></div>';
-            html += '<div class="diag-stat-row"><span class="diag-stat-label">Out of Stock</span><span class="diag-stat-value" style="color:var(--red)">' + d.oos_count + ' (' + d.oos_rate + '%)</span></div>';
-            html += '<div class="diag-stat-row"><span class="diag-stat-label">Low Stock (1-3 units)</span><span class="diag-stat-value" style="color:var(--amber)">' + d.low_stock_count + '</span></div>';
-            html += '<div class="diag-stat-row"><span class="diag-stat-label">Total Units</span><span class="diag-stat-value">' + fmtNum(d.total_units) + '</span></div>';
-
-            if (d.stockout_revenue_risk > 0) {
-                html += '<div class="diag-stat-row"><span class="diag-stat-label">Stockout Revenue Risk</span><span class="diag-stat-value" style="color:var(--red)">' + fmt$(d.stockout_revenue_risk) + '</span></div>';
+            if (!hasData) {
+                html += '<div style="color:var(--slate);font-size:12px;padding:8px 0">'
+                    + 'No out-of-stock products with recent revenue found.'
+                    + '</div></div></div>';
+                return html;
             }
 
-            var oosW = Math.min(d.oos_rate, 100);
-            var oosColor = d.oos_rate > 20 ? 'gauge-red' : d.oos_rate > 5 ? 'gauge-amber' : 'gauge-green';
-            html += '<div class="gauge-bar"><div class="gauge-fill ' + oosColor + '" style="width:' + oosW + '%"></div></div>';
+            html += '<div class="diag-stat-row"><span class="diag-stat-label">Revenue at Risk (90d)</span>'
+                + '<span class="diag-stat-value" style="color:var(--red)">' + fmt$(sp.total_revenue_at_risk || 0) + '</span></div>';
+            html += '<div class="diag-stat-row"><span class="diag-stat-label">Avg Margin</span>'
+                + '<span class="diag-stat-value">' + (sp.avg_margin_on_priorities || 0) + '%</span></div>';
+            html += '<div class="diag-stat-row"><span class="diag-stat-label">Products to Restock</span>'
+                + '<span class="diag-stat-value">' + count + '</span></div>';
 
-            if (d.oos_products && d.oos_products.length) {
-                html += '<div style="margin-top:8px"><table class="product-table"><thead><tr><th>OOS Product</th><th class="num">Recent Rev (90d)</th><th class="num">Units Sold</th></tr></thead><tbody>';
-                for (var k = 0; k < Math.min(d.oos_products.length, 5); k++) {
-                    var op = d.oos_products[k];
-                    html += '<tr><td class="product-title-cell" title="' + escHtml(op.title) + '">' + escHtml(op.title) + '</td>'
-                        + '<td class="num">' + fmt$(op.recent_revenue) + '</td>'
-                        + '<td class="num">' + op.recent_units + '</td></tr>';
-                }
-                html += '</tbody></table></div>';
+            html += '<div style="margin-top:10px;overflow-x:auto">'
+                + '<table class="product-table"><thead><tr>'
+                + '<th>Product</th>'
+                + '<th>SKU</th>'
+                + '<th class="num">Rev (90d)</th>'
+                + '<th class="num">Vel/day</th>'
+                + '<th class="num">Intent %</th>'
+                + '<th class="num">Margin %</th>'
+                + '<th class="num">Priority</th>'
+                + '</tr></thead><tbody>';
+
+            for (var i = 0; i < sp.priorities.length; i++) {
+                var p = sp.priorities[i];
+                var scoreStyle = p.priority_score >= 70 ? 'color:var(--red);font-weight:700'
+                    : p.priority_score >= 40 ? 'color:var(--amber);font-weight:600' : '';
+                var intentTxt = p.view_to_cart_pct > 0 ? p.view_to_cart_pct.toFixed(1) + '%' : '<span style="color:#ccc">--</span>';
+                var marginTxt = p.margin_pct > 0 ? p.margin_pct.toFixed(1) + '%' : '<span style="color:#ccc">--</span>';
+
+                html += '<tr>'
+                    + '<td class="product-title-cell" title="' + escHtml(p.title) + '">' + escHtml(p.title) + '</td>'
+                    + '<td>' + escHtml(p.sku || '--') + '</td>'
+                    + '<td class="num">' + fmt$(p.recent_revenue) + '</td>'
+                    + '<td class="num">' + p.daily_velocity.toFixed(2) + '</td>'
+                    + '<td class="num">' + intentTxt + '</td>'
+                    + '<td class="num">' + marginTxt + '</td>'
+                    + '<td class="num" style="' + scoreStyle + '">' + p.priority_score.toFixed(1) + '</td>'
+                    + '</tr>';
             }
 
+            html += '</tbody></table></div>';
             html += '</div></div>';
             return html;
         }

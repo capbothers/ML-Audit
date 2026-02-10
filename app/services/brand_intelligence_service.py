@@ -19,6 +19,7 @@ from app.models.google_ads_data import GoogleAdsProductPerformance, GoogleAdsCam
 from app.models.ga4_data import GA4ProductPerformance
 from app.models.search_console_data import SearchConsoleQuery
 from app.models.competitive_pricing import CompetitivePricing
+from app.models.product_cost import ProductCost
 from app.utils.logger import log
 
 
@@ -235,6 +236,12 @@ class BrandIntelligenceService:
         except Exception:
             diagnostics["conversion"] = None
 
+        try:
+            diagnostics["stocking_priorities"] = self._get_stocking_priorities(
+                brand_name, period_days=max(period_days, 90)
+            )
+        except Exception:
+            diagnostics["stocking_priorities"] = None
         try:
             diagnostics["ads_yoy"] = self._get_brand_ad_data(
                 brand_name, cur_start, cur_end, yoy_start, yoy_end
@@ -761,12 +768,18 @@ class BrandIntelligenceService:
         if abs(volume_effect) > 0:
             direction = "positive" if volume_effect > 0 else "negative"
             unit_change = sum(cur_map[p]["units"] - yoy_map[p]["units"] for p in shared_ids)
+            # Explanation must reflect the dollar sign, not the unit sign,
+            # because product mix can make +units produce -$ (high-ASP losses outweigh low-ASP gains).
+            if volume_effect > 0:
+                vol_expl = f"Unit volume shifts on existing products added ${abs(volume_effect):,.0f} (net {unit_change:+,} units)"
+            else:
+                vol_expl = f"Unit volume shifts on existing products reduced revenue by ${abs(volume_effect):,.0f} (net {unit_change:+,} units)"
             drivers.append({
                 "driver": "volume",
                 "label": "Sales Volume",
                 "impact_dollars": round(volume_effect, 2),
                 "direction": direction,
-                "explanation": f"Unit volume {'increased' if unit_change > 0 else 'decreased'} by {abs(unit_change):,} units on existing products, contributing ${abs(volume_effect):,.0f}",
+                "explanation": vol_expl,
             })
 
         # 2. Price effect
@@ -1070,6 +1083,21 @@ class BrandIntelligenceService:
                     category="stock",
                 )
 
+        sp = diagnostics.get("stocking_priorities")
+        if sp and sp.get("total_revenue_at_risk", 0) > 500:
+            sp_count = sp.get("total_candidates", 0)
+            sp_risk = sp["total_revenue_at_risk"]
+            sp_margin = sp.get("avg_margin_on_priorities", 0)
+            _add(
+                "Stocking opportunity identified",
+                "medium",
+                f"{sp_count} products with recent sales are OOS/low-stock. "
+                f"Restocking top priorities (avg {sp_margin:.0f}% margin) "
+                f"could recover up to ${sp_risk:,.0f} in revenue.",
+                impact_estimate=sp_risk * 0.5,
+                category="stock",
+            )
+
         pricing = diagnostics.get("pricing") or {}
         price_idx = pricing.get("price_index")
         if price_idx is not None and price_idx > 1.1 and revenue_down:
@@ -1202,22 +1230,23 @@ class BrandIntelligenceService:
                 "sort_weight": rev * 0.3,
             })
 
-        # ── 3. Stockout risk (even for growing brands) ──
-        if self._stockout_root_cause:
-            if stock and stock.get("stockout_revenue_risk", 0) > 1000 and not high_oos:
-                oos = stock["oos_count"]
-                total = stock["total_skus"]
-                risk = stock["stockout_revenue_risk"]
-                recs.append({
-                    "priority": "high",
-                    "category": "stock",
-                    "action": (
-                        f"{oos} of {total} {brand} SKUs out of stock. "
-                        f"These OOS products generated ${risk:,.0f} in the prior period."
-                    ),
-                    "expected_impact": f"Restocking could recover up to ${risk:,.0f}",
-                    "sort_weight": risk,
-                })
+        # ── 3. Stocking priorities ──
+        sp = diagnostics.get("stocking_priorities")
+        if sp and sp.get("priorities"):
+            sp_top = sp["priorities"][0]
+            sp_count = sp.get("total_candidates", 0)
+            sp_risk = sp.get("total_revenue_at_risk", 0)
+            recs.append({
+                "priority": "high" if sp_risk > 2000 else "medium",
+                "category": "stock",
+                "action": (
+                    f"Restock {sp_count} OOS/low-stock {brand} products. "
+                    f"Top priority: {sp_top['title']} "
+                    f"(${sp_top['recent_revenue']:,.0f} rev, score {sp_top['priority_score']:.0f})."
+                ),
+                "expected_impact": f"Up to ${sp_risk:,.0f} revenue recovery over 90 days",
+                "sort_weight": sp_risk,
+            })
 
         # ── 4. Ads: scaling opportunity ──
         if ads and ads.get("campaign_spend", 0) > 0:
@@ -1673,6 +1702,262 @@ class BrandIntelligenceService:
             }
         except Exception as e:
             log.debug(f"Stock health skipped for {brand}: {e}")
+            return None
+
+    def _get_stocking_priorities(self, brand: str, period_days: int = 90) -> Optional[Dict]:
+        """Rank OOS/low-stock products by revenue recovery potential.
+
+        Scoring model:
+          0.40 * normalized_recent_revenue
+        + 0.25 * normalized_view_to_cart_intent
+        + 0.20 * normalized_margin
+        + 0.15 * normalized_daily_velocity
+        """
+        try:
+            # 1. Find candidates: OOS or low stock (<=3 units)
+            inv_rows = (
+                self.db.query(ShopifyInventory)
+                .filter(ShopifyInventory.vendor == brand)
+                .all()
+            )
+            if not inv_rows:
+                return None
+            known = [r for r in inv_rows if r.inventory_quantity is not None]
+            candidates = [r for r in known if r.inventory_quantity <= 3]
+            if not candidates:
+                return None
+
+            candidate_pids = list({r.shopify_product_id for r in candidates if r.shopify_product_id})
+            if not candidate_pids:
+                return None
+            inv_by_pid = {}
+            for r in candidates:
+                if r.shopify_product_id:
+                    inv_by_pid.setdefault(r.shopify_product_id, r)
+
+            # 2. Recent revenue + velocity + COGS per product (net of discounts/refunds)
+            since = datetime.utcnow() - timedelta(days=period_days)
+            rpi = self._refund_per_item_subquery()
+            rev_rows = (
+                self.db.query(
+                    ShopifyOrderItem.shopify_product_id,
+                    ShopifyOrderItem.title,
+                    ShopifyOrderItem.sku,
+                    func.sum(ShopifyOrderItem.total_price).label("rev"),
+                    func.sum(func.coalesce(ShopifyOrderItem.total_discount, literal_column("0"))).label("discounts"),
+                    func.sum(func.coalesce(rpi.c.refund_amount, literal_column("0"))).label("refunds"),
+                    func.sum(ShopifyOrderItem.quantity).label("units"),
+                    func.sum(func.coalesce(rpi.c.refund_qty, literal_column("0"))).label("refund_units"),
+                    func.avg(ShopifyOrderItem.price).label("avg_price"),
+                    func.sum(
+                        case(
+                            (ShopifyOrderItem.cost_per_item.isnot(None),
+                             ShopifyOrderItem.cost_per_item * ShopifyOrderItem.quantity),
+                            else_=literal_column("0"),
+                        )
+                    ).label("cogs"),
+                    func.sum(
+                        case(
+                            (and_(ShopifyOrderItem.cost_per_item.isnot(None),
+                                  rpi.c.refund_qty.isnot(None)),
+                             ShopifyOrderItem.cost_per_item * rpi.c.refund_qty),
+                            else_=literal_column("0"),
+                        )
+                    ).label("refund_cogs"),
+                    func.sum(
+                        case(
+                            (ShopifyOrderItem.cost_per_item.isnot(None),
+                             ShopifyOrderItem.quantity),
+                            else_=literal_column("0"),
+                        )
+                    ).label("units_costed"),
+                )
+                .outerjoin(rpi, rpi.c.line_item_id == ShopifyOrderItem.line_item_id)
+                .filter(
+                    ShopifyOrderItem.shopify_product_id.in_(candidate_pids),
+                    ShopifyOrderItem.order_date >= since,
+                    ShopifyOrderItem.financial_status.in_(["paid", "partially_refunded", "refunded"]),
+                )
+                .group_by(
+                    ShopifyOrderItem.shopify_product_id,
+                    ShopifyOrderItem.title,
+                    ShopifyOrderItem.sku,
+                )
+                .all()
+            )
+
+            # Build product data — only products with revenue > 0
+            products = []
+            for rr in rev_rows:
+                gross_rev = _dec(rr.rev)
+                discounts = _dec(rr.discounts)
+                refunds = _dec(rr.refunds)
+                net_rev = gross_rev - discounts - refunds
+                if net_rev <= 0:
+                    continue
+                units = int(rr.units or 0) - int(rr.refund_units or 0)
+                if units <= 0:
+                    continue
+                avg_price = net_rev / units if units > 0 else 0
+                cogs = _dec(rr.cogs)
+                refund_cogs = _dec(rr.refund_cogs)
+                net_cogs = cogs - refund_cogs
+                units_costed = int(rr.units_costed or 0)
+
+                # Margin from order-level COGS
+                margin_pct = 0.0
+                if net_cogs > 0 and net_rev > 0:
+                    margin_pct = round((net_rev - net_cogs) / net_rev * 100, 1)
+                elif rr.sku:
+                    # Fallback: ProductCost lookup
+                    cost_row = (
+                        self.db.query(ProductCost)
+                        .filter(ProductCost.vendor_sku == rr.sku)
+                        .first()
+                    )
+                    if cost_row:
+                        active_cost = cost_row.get_active_cost()
+                        if active_cost and net_rev > 0:
+                            est_cogs = float(active_cost) * units
+                            margin_pct = round((net_rev - est_cogs) / net_rev * 100, 1)
+
+                inv_item = inv_by_pid.get(rr.shopify_product_id)
+                products.append({
+                    "product_id": rr.shopify_product_id,
+                    "title": rr.title or "Unknown",
+                    "sku": rr.sku or "",
+                    "recent_revenue": round(net_rev, 2),
+                    "recent_units": units,
+                    "daily_velocity": round(units / max(period_days, 1), 2),
+                    "avg_price": round(avg_price, 2),
+                    "margin_pct": max(margin_pct, 0),
+                    "view_to_cart_pct": 0.0,  # filled in step 3
+                    "inventory_quantity": inv_item.inventory_quantity if inv_item else 0,
+                })
+
+            if not products:
+                return None
+
+            # 3. GA4 intent signals — batch query
+            try:
+                active_pids = [p["product_id"] for p in products if p["product_id"]]
+                # Build GA4 item ID mapping per product
+                ga4_map = {}  # shopify_product_id -> set of ga4 item_ids
+                product_rows = (
+                    self.db.query(
+                        ShopifyProduct.shopify_product_id,
+                        ShopifyProduct.handle,
+                        ShopifyProduct.variants,
+                    )
+                    .filter(ShopifyProduct.shopify_product_id.in_(active_pids))
+                    .all()
+                )
+                country_prefixes = ("shopify_AU", "shopify_US", "shopify_CA", "shopify_NZ", "shopify_GB")
+                for pr in product_rows:
+                    pid = str(pr.shopify_product_id)
+                    ids = {pid}
+                    if pr.handle:
+                        ids.add(pr.handle)
+                    variants = pr.variants or []
+                    if isinstance(variants, list):
+                        for v in variants:
+                            vid = v.get("id") if isinstance(v, dict) else None
+                            if vid:
+                                vid = str(vid)
+                                ids.add(vid)
+                                for pfx in country_prefixes:
+                                    ids.add(f"{pfx}_{pid}_{vid}")
+                    ga4_map[pr.shopify_product_id] = ids
+
+                # Add SKUs from order items
+                sku_rows = (
+                    self.db.query(
+                        ShopifyOrderItem.shopify_product_id,
+                        func.distinct(ShopifyOrderItem.sku),
+                    )
+                    .filter(
+                        ShopifyOrderItem.shopify_product_id.in_(active_pids),
+                        ShopifyOrderItem.sku.isnot(None),
+                        ShopifyOrderItem.sku != "",
+                    )
+                    .all()
+                )
+                for row in sku_rows:
+                    if row[0] in ga4_map and row[1]:
+                        ga4_map[row[0]].add(row[1])
+
+                # Batch query GA4 data
+                all_ga4_ids = set()
+                for id_set in ga4_map.values():
+                    all_ga4_ids.update(id_set)
+
+                if all_ga4_ids:
+                    ga4_since = (datetime.utcnow() - timedelta(days=90)).date()
+                    ga4_rows = (
+                        self.db.query(
+                            GA4ProductPerformance.item_id,
+                            func.sum(GA4ProductPerformance.items_viewed).label("views"),
+                            func.sum(GA4ProductPerformance.items_added_to_cart).label("carts"),
+                        )
+                        .filter(
+                            GA4ProductPerformance.item_id.in_(list(all_ga4_ids)),
+                            GA4ProductPerformance.date >= ga4_since,
+                        )
+                        .group_by(GA4ProductPerformance.item_id)
+                        .all()
+                    )
+                    ga4_by_id = {r.item_id: r for r in ga4_rows}
+
+                    # Aggregate per product
+                    for p in products:
+                        pid_ids = ga4_map.get(p["product_id"], set())
+                        total_views = 0
+                        total_carts = 0
+                        for gid in pid_ids:
+                            row = ga4_by_id.get(gid)
+                            if row:
+                                total_views += int(row.views or 0)
+                                total_carts += int(row.carts or 0)
+                        if total_views > 0:
+                            p["view_to_cart_pct"] = round(total_carts / total_views * 100, 1)
+            except Exception as ga4_err:
+                log.debug(f"GA4 intent lookup failed for {brand}: {ga4_err}")
+
+            # 4. Scoring — normalize and weight
+            max_rev = max((p["recent_revenue"] for p in products), default=0.01) or 0.01
+            max_intent = max((p["view_to_cart_pct"] for p in products), default=0.01) or 0.01
+            max_margin = max((p["margin_pct"] for p in products), default=0.01) or 0.01
+            max_velocity = max((p["daily_velocity"] for p in products), default=0.01) or 0.01
+
+            for p in products:
+                p["priority_score"] = round(
+                    (0.40 * (p["recent_revenue"] / max_rev)
+                     + 0.25 * (p["view_to_cart_pct"] / max_intent)
+                     + 0.20 * (p["margin_pct"] / max_margin)
+                     + 0.15 * (p["daily_velocity"] / max_velocity)
+                     ) * 100,
+                    1,
+                )
+                # Revenue protected estimate: 30 days of velocity at avg price
+                p["revenue_protected"] = round(p["daily_velocity"] * 30 * p["avg_price"], 2)
+
+            products.sort(key=lambda x: x["priority_score"], reverse=True)
+            top = products[:10]
+
+            margins_on_top = [p["margin_pct"] for p in top if p["margin_pct"] > 0]
+            return {
+                "total_candidates": len(products),
+                "total_revenue_at_risk": round(sum(p["recent_revenue"] for p in products), 2),
+                "avg_margin_on_priorities": round(
+                    sum(margins_on_top) / len(margins_on_top), 1
+                ) if margins_on_top else 0,
+                "priorities": [
+                    {k: v for k, v in p.items() if k != "avg_price"}
+                    for p in top
+                ],
+            }
+        except Exception as e:
+            log.debug(f"Stocking priorities skipped for {brand}: {e}")
             return None
 
     def _get_ads_diagnostic(self, brand, cur_start, cur_end) -> Optional[Dict]:
