@@ -455,6 +455,9 @@ class BrandIntelligenceService:
             name = row.get("name", "")
             if not name:
                 continue
+            # Explicit campaign exclusions
+            if brand_norm == "zip" and "zip search" in name.lower():
+                continue
             if exclude_patterns and any(p.search(name) for p in exclude_patterns):
                 continue
             # Match if brand name appears in campaign name
