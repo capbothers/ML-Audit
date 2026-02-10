@@ -21,6 +21,7 @@ from app.models.ga4_data import GA4ProductPerformance
 from app.models.search_console_data import SearchConsoleQuery
 from app.models.competitive_pricing import CompetitivePricing
 from app.models.product_cost import ProductCost
+from app.models.business_expense import MonthlyPL
 from app.config import get_settings
 from app.utils.logger import log
 
@@ -263,10 +264,17 @@ class BrandIntelligenceService:
         if diagnostics.get("ads") and diagnostics["ads"].get("campaign_spend") is not None:
             ads_spend = diagnostics["ads"]["campaign_spend"]
 
-        contrib_margin = None
+        total_rev = self._total_revenue(cur_start, cur_end)
+        payroll_total = self._get_period_payroll(cur_start, cur_end)
+        payroll_alloc = 0
+        if total_rev > 0 and payroll_total > 0:
+            payroll_alloc = round(payroll_total * (cur_totals["revenue"] / total_rev), 2)
+
+        net_margin = None
         if cur_totals["revenue"] > 0:
-            contrib_margin = round(
-                (cur_totals["revenue"] - cur_totals["total_cogs"] - ads_spend) / cur_totals["revenue"] * 100,
+            net_margin = round(
+                (cur_totals["revenue"] - cur_totals["total_cogs"] - ads_spend - payroll_alloc)
+                / cur_totals["revenue"] * 100,
                 1,
             )
 
@@ -293,7 +301,8 @@ class BrandIntelligenceService:
                 "estimated_margin_pct": cur_totals.get("estimated_margin_pct"),
                 "has_cost_data": cur_totals.get("has_cost_data", False),
                 "ads_spend": ads_spend,
-                "contribution_margin_pct": contrib_margin,
+                "wages_allocated": payroll_alloc,
+                "net_margin_pct": net_margin,
             },
         }
 
@@ -681,6 +690,52 @@ class BrandIntelligenceService:
             "estimated_margin_pct": estimated_margin,
             "has_cost_data": net_cogs > 0,
         }
+
+    def _total_revenue(self, start, end) -> float:
+        """Net revenue across all brands for a period (for allocation)."""
+        rpi = self._refund_per_item_subquery()
+        r = (
+            self.db.query(
+                func.sum(ShopifyOrderItem.total_price).label('revenue'),
+                func.sum(func.coalesce(ShopifyOrderItem.total_discount, literal_column('0'))).label('discounts'),
+                func.sum(func.coalesce(rpi.c.refund_amount, literal_column('0'))).label('refunds'),
+            )
+            .outerjoin(rpi, rpi.c.line_item_id == ShopifyOrderItem.line_item_id)
+            .filter(
+                ShopifyOrderItem.order_date >= start,
+                ShopifyOrderItem.order_date < end,
+                ShopifyOrderItem.financial_status.in_(['paid', 'partially_refunded', 'refunded']),
+            )
+            .first()
+        )
+        gross = _dec(r.revenue) if r else 0
+        discounts = _dec(r.discounts) if r else 0
+        refunds = _dec(r.refunds) if r else 0
+        return round(gross - discounts - refunds, 2)
+
+    def _get_period_payroll(self, start, end) -> float:
+        """Payroll from MonthlyPL summed across months overlapping the period."""
+        # Normalize to month starts
+        start_month = datetime(start.year, start.month, 1)
+        end_month = datetime(end.year, end.month, 1)
+        months = []
+        cur = start_month
+        while cur <= end_month:
+            months.append(cur.date())
+            if cur.month == 12:
+                cur = datetime(cur.year + 1, 1, 1)
+            else:
+                cur = datetime(cur.year, cur.month + 1, 1)
+
+        if not months:
+            return 0.0
+
+        total = (
+            self.db.query(func.sum(MonthlyPL.payroll))
+            .filter(MonthlyPL.month.in_(months))
+            .scalar()
+        )
+        return float(total or 0)
 
     def _monthly_breakdown(self, brand: str, start, end) -> List[Dict]:
         rpi = self._refund_per_item_subquery()

@@ -1064,10 +1064,11 @@
             return s.gross_margin_pct + '% <span style="font-size:11px;color:var(--amber)">(' + Math.round(cov) + '% cov)</span>';
         }
 
-        function fmtContributionMarginDetail(s) {
-            if (s.contribution_margin_pct == null) return '--';
+        function fmtNetMarginDetail(s) {
+            if (s.net_margin_pct == null) return '--';
             var spend = s.ads_spend != null ? fmt$(s.ads_spend) : '--';
-            return s.contribution_margin_pct + '% <span style="font-size:11px;color:var(--slate)" title="Ads spend: ' + spend + '">(after ads)</span>';
+            var wages = s.wages_allocated != null ? fmt$(s.wages_allocated) : '--';
+            return s.net_margin_pct + '% <span style="font-size:11px;color:var(--slate)" title="Ads spend: ' + spend + ' • Wages: ' + wages + '">(after ads + wages)</span>';
         }
 
         function fmtAdsSpend(v) {
@@ -1338,7 +1339,7 @@
                 + detailMetric('YoY', '<span class="' + yoyCls + '">' + fmtPct(s.revenue_yoy_pct) + '</span>')
                 + detailMetric('Units', fmtNum(s.current_units))
                 + detailMetric('Gross Margin', fmtMarginDetail(s))
-                + detailMetric('Contribution Margin', fmtContributionMarginDetail(s))
+                + detailMetric('Net Margin', fmtNetMarginDetail(s))
                 + '</div></div>';
 
             // WHY analysis — only show BIS version when Decision Engine is NOT available
@@ -1811,8 +1812,8 @@
                 html += '<div class="gauge-bar"><div class="gauge-fill ' + piColor + '" style="width:' + piWidth + '%"></div></div>';
             }
 
-            if (summary && summary.contribution_margin_pct != null) {
-                html += '<div class="diag-stat-row"><span class="diag-stat-label">Contribution Margin (After Ads)</span><span class="diag-stat-value">' + summary.contribution_margin_pct + '%</span></div>';
+            if (summary && summary.net_margin_pct != null) {
+                html += '<div class="diag-stat-row"><span class="diag-stat-label">Net Margin (After Ads + Wages)</span><span class="diag-stat-value">' + summary.net_margin_pct + '%</span></div>';
             }
 
             // Margin distribution
