@@ -88,21 +88,27 @@ class BrandDiagnosisEngine:
         fulfilment_diag = self._safe(self._fulfilment_diagnostic, brand, cur_start, cur_end, yoy_start, yoy_end)
         stock_diag = self._safe(self._stock_diagnostic, brand, cur_start, cur_end, yoy_start, yoy_end, funnel_diag)
 
+        # ── weekly trends ──
+        weekly_trends = self._safe(self._weekly_trends, brand, cur_end)
+
         # ── performance decomposition (the core) ──
         decomposition = self._decompose(
             brand, cur_totals, yoy_totals, cur_map, yoy_map,
             ads_diag, demand_diag, funnel_diag, fulfilment_diag,
+            cur_end=cur_end,
         )
 
         # ── anomaly detection ──
         anomalies = self._detect_anomalies(
             cur_totals, yoy_totals, pricing_diag, ads_diag,
             demand_diag, funnel_diag, fulfilment_diag,
+            weekly_trends=weekly_trends,
         )
 
         # ── momentum score ──
         momentum = self._momentum_score(
             cur_totals, yoy_totals, demand_diag, ads_diag, funnel_diag,
+            weekly_trends=weekly_trends,
         )
 
         return {
@@ -116,12 +122,14 @@ class BrandDiagnosisEngine:
             "fulfilment_model": fulfilment_diag or self._empty_fulfilment(),
             "stock_model": stock_diag or self._empty_stock(),
             "momentum_score": momentum,
+            "weekly_trends": weekly_trends,
         }
 
     # ── performance decomposition ──────────────────────────────
 
     def _decompose(self, brand, cur, yoy, cur_map, yoy_map,
-                   ads_diag, demand_diag, funnel_diag, fulfilment_diag) -> Dict:
+                   ads_diag, demand_diag, funnel_diag, fulfilment_diag,
+                   cur_end=None) -> Dict:
         """
         Decompose revenue change into additive drivers that sum to ~100%.
 
@@ -154,6 +162,9 @@ class BrandDiagnosisEngine:
         new_rev = sum(cur_map[p]["revenue"] for p in new_ids)
         lost_rev = sum(yoy_map[p]["revenue"] for p in lost_ids)
         product_mix_effect = new_rev - lost_rev
+
+        # Classify lost products: structural vs statistical noise
+        variance_info = self._classify_product_variance(brand, lost_ids, yoy_map, cur_end)
 
         # ── 4. Residual (what volume + price + mix doesn't explain) ──
         mechanical_explained = volume_effect + price_effect + product_mix_effect
@@ -205,7 +216,11 @@ class BrandDiagnosisEngine:
                 "direction": "positive" if product_mix_effect >= 0 else "negative",
                 "new_products": len(new_ids),
                 "lost_products": len(lost_ids),
-                "confidence": "high",
+                "structural_mix_dollars": round(new_rev - variance_info["structural_dollars"], 2),
+                "variance_mix_dollars": round(-variance_info["variance_dollars"], 2),
+                "structural_products": len(variance_info["structural_ids"]),
+                "variance_products": len(variance_info["variance_ids"]),
+                "confidence": self._product_mix_confidence(variance_info, product_mix_effect),
             },
             "ads_effectiveness": {
                 "dollars": round(ads_alloc, 2),
@@ -233,6 +248,15 @@ class BrandDiagnosisEngine:
             },
         }
 
+        # Promote product_mix confidence if it's a top-2 driver by dollar impact.
+        # A top driver shouldn't be labeled "low" even if most lost products are
+        # low-volume — the aggregate impact is still the primary explanation.
+        ranked = sorted(contributions.items(),
+                        key=lambda kv: abs(kv[1]["dollars"]), reverse=True)
+        top2_names = {kv[0] for kv in ranked[:2]}
+        if "product_mix" in top2_names and contributions["product_mix"]["confidence"] == "low":
+            contributions["product_mix"]["confidence"] = "medium"
+
         # Verify sum ≈ 100%
         total_pct = sum(c["pct_of_change"] for c in contributions.values())
 
@@ -257,8 +281,12 @@ class BrandDiagnosisEngine:
         has_data = diag.get("cur_spend", 0) > 0 or diag.get("prev_spend", 0) > 0
         if not has_data:
             return 0.0
-        # Strong signal if spend or ROAS changed materially
-        score = min(1.0, (spend_chg / 50) * 0.5 + (roas_chg / 50) * 0.5)
+        score = min(1.0, (spend_chg / 50) * 0.4 + (roas_chg / 50) * 0.4)
+        # Boost if impression share data shows constraint
+        budget_lost = diag.get("cur_budget_lost") or 0
+        rank_lost = diag.get("cur_rank_lost") or 0
+        if budget_lost > 10 or rank_lost > 10:
+            score = min(1.0, score + 0.2)
         return round(score, 3)
 
     def _demand_signal_strength(self, diag) -> float:
@@ -286,6 +314,79 @@ class BrandDiagnosisEngine:
         refund_chg = abs(diag.get("refund_rate_change_pp") or 0)
         cancel_chg = abs(diag.get("cancellation_rate_change_pp") or 0)
         return round(min(1.0, (refund_chg / 5) * 0.6 + (cancel_chg / 3) * 0.4), 3)
+
+    # ── product mix variance detection ─────────────────────────
+
+    def _classify_product_variance(self, brand, lost_ids, yoy_map, cur_end) -> Dict:
+        """
+        For each 'lost' product, check trailing 12-month sales rate.
+        If P(0 sales in 30 days) > 20%, classify as statistical noise.
+        """
+        import math
+        NOISE_THRESHOLD = 0.20
+
+        empty = {"structural_ids": set(), "variance_ids": set(),
+                 "structural_dollars": 0.0, "variance_dollars": 0.0}
+
+        if not lost_ids or cur_end is None:
+            return empty
+
+        trailing_start = cur_end - timedelta(days=365)
+        trailing_rows = (
+            self.db.query(
+                ShopifyOrderItem.shopify_product_id,
+                func.sum(ShopifyOrderItem.quantity).label("units"),
+            )
+            .filter(
+                ShopifyOrderItem.vendor == brand,
+                ShopifyOrderItem.shopify_product_id.in_(list(lost_ids)),
+                ShopifyOrderItem.order_date >= trailing_start,
+                ShopifyOrderItem.order_date < cur_end,
+                ShopifyOrderItem.financial_status.in_(
+                    ["paid", "partially_refunded", "refunded"]
+                ),
+            )
+            .group_by(ShopifyOrderItem.shopify_product_id)
+            .all()
+        )
+
+        trailing_map = {r.shopify_product_id: int(r.units or 0) for r in trailing_rows}
+
+        structural_ids = set()
+        variance_ids = set()
+        structural_dollars = 0.0
+        variance_dollars = 0.0
+
+        for pid in lost_ids:
+            units_12m = trailing_map.get(pid, 0)
+            monthly_rate = units_12m / 12.0
+            p_zero = math.exp(-monthly_rate) if monthly_rate > 0 else 1.0
+            lost_rev = yoy_map[pid]["revenue"] if pid in yoy_map else 0
+
+            if p_zero > NOISE_THRESHOLD:
+                variance_ids.add(pid)
+                variance_dollars += lost_rev
+            else:
+                structural_ids.add(pid)
+                structural_dollars += lost_rev
+
+        return {
+            "structural_ids": structural_ids,
+            "variance_ids": variance_ids,
+            "structural_dollars": round(structural_dollars, 2),
+            "variance_dollars": round(variance_dollars, 2),
+        }
+
+    def _product_mix_confidence(self, variance_info, product_mix_effect) -> str:
+        """Low confidence when most dollar impact comes from noise products."""
+        if abs(product_mix_effect) < 1:
+            return "low"
+        noise_pct = abs(variance_info["variance_dollars"]) / abs(product_mix_effect) if abs(product_mix_effect) > 0 else 0
+        if noise_pct > 0.6:
+            return "low"
+        elif noise_pct > 0.3:
+            return "medium"
+        return "high"
 
     # ── stock gating (NON-NEGOTIABLE) ──────────────────────────
 
@@ -507,49 +608,164 @@ class BrandDiagnosisEngine:
         return include_terms, exclude_terms, allowlist_used
 
     def _ads_diagnostic(self, brand, cur_start, cur_end, yoy_start, yoy_end) -> Optional[Dict]:
-        brand_pids = (
-            self.db.query(func.cast(ShopifyProduct.shopify_product_id, String))
-            .filter(ShopifyProduct.vendor == brand)
-            .all()
-        )
-        pid_list = [str(r[0]) for r in brand_pids] if brand_pids else []
+        """Campaign-level ads diagnostic using name-based brand matching."""
+        import re as _re
 
-        def _agg(start, end):
-            if not pid_list:
-                return {"spend": 0, "conv": 0, "conv_val": 0, "clicks": 0, "impr": 0, "roas": 0}
-            row = (
+        include_terms, exclude_terms, allowlist_used = self._get_brand_term_filters(brand)
+        brand_norm = (brand or "").strip().lower()
+        if not brand_norm:
+            return None
+
+        # Build include/exclude patterns for campaign name matching.
+        # Campaign names typically contain the brand name (e.g. "PM-AU Zip Taps"),
+        # so ALWAYS include a brand-name pattern regardless of allowlist config.
+        brand_pattern = _re.compile(r"\b" + _re.escape(brand_norm) + r"\b", _re.IGNORECASE)
+        include_patterns = [
+            _re.compile(r"\b" + _re.escape(t) + r"\b", _re.IGNORECASE)
+            for t in include_terms if t
+        ] if allowlist_used else []
+        exclude_patterns = [
+            _re.compile(r"\b" + _re.escape(t) + r"\b", _re.IGNORECASE)
+            for t in exclude_terms if t
+        ]
+
+        def _matches_brand(campaign_name):
+            name = (campaign_name or "").strip()
+            if not name:
+                return False
+            if exclude_patterns and any(p.search(name) for p in exclude_patterns):
+                return False
+            # Match if brand name appears in campaign name
+            if brand_pattern.search(name):
+                return True
+            # Also match via allowlist terms
+            if include_patterns and any(p.search(name) for p in include_patterns):
+                return True
+            return False
+
+        def _fetch_and_aggregate(start, end):
+            rows = (
                 self.db.query(
-                    func.sum(GoogleAdsProductPerformance.cost_micros).label("cost"),
-                    func.sum(GoogleAdsProductPerformance.conversions).label("conv"),
-                    func.sum(GoogleAdsProductPerformance.conversions_value).label("conv_val"),
-                    func.sum(GoogleAdsProductPerformance.clicks).label("clicks"),
-                    func.sum(GoogleAdsProductPerformance.impressions).label("impr"),
+                    GoogleAdsCampaign.campaign_id,
+                    GoogleAdsCampaign.campaign_name,
+                    GoogleAdsCampaign.date,
+                    GoogleAdsCampaign.impressions,
+                    GoogleAdsCampaign.clicks,
+                    GoogleAdsCampaign.cost_micros,
+                    GoogleAdsCampaign.conversions,
+                    GoogleAdsCampaign.conversions_value,
+                    GoogleAdsCampaign.search_impression_share,
+                    GoogleAdsCampaign.search_budget_lost_impression_share,
+                    GoogleAdsCampaign.search_rank_lost_impression_share,
                 )
                 .filter(
-                    GoogleAdsProductPerformance.product_item_id.in_(pid_list),
-                    GoogleAdsProductPerformance.date >= start.date() if hasattr(start, "date") else start,
-                    GoogleAdsProductPerformance.date < end.date() if hasattr(end, "date") else end,
+                    GoogleAdsCampaign.date >= (start.date() if hasattr(start, "date") else start),
+                    GoogleAdsCampaign.date < (end.date() if hasattr(end, "date") else end),
                 )
-                .first()
+                .all()
             )
-            spend = _f(row.cost) / 1_000_000 if row and row.cost else 0
-            conv = _f(row.conv) if row else 0
-            conv_val = _f(row.conv_val) if row else 0
-            clicks = int(row.clicks or 0) if row else 0
-            impr = int(row.impr or 0) if row else 0
-            roas = conv_val / spend if spend > 0 else 0
-            return {"spend": spend, "conv": conv, "conv_val": conv_val, "clicks": clicks, "impr": impr, "roas": roas}
 
-        cur = _agg(cur_start, cur_end)
-        prev = _agg(yoy_start, yoy_end)
+            total_impr = 0
+            total_clicks = 0
+            total_cost_micros = 0
+            total_conv = 0.0
+            total_conv_val = 0.0
+            imp_share_num = 0.0
+            budget_lost_num = 0.0
+            rank_lost_num = 0.0
+            campaign_ids = set()
+            # Per-campaign tracking for breakdown
+            camp_stats = {}  # campaign_name → {spend_micros, conv_val, clicks, last_date}
+
+            for r in rows:
+                if not _matches_brand(r.campaign_name):
+                    continue
+                impr = int(r.impressions or 0)
+                total_impr += impr
+                total_clicks += int(r.clicks or 0)
+                total_cost_micros += int(r.cost_micros or 0)
+                total_conv += _f(r.conversions)
+                total_conv_val += _f(r.conversions_value)
+                campaign_ids.add(r.campaign_id)
+                # Accumulate per-campaign
+                cname = (r.campaign_name or "").strip()
+                if cname:
+                    cs = camp_stats.setdefault(cname, {"spend_micros": 0, "conv_val": 0.0, "clicks": 0, "last_date": None})
+                    cs["spend_micros"] += int(r.cost_micros or 0)
+                    cs["conv_val"] += _f(r.conversions_value)
+                    cs["clicks"] += int(r.clicks or 0)
+                    row_date = r.date
+                    if row_date and (cs["last_date"] is None or row_date > cs["last_date"]):
+                        cs["last_date"] = row_date
+                if r.search_impression_share is not None:
+                    v = _f(r.search_impression_share)
+                    if 0 < v <= 1:
+                        v *= 100
+                    imp_share_num += v * impr
+                if r.search_budget_lost_impression_share is not None:
+                    v = _f(r.search_budget_lost_impression_share)
+                    if 0 < v <= 1:
+                        v *= 100
+                    budget_lost_num += v * impr
+                if r.search_rank_lost_impression_share is not None:
+                    v = _f(r.search_rank_lost_impression_share)
+                    if 0 < v <= 1:
+                        v *= 100
+                    rank_lost_num += v * impr
+
+            spend = total_cost_micros / 1_000_000
+            roas = total_conv_val / spend if spend > 0 else 0
+
+            def _share(num):
+                if total_impr == 0 or num == 0:
+                    return None
+                return round(num / total_impr, 1)
+
+            # Build per-campaign breakdown (top 5 by spend)
+            # Mark campaigns as "paused" if their last activity is before
+            # the latest data date across all matched campaigns in this period.
+            all_last_dates = [cs["last_date"] for cs in camp_stats.values() if cs["last_date"]]
+            latest_data_date = max(all_last_dates) if all_last_dates else None
+
+            camp_list = []
+            for cname, cs in camp_stats.items():
+                cs_spend = cs["spend_micros"] / 1_000_000
+                cs_roas = cs["conv_val"] / cs_spend if cs_spend > 0 else 0
+                ld = cs["last_date"]
+                if ld and latest_data_date and ld < latest_data_date:
+                    status = "paused"
+                else:
+                    status = "active"
+                camp_list.append({
+                    "name": cname, "spend": round(cs_spend, 2),
+                    "roas": round(cs_roas, 2), "clicks": cs["clicks"],
+                    "last_date": str(ld) if ld else None,
+                    "status": status,
+                })
+            camp_list.sort(key=lambda x: x["spend"], reverse=True)
+
+            return {
+                "spend": spend, "conv": total_conv, "conv_val": total_conv_val,
+                "clicks": total_clicks, "impr": total_impr, "roas": roas,
+                "imp_share": _share(imp_share_num),
+                "budget_lost": _share(budget_lost_num),
+                "rank_lost": _share(rank_lost_num),
+                "campaign_ids": campaign_ids,
+                "campaigns": camp_list[:5],
+            }
+
+        cur = _fetch_and_aggregate(cur_start, cur_end)
+        prev = _fetch_and_aggregate(yoy_start, yoy_end)
 
         if cur["spend"] == 0 and prev["spend"] == 0:
             return None
 
+        new_campaign_ids = cur["campaign_ids"] - prev["campaign_ids"]
+        lost_campaign_ids = prev["campaign_ids"] - cur["campaign_ids"]
+
         spend_chg_pct = _pct(cur["spend"], prev["spend"])
         roas_chg_pct = _pct(cur["roas"], prev["roas"])
 
-        # Efficiency: revenue per $ of spend
         cur_eff = cur["conv_val"] / cur["spend"] if cur["spend"] > 0 else 0
         prev_eff = prev["conv_val"] / prev["spend"] if prev["spend"] > 0 else 0
 
@@ -566,9 +782,16 @@ class BrandDiagnosisEngine:
             "prev_clicks": prev["clicks"],
             "cur_impressions": cur["impr"],
             "prev_impressions": prev["impr"],
+            "cur_imp_share": cur["imp_share"],
+            "prev_imp_share": prev["imp_share"],
+            "cur_budget_lost": cur["budget_lost"],
+            "cur_rank_lost": cur["rank_lost"],
             "efficiency_current": round(cur_eff, 3),
             "efficiency_prior": round(prev_eff, 3),
             "ad_driven_revenue_delta": round(cur["conv_val"] - prev["conv_val"], 2),
+            "new_campaigns": len(new_campaign_ids),
+            "lost_campaigns": len(lost_campaign_ids),
+            "top_campaigns": cur.get("campaigns", []),
         }
 
     def _demand_diagnostic(self, brand, cur_start, cur_end, yoy_start, yoy_end) -> Optional[Dict]:
@@ -763,7 +986,8 @@ class BrandDiagnosisEngine:
 
     # ── anomaly detection ──────────────────────────────────────
 
-    def _detect_anomalies(self, cur, yoy, pricing, ads, demand, funnel, fulfilment) -> Dict:
+    def _detect_anomalies(self, cur, yoy, pricing, ads, demand, funnel, fulfilment,
+                          weekly_trends=None) -> Dict:
         """Flag signals that are statistical outliers (simple threshold-based)."""
         anomalies = []
 
@@ -824,62 +1048,276 @@ class BrandDiagnosisEngine:
                     "description": f"Refund rate {'increased' if ref_chg > 0 else 'decreased'} {abs(ref_chg):.1f}pp",
                 })
 
+        # Trend-based anomalies
+        if weekly_trends and weekly_trends.get("trends"):
+            trends = weekly_trends["trends"]
+            if trends.get("ads_roas") in ("accelerating_decline", "declining"):
+                roas_vals = [w["roas"] for w in (weekly_trends.get("ads") or []) if w.get("roas") is not None]
+                recent = roas_vals[-4:] if len(roas_vals) >= 4 else roas_vals
+                if recent:
+                    anomalies.append({
+                        "signal": "ads_roas_trend",
+                        "value": recent[-1] if recent else None,
+                        "threshold": None,
+                        "description": f"ROAS declining week-over-week: {' → '.join(str(r) for r in recent)}",
+                    })
+            if trends.get("revenue") == "accelerating_decline":
+                anomalies.append({
+                    "signal": "revenue_trend",
+                    "value": None,
+                    "threshold": None,
+                    "description": "Revenue in accelerating week-over-week decline",
+                })
+
         return {
             "count": len(anomalies),
             "items": anomalies,
         }
 
+    # ── weekly trend analysis ──────────────────────────────────
+
+    def _weekly_trends(self, brand, cur_end, num_weeks=8) -> Dict:
+        """Compute week-over-week trends for revenue, ads, and search."""
+        import re as _re
+
+        weeks = []
+        for i in range(num_weeks):
+            week_end = cur_end - timedelta(weeks=i)
+            week_start = week_end - timedelta(days=7)
+            weeks.append((week_start, week_end))
+        weeks.reverse()  # oldest first
+
+        # ── Revenue + orders per week ──
+        revenue_weeks = []
+        for ws, we in weeks:
+            row = (
+                self.db.query(
+                    func.sum(ShopifyOrderItem.total_price).label("revenue"),
+                    func.sum(ShopifyOrderItem.quantity).label("units"),
+                    func.count(func.distinct(ShopifyOrderItem.shopify_order_id)).label("orders"),
+                )
+                .filter(
+                    ShopifyOrderItem.vendor == brand,
+                    ShopifyOrderItem.order_date >= ws,
+                    ShopifyOrderItem.order_date < we,
+                    ShopifyOrderItem.financial_status.in_(["paid", "partially_refunded"]),
+                )
+                .first()
+            )
+            revenue_weeks.append({
+                "week_start": ws.strftime("%Y-%m-%d"),
+                "revenue": round(_f(row.revenue), 2) if row else 0,
+                "units": int(row.units or 0) if row else 0,
+                "orders": int(row.orders or 0) if row else 0,
+            })
+
+        # ── Ads ROAS + spend per week (campaign-level, one bulk query) ──
+        include_terms, exclude_terms, allowlist_used = self._get_brand_term_filters(brand)
+        brand_norm = (brand or "").strip().lower()
+        brand_pat = _re.compile(r"\b" + _re.escape(brand_norm) + r"\b", _re.IGNORECASE)
+        al_patterns = [
+            _re.compile(r"\b" + _re.escape(t) + r"\b", _re.IGNORECASE)
+            for t in include_terms if t
+        ] if allowlist_used else []
+        ex_patterns = [
+            _re.compile(r"\b" + _re.escape(t) + r"\b", _re.IGNORECASE)
+            for t in exclude_terms if t
+        ]
+
+        def _camp_matches(name):
+            name = (name or "").strip()
+            if not name:
+                return False
+            if ex_patterns and any(p.search(name) for p in ex_patterns):
+                return False
+            if brand_pat.search(name):
+                return True
+            if al_patterns and any(p.search(name) for p in al_patterns):
+                return True
+            return False
+
+        span_start = weeks[0][0]
+        span_end = weeks[-1][1]
+        all_camp_rows = (
+            self.db.query(
+                GoogleAdsCampaign.campaign_name,
+                GoogleAdsCampaign.date,
+                GoogleAdsCampaign.cost_micros,
+                GoogleAdsCampaign.conversions_value,
+            )
+            .filter(
+                GoogleAdsCampaign.date >= (span_start.date() if hasattr(span_start, "date") else span_start),
+                GoogleAdsCampaign.date < (span_end.date() if hasattr(span_end, "date") else span_end),
+            )
+            .all()
+        )
+        brand_camp_rows = [r for r in all_camp_rows if _camp_matches(r.campaign_name)]
+
+        ads_weeks = []
+        for ws, we in weeks:
+            ws_d = ws.date() if hasattr(ws, "date") else ws
+            we_d = we.date() if hasattr(we, "date") else we
+            period_rows = [r for r in brand_camp_rows if ws_d <= r.date < we_d]
+            spend = sum(int(r.cost_micros or 0) for r in period_rows) / 1_000_000
+            conv_val = sum(_f(r.conversions_value) for r in period_rows)
+            roas = round(conv_val / spend, 2) if spend > 0 else None
+            ads_weeks.append({
+                "week_start": ws.strftime("%Y-%m-%d"),
+                "spend": round(spend, 2),
+                "roas": roas,
+            })
+
+        # ── Branded search clicks per week ──
+        brand_clause = SearchConsoleQuery.query.ilike(f"%{brand}%") if brand else None
+        exact_brand = func.lower(SearchConsoleQuery.query) == brand_norm if brand_norm else None
+
+        search_weeks = []
+        for ws, we in weeks:
+            term_clauses = [SearchConsoleQuery.query.ilike(f"%{t}%") for t in include_terms]
+            if allowlist_used and brand_clause is not None and term_clauses:
+                include_expr = or_(exact_brand, and_(brand_clause, or_(*term_clauses)))
+            elif brand_clause is not None:
+                include_expr = or_(exact_brand, brand_clause)
+            else:
+                include_expr = exact_brand
+
+            q = (
+                self.db.query(func.sum(SearchConsoleQuery.clicks).label("clicks"))
+                .filter(
+                    include_expr,
+                    SearchConsoleQuery.date >= (ws.date() if hasattr(ws, "date") else ws),
+                    SearchConsoleQuery.date < (we.date() if hasattr(we, "date") else we),
+                )
+            )
+            for t in exclude_terms:
+                q = q.filter(~SearchConsoleQuery.query.ilike(f"%{t}%"))
+            row = q.first()
+            search_weeks.append({
+                "week_start": ws.strftime("%Y-%m-%d"),
+                "clicks": int(row.clicks or 0) if row and row.clicks else 0,
+            })
+
+        # ── Trend classification ──
+        rev_trend = self._classify_trend([w["revenue"] for w in revenue_weeks])
+        ads_roas_values = [w["roas"] for w in ads_weeks if w["roas"] is not None]
+        ads_trend = self._classify_trend(ads_roas_values) if len(ads_roas_values) >= 4 else "insufficient_data"
+        search_trend = self._classify_trend([w["clicks"] for w in search_weeks])
+
+        return {
+            "num_weeks": num_weeks,
+            "revenue": revenue_weeks,
+            "ads": ads_weeks,
+            "search": search_weeks,
+            "trends": {
+                "revenue": rev_trend,
+                "ads_roas": ads_trend,
+                "search_clicks": search_trend,
+            },
+        }
+
+    def _classify_trend(self, values) -> str:
+        """Classify a series of weekly values into a trend direction."""
+        if len(values) < 4:
+            return "insufficient_data"
+
+        changes = []
+        for i in range(1, len(values)):
+            prev_val = values[i - 1]
+            curr_val = values[i]
+            if prev_val and prev_val > 0:
+                changes.append((curr_val - prev_val) / prev_val)
+            else:
+                changes.append(0)
+
+        recent = changes[-4:]
+        neg_count = sum(1 for c in recent if c < -0.05)
+        pos_count = sum(1 for c in recent if c > 0.05)
+
+        if neg_count >= 3:
+            if len(recent) >= 2 and recent[-1] < recent[-2]:
+                return "accelerating_decline"
+            return "declining"
+        elif pos_count >= 3:
+            earlier = changes[:-4] if len(changes) > 4 else []
+            if any(c < -0.05 for c in earlier):
+                return "recovering"
+            return "accelerating_growth"
+        elif neg_count >= 2 and pos_count >= 1:
+            return "stabilizing"
+        elif abs(sum(recent)) < 0.1:
+            return "flat"
+        return "mixed"
+
     # ── momentum score ─────────────────────────────────────────
 
-    def _momentum_score(self, cur, yoy, demand, ads, funnel) -> Dict:
+    def _momentum_score(self, cur, yoy, demand, ads, funnel,
+                        weekly_trends=None) -> Dict:
         """
         Forward-looking 0-100 composite score.
 
         Weights:
-          - Revenue trajectory: 30%
-          - Demand trend: 25%
-          - Ads efficiency trend: 20%
-          - Conversion trend: 25%
+          - Revenue trajectory: 25%
+          - Demand trend: 20%
+          - Ads efficiency trend: 15%
+          - Conversion trend: 20%
+          - Weekly momentum: 20%
         """
         score = 50.0  # neutral baseline
         components = {}
 
-        # Revenue trajectory (30 pts)
+        # Revenue trajectory (25 pts)
         rev_pct = _pct(cur["revenue"], yoy["revenue"])
         if rev_pct is not None:
-            rev_score = max(-30, min(30, rev_pct * 0.6))
+            rev_score = max(-25, min(25, rev_pct * 0.5))
         else:
             rev_score = 0
         components["revenue_trajectory"] = round(rev_score, 2)
         score += rev_score
 
-        # Demand trend (25 pts)
+        # Demand trend (20 pts)
         if demand:
             clicks_chg = demand.get("clicks_yoy_pct") or 0
-            demand_score = max(-25, min(25, clicks_chg * 0.5))
+            demand_score = max(-20, min(20, clicks_chg * 0.4))
         else:
             demand_score = 0
         components["demand_trend"] = round(demand_score, 2)
         score += demand_score
 
-        # Ads efficiency (20 pts)
+        # Ads efficiency (15 pts)
         if ads:
             roas_chg = ads.get("roas_change_pct") or 0
-            ads_score = max(-20, min(20, roas_chg * 0.3))
+            ads_score = max(-15, min(15, roas_chg * 0.25))
         else:
             ads_score = 0
         components["ads_efficiency"] = round(ads_score, 2)
         score += ads_score
 
-        # Conversion trend (25 pts)
+        # Conversion trend (20 pts)
         if funnel:
             v2c_chg = funnel.get("view_to_cart_change_pp") or 0
             c2p_chg = funnel.get("cart_to_purchase_change_pp") or 0
-            conv_score = max(-25, min(25, (v2c_chg * 2 + c2p_chg * 3)))
+            conv_score = max(-20, min(20, (v2c_chg * 1.5 + c2p_chg * 2.5)))
         else:
             conv_score = 0
         components["conversion_trend"] = round(conv_score, 2)
         score += conv_score
+
+        # Weekly momentum (20 pts)
+        weekly_score = 0
+        if weekly_trends and weekly_trends.get("trends"):
+            trends = weekly_trends["trends"]
+            trend_scores = {
+                "accelerating_decline": -20, "declining": -15,
+                "stabilizing": -5, "flat": 0, "mixed": 0,
+                "recovering": 10, "accelerating_growth": 20,
+                "insufficient_data": 0,
+            }
+            rev_t = trend_scores.get(trends.get("revenue", ""), 0) * 0.5
+            ads_t = trend_scores.get(trends.get("ads_roas", ""), 0) * 0.3
+            search_t = trend_scores.get(trends.get("search_clicks", ""), 0) * 0.2
+            weekly_score = rev_t + ads_t + search_t
+        components["weekly_momentum"] = round(weekly_score, 2)
+        score += weekly_score
 
         score = max(0, min(100, score))
 
@@ -1122,8 +1560,11 @@ class BrandDiagnosisEngine:
             "cur_conversions": 0, "prev_conversions": 0,
             "cur_clicks": 0, "prev_clicks": 0,
             "cur_impressions": 0, "prev_impressions": 0,
+            "cur_imp_share": None, "prev_imp_share": None,
+            "cur_budget_lost": None, "cur_rank_lost": None,
             "efficiency_current": 0, "efficiency_prior": 0,
             "ad_driven_revenue_delta": 0,
+            "new_campaigns": 0, "lost_campaigns": 0,
         }
 
     def _empty_funnel(self) -> Dict:

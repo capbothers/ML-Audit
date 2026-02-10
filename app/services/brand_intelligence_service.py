@@ -420,18 +420,17 @@ class BrandIntelligenceService:
         if not brand or (len(brand) <= 2 and not allowlist_used):
             return empty
 
-        if not include_terms:
-            return empty
-
+        brand_norm = brand.strip().lower()
+        # Always match on brand name in campaign name (word-boundary regex)
+        brand_pattern = _re.compile(r"\b" + _re.escape(brand_norm) + r"\b", _re.IGNORECASE)
         include_patterns = [
             _re.compile(r"\b" + _re.escape(term) + r"\b", _re.IGNORECASE)
             for term in include_terms if term
-        ]
+        ] if allowlist_used else []
         exclude_patterns = [
             _re.compile(r"\b" + _re.escape(term) + r"\b", _re.IGNORECASE)
             for term in exclude_terms if term
         ]
-        brand_norm = brand.strip().lower()
         total_impr = 0
         total_cost_micros = 0
         total_conv_val = 0.0
@@ -441,17 +440,17 @@ class BrandIntelligenceService:
 
         for row in rows:
             name = row.get("name", "")
-            name_norm = name.strip().lower()
+            if not name:
+                continue
             if exclude_patterns and any(p.search(name) for p in exclude_patterns):
                 continue
-            if allowlist_used:
-                if name_norm == brand_norm:
-                    pass
-                elif include_patterns and not any(p.search(name) for p in include_patterns):
-                    continue
+            # Match if brand name appears in campaign name
+            if brand_pattern.search(name):
+                pass
+            elif include_patterns and any(p.search(name) for p in include_patterns):
+                pass
             else:
-                if include_patterns and not any(p.search(name) for p in include_patterns):
-                    continue
+                continue
             impr = row["impr"] or 0
             total_impr += impr
             total_cost_micros += row.get("cost_micros", 0) or 0
@@ -1582,7 +1581,11 @@ class BrandIntelligenceService:
                 return None
 
             rows = (
-                self.db.query(CompetitivePricing)
+                self.db.query(CompetitivePricing, ProductCost)
+                .outerjoin(
+                    ProductCost,
+                    func.upper(CompetitivePricing.variant_sku) == func.upper(ProductCost.vendor_sku),
+                )
                 .filter(
                     CompetitivePricing.vendor == brand,
                     CompetitivePricing.pricing_date == latest_date,
@@ -1593,20 +1596,41 @@ class BrandIntelligenceService:
                 return None
 
             total = len(rows)
-            below_min = sum(1 for r in rows if r.is_below_minimum)
-            losing = sum(1 for r in rows if r.is_losing_money)
-            above_rrp = sum(1 for r in rows if r.is_above_rrp)
-            no_cost = sum(1 for r in rows if r.has_no_cost)
+            below_min = 0
+            losing = 0
+            above_rrp = 0
+            no_cost = 0
 
             # Price index
             price_ratios = []
-            for r in rows:
-                if r.current_price and r.lowest_competitor_price and float(r.lowest_competitor_price) > 0:
-                    price_ratios.append(float(r.current_price) / float(r.lowest_competitor_price))
+            for cp, pc in rows:
+                if cp.is_losing_money:
+                    losing += 1
+                if cp.is_above_rrp:
+                    above_rrp += 1
+                if cp.has_no_cost:
+                    no_cost += 1
+
+                floor = None
+                if pc and pc.minimum_price:
+                    floor = float(pc.minimum_price)
+                elif cp.minimum_price:
+                    floor = float(cp.minimum_price)
+
+                if (
+                    floor is not None
+                    and cp.lowest_competitor_price
+                    and float(cp.lowest_competitor_price) > 0
+                    and float(cp.lowest_competitor_price) < floor
+                ):
+                    below_min += 1
+
+                if cp.current_price and cp.lowest_competitor_price and float(cp.lowest_competitor_price) > 0:
+                    price_ratios.append(float(cp.current_price) / float(cp.lowest_competitor_price))
             price_index = round(sum(price_ratios) / len(price_ratios), 2) if price_ratios else None
 
             # Avg margin
-            margins = [float(r.profit_margin_pct) for r in rows if r.profit_margin_pct is not None]
+            margins = [float(cp.profit_margin_pct) for cp, _pc in rows if cp.profit_margin_pct is not None]
             avg_margin = round(sum(margins) / len(margins), 1) if margins else None
 
             # Margin distribution
@@ -1624,17 +1648,17 @@ class BrandIntelligenceService:
                     buckets["30_plus"] += 1
 
             # Worst margin SKUs
-            with_margin = [(r, float(r.profit_margin_pct)) for r in rows if r.profit_margin_pct is not None]
+            with_margin = [(cp, float(cp.profit_margin_pct)) for cp, _pc in rows if cp.profit_margin_pct is not None]
             with_margin.sort(key=lambda x: x[1])
             worst = []
-            for r, m in with_margin[:5]:
+            for cp, m in with_margin[:5]:
                 worst.append({
-                    "title": r.title or "Unknown",
-                    "sku": r.variant_sku or "",
+                    "title": cp.title or "Unknown",
+                    "sku": cp.variant_sku or "",
                     "margin_pct": m,
-                    "current_price": float(r.current_price) if r.current_price else None,
-                    "lowest_competitor": float(r.lowest_competitor_price) if r.lowest_competitor_price else None,
-                    "nett_cost": float(r.nett_cost) if r.nett_cost else None,
+                    "current_price": float(cp.current_price) if cp.current_price else None,
+                    "lowest_competitor": float(cp.lowest_competitor_price) if cp.lowest_competitor_price else None,
+                    "nett_cost": float(cp.nett_cost) if cp.nett_cost else None,
                 })
 
             return {

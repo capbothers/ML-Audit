@@ -34,7 +34,7 @@ class BrandDecisionEngine:
 
         state, state_label = self._determine_state(detail, diag)
         why = self._build_why(detail, diag, state)
-        how = self._build_how(detail, state)
+        how = self._build_how(detail, state, diag=diag)
         what_if = self._build_what_if(detail, diag)
         guardrails = self._apply_guardrails(detail, diag, how)
         confidence = self._build_confidence(detail, diag)
@@ -85,7 +85,7 @@ class BrandDecisionEngine:
 
         drivers.sort(key=lambda x: abs(x.get("dollars") or 0), reverse=True)
 
-        # primary driver: avoid low confidence if possible
+        # primary driver: prefer high-confidence, largest dollar impact
         primary = None
         for d in drivers:
             if d.get("confidence") != "low":
@@ -94,11 +94,8 @@ class BrandDecisionEngine:
         if not primary and drivers:
             primary = drivers[0].get("driver")
 
-        # summary: state + top 2 drivers
-        summary_bits = []
-        summary_bits.append((why_detail.get("summary") or "").strip())
-        top_expl = [d.get("explanation") for d in drivers[:2] if d.get("explanation")]
-        summary = ". ".join([b for b in summary_bits + top_expl if b])
+        # Build concise 1-2 sentence executive summary
+        summary = self._executive_summary(detail, diag, drivers, state)
 
         return {
             "summary": summary,
@@ -106,11 +103,78 @@ class BrandDecisionEngine:
             "drivers": drivers,
             "anomalies": (diag or {}).get("anomalies") or [],
             "momentum": (diag or {}).get("momentum_score") or {},
+            "weekly_trends": (diag or {}).get("weekly_trends"),
         }
 
-    def _build_how(self, detail: Dict, state: str) -> Dict:
+    def _executive_summary(self, detail: Dict, diag: Optional[Dict],
+                           drivers: list, state: str) -> str:
+        """Build a 1-2 sentence executive summary from drivers + trends."""
+        summary = detail.get("summary") or {}
+        brand = summary.get("brand") or (detail.get("brand") or "Brand")
+        yoy = summary.get("revenue_yoy_pct")
+        cur_rev = summary.get("current_revenue")
+        decomp = (diag or {}).get("performance_decomposition", {}).get("driver_contributions", {})
+
+        # Sentence 1: "{Brand} is {up/down} X% YoY driven by {top 2 directional drivers}"
+        if yoy is not None:
+            direction = "up" if yoy >= 0 else "down"
+            s1 = f"{brand} is {direction} {abs(yoy):.0f}% YoY"
+        elif cur_rev is not None:
+            s1 = f"{brand} revenue is ${cur_rev:,.0f}"
+        else:
+            s1 = f"{brand} performance"
+
+        # Pick top 2 drivers that match the direction of change
+        # Declining brand → focus on biggest negative drivers
+        # Growing brand → focus on biggest positive drivers
+        is_declining = yoy is not None and yoy < 0
+        directional = [d for d in drivers if
+                       (is_declining and (d.get("dollars") or 0) < 0) or
+                       (not is_declining and (d.get("dollars") or 0) > 0)]
+        # Fallback: if fewer than 2 same-direction drivers, take largest by abs
+        if len(directional) < 2:
+            directional = sorted(drivers, key=lambda x: abs(x.get("dollars") or 0), reverse=True)
+        top2 = sorted(directional, key=lambda x: abs(x.get("dollars") or 0), reverse=True)[:2]
+
+        driver_parts = []
+        for d in top2:
+            name = d.get("driver") or ""
+            dollars = d.get("dollars") or 0
+            # Use rich labels for product_mix (show lost/new breakdown)
+            if name == "product_mix" and decomp.get("product_mix"):
+                pm = decomp["product_mix"]
+                if dollars < 0:
+                    lost_n = pm.get("lost_products", 0)
+                    driver_parts.append(f"lost range (-${abs(dollars):,.0f}, {lost_n} products)")
+                else:
+                    new_n = pm.get("new_products", 0)
+                    driver_parts.append(f"new range (+${abs(dollars):,.0f}, {new_n} products)")
+            else:
+                label = name.replace("_", " ")
+                driver_parts.append(f"{label} (-${abs(dollars):,.0f})" if dollars < 0
+                                    else f"{label} (+${abs(dollars):,.0f})")
+
+        if driver_parts:
+            s1 += " driven by " + " and ".join(driver_parts)
+        s1 += "."
+
+        # Sentence 2: Critical trend or operational signal
+        trend_narrative = self._build_trend_narrative(diag)
+        if trend_narrative:
+            return f"{s1} {trend_narrative}"
+
+        # Fallback: mention ads efficiency if ROAS changed significantly
+        ads = (diag or {}).get("ads_model") or {}
+        roas_chg = ads.get("roas_change_pct")
+        if roas_chg is not None and abs(roas_chg) > 30:
+            direction = "up" if roas_chg > 0 else "down"
+            return f"{s1} Ads efficiency {direction} {abs(roas_chg):.0f}% YoY ({ads.get('cur_roas', 0):.1f}x → {ads.get('prev_roas', 0):.1f}x)."
+
+        return s1
+
+    def _build_how(self, detail: Dict, state: str, diag: Optional[Dict] = None) -> Dict:
         recs = detail.get("recommendations") or []
-        diag = detail.get("diagnostics") or {}
+        detail_diag = detail.get("diagnostics") or {}
 
         category_map = {
             "root_cause": "assortment",
@@ -123,15 +187,41 @@ class BrandDecisionEngine:
             "conversion": "funnel",
         }
 
+        # Check if ROAS is declining — suppress BIS "scale" ads recs if so
+        roas_declining = False
+        if diag:
+            _wt = ((diag or {}).get("weekly_trends") or {}).get("trends") or {}
+            roas_declining = _wt.get("ads_roas", "") in ("accelerating_decline", "declining")
+
+        # Pre-build enrichment data for concrete actions
+        lost_products = detail.get("lost_products") or []
+        top_lost = lost_products[:3]
+        lost_sku_lines = []
+        for p in top_lost:
+            sku = p.get("sku") or "?"
+            rev = p.get("revenue") or 0
+            lost_sku_lines.append(f"{sku} (${rev:,.0f})")
+
         actions = []
         for idx, r in enumerate(recs, 1):
             cat = category_map.get(r.get("category", ""), r.get("category") or "assortment")
-            evidence = self._build_evidence(r, diag)
+            # Skip BIS ads "scale" recommendations when ROAS is declining
+            if roas_declining and cat == "ads":
+                action_text = (r.get("action") or "").lower()
+                if "scale" in action_text or "increase" in action_text:
+                    continue
+            evidence = self._build_evidence(r, detail_diag)
+            action = r.get("action") or ""
+
+            # Enrich "lost products" action with top SKUs
+            if cat == "assortment" and "lost" in action.lower() and lost_sku_lines:
+                action += " Top lost: " + ", ".join(lost_sku_lines) + "."
+
             actions.append({
                 "id": idx,
                 "category": cat,
                 "priority": r.get("priority"),
-                "action": r.get("action"),
+                "action": action,
                 "expected_impact": r.get("expected_impact"),
                 "expected_impact_dollars": r.get("expected_impact_dollars"),
                 "impacted_metric": r.get("impacted_metric"),
@@ -139,17 +229,118 @@ class BrandDecisionEngine:
                 "evidence": evidence,
             })
 
+        # Inject ads-specific actions from diagnosis engine data
+        if diag:
+            ads_model = (diag or {}).get("ads_model") or {}
+            weekly = (diag or {}).get("weekly_trends") or {}
+            trends = weekly.get("trends") or {}
+
+            if ads_model.get("cur_spend", 0) > 0:
+                roas_trend = trends.get("ads_roas", "")
+
+                if roas_trend in ("accelerating_decline", "declining"):
+                    # Build concrete action with campaign names (active only)
+                    top_camps = ads_model.get("top_campaigns") or []
+                    active_camps = [c for c in top_camps if c.get("status") != "paused"]
+                    paused_camps = [c for c in top_camps if c.get("status") == "paused"]
+                    camp_lines = []
+                    for c in active_camps[:3]:
+                        camp_lines.append(
+                            f"{c['name']} (${c['spend']:,.0f} spend, {c['roas']:.1f}x ROAS)"
+                        )
+                    action_text = "Audit declining ROAS campaigns"
+                    if camp_lines:
+                        action_text += ": " + "; ".join(camp_lines)
+                    else:
+                        action_text += " — pause or restructure worst performers"
+                    if paused_camps:
+                        paused_names = ", ".join(c["name"] for c in paused_camps[:2])
+                        action_text += f". Already paused: {paused_names}"
+
+                    actions.append({
+                        "id": len(actions) + 1,
+                        "category": "ads",
+                        "priority": "critical" if roas_trend == "accelerating_decline" else "high",
+                        "action": action_text,
+                        "expected_impact": "Prevent further ROAS erosion",
+                        "expected_impact_dollars": None,
+                        "impacted_metric": "spend_efficiency",
+                        "dependency_order": 1,
+                        "evidence": [
+                            {"source": "diagnosis", "metric": "roas_trend", "value": roas_trend},
+                            {"source": "diagnosis", "metric": "cur_roas", "value": ads_model.get("cur_roas")},
+                            {"source": "diagnosis", "metric": "prev_roas", "value": ads_model.get("prev_roas")},
+                        ],
+                    })
+
+                budget_lost = ads_model.get("cur_budget_lost") or 0
+                if budget_lost > 15:
+                    actions.append({
+                        "id": len(actions) + 1,
+                        "category": "ads",
+                        "priority": "medium",
+                        "action": f"Increase budget — {budget_lost:.0f}% impression share lost to budget",
+                        "expected_impact": "Capture additional impression share",
+                        "expected_impact_dollars": None,
+                        "impacted_metric": "revenue",
+                        "dependency_order": 3,
+                        "evidence": [
+                            {"source": "diagnosis", "metric": "budget_lost_share", "value": budget_lost},
+                        ],
+                    })
+
+                new_camps = ads_model.get("new_campaigns", 0)
+                if new_camps > 0:
+                    actions.append({
+                        "id": len(actions) + 1,
+                        "category": "ads",
+                        "priority": "medium",
+                        "action": f"Review {new_camps} new campaign(s) — verify targeting and ROAS trajectory",
+                        "expected_impact": "Ensure new campaigns are optimizing correctly",
+                        "expected_impact_dollars": None,
+                        "impacted_metric": "spend_efficiency",
+                        "dependency_order": 3,
+                        "evidence": [],
+                    })
+
+        # When ROAS is the critical issue, demote assortment actions
+        # so ads efficiency leads the action list
+        if roas_declining:
+            for a in actions:
+                if a["category"] == "assortment":
+                    # Push assortment to later steps
+                    if (a.get("dependency_order") or 4) < 3:
+                        a["dependency_order"] = 3
+                    # Downgrade priority so ads [critical] dominates visually
+                    if a.get("priority") == "high":
+                        a["priority"] = "medium"
+
         strategy = "activation"
         if state == "down":
             strategy = "recovery"
         elif state == "up":
             strategy = "scaling"
 
-        deps = [
-            "Fix pricing or margin violations before scaling spend",
-            "Secure supply for high-velocity products before advertising pushes",
-            "Resolve conversion friction before scaling traffic",
-        ]
+        # Build context-aware dependency chain (only include what's relevant)
+        deps = []
+        pricing_diag = (detail.get("diagnostics") or {}).get("pricing") or {}
+        losing = pricing_diag.get("losing_money", 0) or 0
+        below_min = pricing_diag.get("below_minimum", 0) or 0
+        if losing > 0 or below_min > 0:
+            deps.append(f"Fix {losing + below_min} pricing violation(s) before scaling spend")
+
+        if roas_declining:
+            deps.append("Fix ads efficiency before scaling spend")
+
+        conv_diag = (detail.get("diagnostics") or {}).get("conversion") or {}
+        v2c = conv_diag.get("view_to_cart_pct")
+        if v2c is not None and v2c < 3:
+            deps.append(f"Resolve conversion friction ({v2c:.1f}% add-to-cart) before scaling traffic")
+
+        stock_model = (diag or {}).get("stock_model") or {}
+        if stock_model.get("gate_passed"):
+            oos_ct = stock_model.get("oos_count", 0)
+            deps.append(f"Address {oos_ct} out-of-stock SKU(s) before advertising pushes")
 
         return {
             "strategy": strategy,
@@ -160,23 +351,64 @@ class BrandDecisionEngine:
     def _build_what_if(self, detail: Dict, diag: Optional[Dict]) -> Dict:
         scenarios = []
         diagnostics = detail.get("diagnostics") or {}
+        weekly_trends = ((diag or {}).get("weekly_trends") or {}).get("trends") or {}
 
-        # Scenario 1: Scale ads +20%
+        # Scenario 1a: Restore ROAS (when declining) or Scale ads +20% (when stable)
         ads = diagnostics.get("ads") or {}
+        ads_roas_trend = weekly_trends.get("ads_roas", "")
+        diag_ads = (diag or {}).get("ads_model") or {}
         if ads.get("campaign_spend", 0) > 0:
             spend = ads.get("campaign_spend", 0)
             roas = ads.get("campaign_roas", 0) or 0
             add_spend = spend * 0.2
-            scenarios.append({
-                "scenario": "Scale ads +20%",
-                "description": "Increase brand spend by 20% at current ROAS",
-                "impact_low": add_spend * roas * 0.7,
-                "impact_mid": add_spend * roas * 1.0,
-                "impact_high": add_spend * roas * 1.2,
-                "confidence": "high" if spend > 500 else "medium",
-                "assumptions": ["ROAS holds", "Inventory coverage sufficient"],
-                "time_horizon": "30 days",
-            })
+
+            if ads_roas_trend in ("accelerating_decline", "declining"):
+                # Blocked: Scale ads
+                scenarios.append({
+                    "scenario": "Scale ads +20%",
+                    "description": "ROAS is in decline — fix campaign efficiency first",
+                    "impact_low": 0,
+                    "impact_mid": 0,
+                    "impact_high": 0,
+                    "confidence": "low",
+                    "assumptions": [f"ROAS trend: {ads_roas_trend} — scaling would amplify losses"],
+                    "time_horizon": "30 days",
+                    "blocked": True,
+                    "blocked_reason": f"ROAS trend: {ads_roas_trend}",
+                })
+
+                # Priority scenario: Restore ROAS to prior-year level
+                prev_roas = diag_ads.get("prev_roas", 0) or 0
+                cur_roas = diag_ads.get("cur_roas", 0) or 0
+                if prev_roas > cur_roas and spend > 0:
+                    # Revenue gained = current spend × (prior ROAS - current ROAS)
+                    roas_gap = prev_roas - cur_roas
+                    recovery_mid = spend * roas_gap
+                    scenarios.append({
+                        "scenario": "Restore ROAS to prior level",
+                        "description": f"Fix campaign efficiency from {cur_roas:.1f}x back to {prev_roas:.1f}x at current spend",
+                        "impact_low": round(recovery_mid * 0.5, 2),
+                        "impact_mid": round(recovery_mid, 2),
+                        "impact_high": round(recovery_mid * 1.2, 2),
+                        "confidence": "high" if spend > 500 else "medium",
+                        "assumptions": [
+                            f"Current ROAS: {cur_roas:.1f}x → Target: {prev_roas:.1f}x",
+                            "Campaign restructuring stops efficiency bleed",
+                            "Inventory and demand remain stable",
+                        ],
+                        "time_horizon": "60 days",
+                    })
+            else:
+                scenarios.append({
+                    "scenario": "Scale ads +20%",
+                    "description": "Increase brand spend by 20% at current ROAS",
+                    "impact_low": add_spend * roas * 0.7,
+                    "impact_mid": add_spend * roas * 1.0,
+                    "impact_high": add_spend * roas * 1.2,
+                    "confidence": "high" if spend > 500 else "medium",
+                    "assumptions": ["ROAS holds", "Inventory coverage sufficient"],
+                    "time_horizon": "30 days",
+                })
 
         # Scenario 3: Fix pricing violations
         pricing = diagnostics.get("pricing") or {}
@@ -249,10 +481,14 @@ class BrandDecisionEngine:
         if coverage:
             coverage = round(abs(coverage), 2)
 
+        # Check ads from both BIS diagnostics and diagnosis engine
+        diag_ads = (diag or {}).get("ads_model") or {}
+        has_ads = diagnostics.get("ads") is not None or diag_ads.get("cur_spend", 0) > 0
+
         sources = {
             "orders": summary.get("current_revenue") is not None,
             "cogs": summary.get("cost_coverage_pct", 0),
-            "ads": diagnostics.get("ads") is not None,
+            "ads": has_ads,
             "demand": diagnostics.get("demand") is not None and (diagnostics.get("demand") or {}).get("cur_clicks") is not None,
             "conversion": diagnostics.get("conversion") is not None,
             "pricing": diagnostics.get("pricing") is not None,
@@ -267,6 +503,40 @@ class BrandDecisionEngine:
             "data_sources": sources,
             "decomposition_coverage_pct": coverage,
         }
+
+    def _build_trend_narrative(self, diag: Optional[Dict]) -> str:
+        """Build human-readable trend narrative from weekly trends."""
+        weekly = (diag or {}).get("weekly_trends") or {}
+        trends = weekly.get("trends") or {}
+        if not trends:
+            return ""
+
+        parts = []
+        ads_trend = trends.get("ads_roas", "")
+        if ads_trend in ("accelerating_decline", "declining"):
+            ads_data = weekly.get("ads") or []
+            roas_vals = [w["roas"] for w in ads_data if w.get("roas") is not None]
+            recent = roas_vals[-4:] if len(roas_vals) >= 4 else roas_vals
+            if recent:
+                parts.append(
+                    f"ROAS declining week-over-week ({' → '.join(str(r) for r in recent)})"
+                )
+            else:
+                parts.append("Ads ROAS in sustained decline")
+
+        rev_trend = trends.get("revenue", "")
+        if rev_trend == "accelerating_decline":
+            parts.append("Revenue decline is accelerating week-over-week")
+        elif rev_trend == "recovering":
+            parts.append("Revenue showing signs of week-over-week recovery")
+
+        search_trend = trends.get("search_clicks", "")
+        if search_trend in ("accelerating_decline", "declining"):
+            parts.append("Branded search demand weakening")
+        elif search_trend in ("recovering", "accelerating_growth"):
+            parts.append("Branded search demand strengthening")
+
+        return ". ".join(parts)
 
     def _build_evidence(self, rec: Dict, diagnostics: Dict) -> List[Dict]:
         category = rec.get("category", "")

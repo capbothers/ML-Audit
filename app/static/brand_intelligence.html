@@ -1334,43 +1334,46 @@
                 + detailMetric('Margin', fmtMarginDetail(s))
                 + '</div></div>';
 
-            // WHY analysis with confidence
-            var why = data.why_analysis;
-            html += '<div class="why-box"><h3>WHY Analysis</h3>'
-                + '<p class="why-summary">' + escHtml(why.summary) + '</p>'
-                + '<div class="driver-list">';
-            for (var i = 0; i < why.drivers.length; i++) {
-                var d = why.drivers[i];
-                var dir = d.direction;
-                var icon = dir === 'positive' ? '+' : dir === 'negative' ? '-' : '~';
-                var impactCls = d.impact_dollars >= 0 ? 'positive' : 'negative';
-                var confBadge = d.confidence ? '<span class="conf-badge conf-' + d.confidence + '">' + d.confidence + '</span>' : '';
-                html += '<div class="driver-item ' + dir + '">'
-                    + '<div class="driver-icon">' + icon + '</div>'
-                    + '<div class="driver-text">' + escHtml(d.explanation) + confBadge + '</div>'
-                    + '<div class="driver-impact ' + impactCls + '">' + (d.impact_dollars >= 0 ? '+' : '') + fmt$(d.impact_dollars) + '</div>'
-                    + '</div>';
-            }
-            html += '</div></div>';
-
-            // Insight summary
-            var insights = data.insights || [];
-            if (insights.length) {
-                html += '<div class="card"><div class="card-title">Insight Summary</div>'
-                    + '<div class="insight-list">';
-                for (var j = 0; j < insights.length; j++) {
-                    var ins = insights[j];
-                    var sev = (ins.severity || 'medium').toLowerCase();
-                    var impact = ins.impact_estimate != null ? ('~' + fmt$(ins.impact_estimate)) : '';
-                    html += '<div class="insight-item">'
-                        + '<div class="insight-head">'
-                        + '<span>' + escHtml(ins.title || 'Insight') + '</span>'
-                        + '<span class="insight-badge ' + sev + '">' + escHtml(sev) + '</span>'
-                        + '</div>'
-                        + '<div class="insight-evidence">' + escHtml(ins.evidence || '') + (impact ? (' • ' + impact + ' potential') : '') + '</div>'
+            // WHY analysis — only show BIS version when Decision Engine is NOT available
+            // (Decision Engine provides superior WHY with trend detection + noise filtering)
+            if (!data.decision) {
+                var why = data.why_analysis;
+                html += '<div class="why-box"><h3>WHY Analysis</h3>'
+                    + '<p class="why-summary">' + escHtml(why.summary) + '</p>'
+                    + '<div class="driver-list">';
+                for (var i = 0; i < why.drivers.length; i++) {
+                    var d = why.drivers[i];
+                    var dir = d.direction;
+                    var icon = dir === 'positive' ? '+' : dir === 'negative' ? '-' : '~';
+                    var impactCls = d.impact_dollars >= 0 ? 'positive' : 'negative';
+                    var confBadge = d.confidence ? '<span class="conf-badge conf-' + d.confidence + '">' + d.confidence + '</span>' : '';
+                    html += '<div class="driver-item ' + dir + '">'
+                        + '<div class="driver-icon">' + icon + '</div>'
+                        + '<div class="driver-text">' + escHtml(d.explanation) + confBadge + '</div>'
+                        + '<div class="driver-impact ' + impactCls + '">' + (d.impact_dollars >= 0 ? '+' : '') + fmt$(d.impact_dollars) + '</div>'
                         + '</div>';
                 }
                 html += '</div></div>';
+
+                // Insight summary — only show when Decision Engine is NOT available
+                var insights = data.insights || [];
+                if (insights.length) {
+                    html += '<div class="card"><div class="card-title">Insight Summary</div>'
+                        + '<div class="insight-list">';
+                    for (var j = 0; j < insights.length; j++) {
+                        var ins = insights[j];
+                        var sev = (ins.severity || 'medium').toLowerCase();
+                        var impact = ins.impact_estimate != null ? ('~' + fmt$(ins.impact_estimate)) : '';
+                        html += '<div class="insight-item">'
+                            + '<div class="insight-head">'
+                            + '<span>' + escHtml(ins.title || 'Insight') + '</span>'
+                            + '<span class="insight-badge ' + sev + '">' + escHtml(sev) + '</span>'
+                            + '</div>'
+                            + '<div class="insight-evidence">' + escHtml(ins.evidence || '') + (impact ? (' • ' + impact + ' potential') : '') + '</div>'
+                            + '</div>';
+                    }
+                    html += '</div></div>';
+                }
             }
 
             // Monthly chart
@@ -1381,7 +1384,7 @@
             var diag = data.diagnostics || {};
             html += '<div class="diag-grid">';
             html += renderPricingDiag(diag.pricing);
-            html += renderAdsDiag(diag.ads);
+            html += renderAdsDiag(diag.ads, data.decision);
             html += renderDemandDiag(diag.demand);
             html += renderConversionDiag(diag.conversion);
             html += '</div>';
@@ -1428,8 +1431,9 @@
 
             html += '</div>';
 
-            // Next Actions (dependency-ordered recommendations)
-            if (data.recommendations.length) {
+            // Next Actions — only show BIS version when Decision Engine is NOT available
+            // (Decision Engine HOW section provides superior actions with trend-awareness)
+            if (!data.decision && data.recommendations.length) {
                 var recs = data.recommendations.slice().sort(function(a, b) {
                     var da = a.dependency_order || 4, db = b.dependency_order || 4;
                     if (da !== db) return da - db;
@@ -1491,22 +1495,39 @@
                     + '<div class="kpi-label">WHY</div>'
                     + '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:8px">' + escHtml(de.why.summary || '') + '</div>';
 
-                // Driver contribution bars
+                // Driver contribution bars — top 2 visible, rest behind "show more"
                 if (de.why.drivers && de.why.drivers.length) {
+                    var sortedDrivers = de.why.drivers.slice().sort(function(a, b) {
+                        var confOrder = { high: 0, medium: 1, low: 2 };
+                        var ca = confOrder[a.confidence] != null ? confOrder[a.confidence] : 1;
+                        var cb = confOrder[b.confidence] != null ? confOrder[b.confidence] : 1;
+                        if (ca !== cb) return ca - cb;
+                        return Math.abs(b.dollars || 0) - Math.abs(a.dollars || 0);
+                    });
+                    var driverId = 'de-drivers-' + Date.now();
                     html += '<div style="display:grid;gap:6px;margin-bottom:10px">';
-                    for (var w = 0; w < Math.min(de.why.drivers.length, 6); w++) {
-                        var d = de.why.drivers[w];
+                    for (var w = 0; w < Math.min(sortedDrivers.length, 6); w++) {
+                        var d = sortedDrivers[w];
+                        var isLowConf = d.confidence === 'low';
                         var pct = Math.min(Math.abs(d.pct_of_change || 0), 100);
                         var barCls = (d.direction === 'positive') ? 'driver-bar-pos' : 'driver-bar-neg';
                         var confBadge = d.confidence ? '<span class="conf-badge conf-' + d.confidence + '" style="font-size:9px;margin-left:6px">' + d.confidence + '</span>' : '';
                         var dollarStr = d.dollars != null ? ' (' + (d.dollars >= 0 ? '+' : '') + fmt$(d.dollars) + ')' : '';
-                        html += '<div>'
+                        var dimStyle = isLowConf ? 'opacity:0.5' : '';
+                        // Hide drivers beyond top 2 by default
+                        var hiddenStyle = w >= 2 ? 'display:none' : '';
+                        var extraCls = w >= 2 ? 'class="de-extra-driver"' : '';
+                        html += '<div ' + extraCls + ' data-driver-group="' + driverId + '" style="' + dimStyle + ';' + hiddenStyle + '">'
                             + '<div style="display:flex;justify-content:space-between;font-size:12px">'
-                            + '<span>' + escHtml(d.driver) + confBadge + '</span>'
+                            + '<span>' + escHtml(d.driver.replace(/_/g, ' ')) + confBadge + '</span>'
                             + '<span>' + (d.pct_of_change != null ? d.pct_of_change.toFixed(1) + '%' : '--') + dollarStr + '</span>'
                             + '</div>'
                             + '<div class="driver-bar"><div class="driver-bar-fill ' + barCls + '" style="width:' + pct + '%"></div></div>'
                             + '</div>';
+                    }
+                    if (sortedDrivers.length > 2) {
+                        html += '<a href="#" class="de-show-more" onclick="var els=document.querySelectorAll(\'[data-driver-group=&quot;' + driverId + '&quot;].de-extra-driver\');var showing=els[0]&&els[0].style.display===\'none\';for(var i=0;i<els.length;i++){els[i].style.display=showing?\'\':\'none\';}this.textContent=showing?\'Show less\':\'Show more\';return false;" style="font-size:11px;color:var(--cass-teal);cursor:pointer;text-decoration:none;margin-top:2px">'
+                            + 'Show more</a>';
                     }
                     html += '</div>';
                 }
@@ -1520,6 +1541,35 @@
                         + '<div class="opp-bar-track" style="width:100px"><div class="opp-bar-fill" style="width:' + mom.score + '%;background:' + momColor + '"></div></div>'
                         + '<span style="font-size:12px;font-weight:600;color:' + momColor + '">' + mom.score.toFixed(0) + '/100 ' + escHtml(mom.label || '') + '</span>'
                         + '</div>';
+                }
+
+                // Weekly Trends (sparklines)
+                var wt = de.why.weekly_trends;
+                if (wt && wt.revenue && wt.revenue.length) {
+                    html += '<div style="margin-bottom:10px">'
+                        + '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate);margin-bottom:6px">Weekly Trends (8 wk)</div>'
+                        + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">';
+
+                    // Revenue sparkline
+                    var revVals = wt.revenue.map(function(w) { return w.revenue || 0; });
+                    var revTrend = (wt.trends || {}).revenue || '';
+                    html += renderSparkCard('Revenue', revVals, revTrend, function(v) { return fmt$(v); });
+
+                    // ROAS sparkline
+                    if (wt.ads && wt.ads.length) {
+                        var roasVals = wt.ads.map(function(w) { return w.roas != null ? w.roas : 0; });
+                        var roasTrend = (wt.trends || {}).ads_roas || '';
+                        html += renderSparkCard('ROAS', roasVals, roasTrend, function(v) { return v.toFixed(1) + 'x'; });
+                    }
+
+                    // Search clicks sparkline
+                    if (wt.search && wt.search.length) {
+                        var srchVals = wt.search.map(function(w) { return w.clicks || 0; });
+                        var srchTrend = (wt.trends || {}).search_clicks || '';
+                        html += renderSparkCard('Search', srchVals, srchTrend, function(v) { return v.toFixed(0); });
+                    }
+
+                    html += '</div></div>';
                 }
 
                 // Anomalies
@@ -1597,22 +1647,33 @@
                     + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">';
                 for (var s = 0; s < de.what_if.scenarios.length; s++) {
                     var sc = de.what_if.scenarios[s];
+                    var isBlocked = sc.blocked === true;
                     var confColor = sc.confidence === 'high' ? 'var(--green)' : sc.confidence === 'medium' ? 'var(--amber)' : 'var(--slate)';
-                    html += '<div class="whatif-card">'
+                    var cardBorder = isBlocked ? 'border:2px solid var(--red);opacity:0.85' : '';
+                    html += '<div class="whatif-card" style="' + cardBorder + '">'
                         + '<div style="display:flex;justify-content:space-between;align-items:center">'
-                        + '<span style="font-weight:600;font-size:13px">' + escHtml(sc.scenario) + '</span>'
-                        + '<span style="font-size:10px;font-weight:600;color:' + confColor + ';text-transform:uppercase">' + escHtml(sc.confidence || '') + '</span>'
-                        + '</div>'
-                        + '<div style="font-size:12px;color:var(--slate);margin-top:4px">' + escHtml(sc.description || '') + '</div>'
-                        + '<div style="margin-top:8px;display:flex;align-items:center;gap:6px">'
-                        + '<span style="font-size:12px;color:var(--slate)">' + fmt$(sc.impact_low) + '</span>'
-                        + '<div style="flex:1;height:6px;background:#eee;border-radius:3px;position:relative">'
-                        + '<div style="position:absolute;left:' + impactBarPct(sc.impact_low, sc.impact_high, sc.impact_mid) + '%;top:-2px;width:10px;height:10px;border-radius:50%;background:var(--cass-gold);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></div>'
-                        + '</div>'
-                        + '<span style="font-size:12px;color:var(--slate)">' + fmt$(sc.impact_high) + '</span>'
-                        + '</div>'
-                        + '<div style="font-size:12px;font-weight:600;text-align:center;margin-top:4px">Expected: ' + fmt$(sc.impact_mid) + '</div>'
-                        + '<div style="font-size:10px;color:var(--slate);margin-top:4px">' + escHtml(sc.time_horizon || '') + '</div>'
+                        + '<span style="font-weight:600;font-size:13px">' + escHtml(sc.scenario) + '</span>';
+                    if (isBlocked) {
+                        html += '<span style="font-size:10px;font-weight:700;color:#fff;background:var(--red);padding:2px 8px;border-radius:4px">BLOCKED</span>';
+                    } else {
+                        html += '<span style="font-size:10px;font-weight:600;color:' + confColor + ';text-transform:uppercase">' + escHtml(sc.confidence || '') + '</span>';
+                    }
+                    html += '</div>'
+                        + '<div style="font-size:12px;color:' + (isBlocked ? 'var(--red)' : 'var(--slate)') + ';margin-top:4px">' + escHtml(sc.description || '') + '</div>';
+                    if (!isBlocked) {
+                        html += '<div style="margin-top:8px;display:flex;align-items:center;gap:6px">'
+                            + '<span style="font-size:12px;color:var(--slate)">' + fmt$(sc.impact_low) + '</span>'
+                            + '<div style="flex:1;height:6px;background:#eee;border-radius:3px;position:relative">'
+                            + '<div style="position:absolute;left:' + impactBarPct(sc.impact_low, sc.impact_high, sc.impact_mid) + '%;top:-2px;width:10px;height:10px;border-radius:50%;background:var(--cass-gold);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></div>'
+                            + '</div>'
+                            + '<span style="font-size:12px;color:var(--slate)">' + fmt$(sc.impact_high) + '</span>'
+                            + '</div>'
+                            + '<div style="font-size:12px;font-weight:600;text-align:center;margin-top:4px">Expected: ' + fmt$(sc.impact_mid) + '</div>';
+                    }
+                    if (isBlocked && sc.blocked_reason) {
+                        html += '<div style="font-size:11px;color:var(--red);margin-top:6px;font-weight:600">Reason: ' + escHtml(sc.blocked_reason) + '</div>';
+                    }
+                    html += '<div style="font-size:10px;color:var(--slate);margin-top:4px">' + escHtml(sc.time_horizon || '') + '</div>'
                         + '</div>';
                 }
                 html += '</div>'
@@ -1670,6 +1731,48 @@
 
             html += '</div>';
             return html;
+        }
+
+        function renderSparkCard(label, values, trend, fmtFn) {
+            var trendColors = {
+                accelerating_decline: 'var(--red)', declining: 'var(--red)',
+                stabilizing: 'var(--amber)', flat: 'var(--slate)', mixed: 'var(--amber)',
+                recovering: 'var(--green)', accelerating_growth: 'var(--green)',
+                insufficient_data: 'var(--slate)'
+            };
+            var trendLabels = {
+                accelerating_decline: 'Accel. Decline', declining: 'Declining',
+                stabilizing: 'Stabilizing', flat: 'Flat', mixed: 'Mixed',
+                recovering: 'Recovering', accelerating_growth: 'Accel. Growth',
+                insufficient_data: 'No Data'
+            };
+            var color = trendColors[trend] || 'var(--slate)';
+            var tLabel = trendLabels[trend] || trend;
+            var last = values.length ? values[values.length - 1] : 0;
+
+            // SVG sparkline
+            var maxV = Math.max.apply(null, values) || 1;
+            var minV = Math.min.apply(null, values);
+            var range = (maxV - minV) || 1;
+            var w = 100, h = 28;
+            var pts = [];
+            for (var i = 0; i < values.length; i++) {
+                var x = (i / Math.max(values.length - 1, 1)) * w;
+                var y = h - ((values[i] - minV) / range) * (h - 4) - 2;
+                pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+            }
+            var svg = '<svg width="' + w + '" height="' + h + '" viewBox="0 0 ' + w + ' ' + h + '" style="display:block">'
+                + '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linejoin="round"/>'
+                + '</svg>';
+
+            return '<div style="background:var(--card);border:1px solid var(--line);border-radius:6px;padding:6px 8px">'
+                + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">'
+                + '<span style="font-size:10px;font-weight:600;text-transform:uppercase;color:var(--slate)">' + label + '</span>'
+                + '<span style="font-size:10px;font-weight:600;color:' + color + '">' + tLabel + '</span>'
+                + '</div>'
+                + svg
+                + '<div style="font-size:11px;font-weight:600;color:var(--ink);text-align:right">' + fmtFn(last) + '</div>'
+                + '</div>';
         }
 
         function impactBarPct(low, high, mid) {
@@ -1742,10 +1845,17 @@
             return '<div style="width:' + pct + '%;background:' + color + ';border-radius:3px" title="' + label + ': ' + count + '"></div>';
         }
 
-        function renderAdsDiag(d) {
+        function renderAdsDiag(d, decision) {
             if (!d) return '';
-            var badgeTxt = d.scaling_opportunity ? 'Scale opportunity' : 'ROAS ' + d.campaign_roas + 'x';
-            var badgeCls = d.scaling_opportunity ? 'background:var(--green-bg);color:var(--green)' : 'background:var(--amber-bg);color:var(--amber)';
+            // Override scaling_opportunity when Decision Engine detects ROAS decline
+            var roasDecline = false;
+            if (decision) {
+                var wt = ((decision.why || {}).weekly_trends || {}).trends || {};
+                roasDecline = wt.ads_roas === 'accelerating_decline' || wt.ads_roas === 'declining';
+            }
+            var canScale = d.scaling_opportunity && !roasDecline;
+            var badgeTxt = roasDecline ? 'ROAS declining' : canScale ? 'Scale opportunity' : 'ROAS ' + d.campaign_roas + 'x';
+            var badgeCls = roasDecline ? 'background:var(--red-bg);color:var(--red)' : canScale ? 'background:var(--green-bg);color:var(--green)' : 'background:var(--amber-bg);color:var(--amber)';
 
             var html = '<div class="diag-panel">'
                 + '<div class="diag-header" onclick="this.parentElement.classList.toggle(\'collapsed\')">'
