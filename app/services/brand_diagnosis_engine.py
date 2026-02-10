@@ -502,11 +502,9 @@ class BrandDiagnosisEngine:
         key = (brand or "").strip().lower()
         include_terms = [t for t in (allowlist.get(key) or []) if t]
         exclude_terms = [t for t in (denylist.get(key) or []) if t]
+        allowlist_used = len(include_terms) > 0
 
-        if not include_terms:
-            include_terms = [brand]
-
-        return include_terms, exclude_terms
+        return include_terms, exclude_terms, allowlist_used
 
     def _ads_diagnostic(self, brand, cur_start, cur_end, yoy_start, yoy_end) -> Optional[Dict]:
         brand_pids = (
@@ -574,10 +572,15 @@ class BrandDiagnosisEngine:
         }
 
     def _demand_diagnostic(self, brand, cur_start, cur_end, yoy_start, yoy_end) -> Optional[Dict]:
-        include_terms, exclude_terms = self._get_brand_term_filters(brand)
+        include_terms, exclude_terms, allowlist_used = self._get_brand_term_filters(brand)
+        brand_norm = (brand or "").strip().lower()
 
         def _gsc(start, end):
             inc = [SearchConsoleQuery.query.ilike(f"%{t}%") for t in include_terms]
+            if brand_norm:
+                inc.append(func.lower(SearchConsoleQuery.query) == brand_norm)
+            if not allowlist_used:
+                inc.append(SearchConsoleQuery.query.ilike(f"%{brand}%"))
             q = (
                 self.db.query(
                     func.sum(SearchConsoleQuery.clicks).label("clicks"),

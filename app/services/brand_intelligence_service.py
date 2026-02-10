@@ -348,9 +348,6 @@ class BrandIntelligenceService:
         exclude_terms = [t for t in (denylist.get(key) or []) if t]
         allowlist_used = len(include_terms) > 0
 
-        if not include_terms:
-            include_terms = [brand]
-
         return include_terms, exclude_terms, allowlist_used
 
     def _get_ads_product_summary(self, start, end) -> Dict[str, Dict]:
@@ -440,6 +437,7 @@ class BrandIntelligenceService:
             _re.compile(r"\b" + _re.escape(term) + r"\b", _re.IGNORECASE)
             for term in exclude_terms if term
         ]
+        brand_norm = brand.strip().lower()
         total_impr = 0
         total_cost_micros = 0
         total_conv_val = 0.0
@@ -449,10 +447,17 @@ class BrandIntelligenceService:
 
         for row in rows:
             name = row.get("name", "")
+            name_norm = name.strip().lower()
             if exclude_patterns and any(p.search(name) for p in exclude_patterns):
                 continue
-            if include_patterns and not any(p.search(name) for p in include_patterns):
-                continue
+            if allowlist_used:
+                if name_norm == brand_norm:
+                    pass
+                elif include_patterns and not any(p.search(name) for p in include_patterns):
+                    continue
+            else:
+                if include_patterns and not any(p.search(name) for p in include_patterns):
+                    continue
             impr = row["impr"] or 0
             total_impr += impr
             total_cost_micros += row.get("cost_micros", 0) or 0
@@ -2084,8 +2089,13 @@ class BrandIntelligenceService:
     def _get_demand_signals(self, brand, cur_start, cur_end, yoy_start, yoy_end) -> Optional[Dict]:
         """Branded search demand from GSC."""
         try:
-            include_terms, exclude_terms, _ = self._get_brand_term_filters(brand)
+            include_terms, exclude_terms, allowlist_used = self._get_brand_term_filters(brand)
+            brand_norm = (brand or "").strip().lower()
             include_clauses = [SearchConsoleQuery.query.ilike(f"%{t}%") for t in include_terms]
+            if brand_norm:
+                include_clauses.append(func.lower(SearchConsoleQuery.query) == brand_norm)
+            if not allowlist_used:
+                include_clauses.append(SearchConsoleQuery.query.ilike(f"%{brand}%"))
 
             def _gsc_agg(start, end):
                 q = (
