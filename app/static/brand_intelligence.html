@@ -1804,8 +1804,8 @@
                 html += '<div class="gauge-bar"><div class="gauge-fill ' + piColor + '" style="width:' + piWidth + '%"></div></div>';
             }
 
-            if (summary && summary.avg_margin_pct != null) {
-                html += '<div class="diag-stat-row"><span class="diag-stat-label">True Margin (Orders)</span><span class="diag-stat-value">' + summary.avg_margin_pct + '%</span></div>';
+            if (summary && summary.gross_margin_pct != null) {
+                html += '<div class="diag-stat-row"><span class="diag-stat-label">True Margin (Orders)</span><span class="diag-stat-value">' + summary.gross_margin_pct + '%</span></div>';
             }
 
             // Margin distribution
