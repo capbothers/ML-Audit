@@ -574,20 +574,24 @@ class BrandDiagnosisEngine:
     def _demand_diagnostic(self, brand, cur_start, cur_end, yoy_start, yoy_end) -> Optional[Dict]:
         include_terms, exclude_terms, allowlist_used = self._get_brand_term_filters(brand)
         brand_norm = (brand or "").strip().lower()
+        brand_clause = SearchConsoleQuery.query.ilike(f"%{brand}%") if brand else None
+        exact_brand = func.lower(SearchConsoleQuery.query) == brand_norm if brand_norm else None
 
         def _gsc(start, end):
-            inc = [SearchConsoleQuery.query.ilike(f"%{t}%") for t in include_terms]
-            if brand_norm:
-                inc.append(func.lower(SearchConsoleQuery.query) == brand_norm)
-            if not allowlist_used:
-                inc.append(SearchConsoleQuery.query.ilike(f"%{brand}%"))
+            term_clauses = [SearchConsoleQuery.query.ilike(f"%{t}%") for t in include_terms]
+            if allowlist_used and brand_clause is not None and term_clauses:
+                include_expr = or_(exact_brand, and_(brand_clause, or_(*term_clauses)))
+            elif brand_clause is not None:
+                include_expr = or_(exact_brand, brand_clause)
+            else:
+                include_expr = exact_brand
             q = (
                 self.db.query(
                     func.sum(SearchConsoleQuery.clicks).label("clicks"),
                     func.sum(SearchConsoleQuery.impressions).label("impr"),
                 )
                 .filter(
-                    or_(*inc),
+                    include_expr,
                     SearchConsoleQuery.date >= start.date() if hasattr(start, "date") else start,
                     SearchConsoleQuery.date < end.date() if hasattr(end, "date") else end,
                 )

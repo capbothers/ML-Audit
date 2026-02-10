@@ -2091,11 +2091,15 @@ class BrandIntelligenceService:
         try:
             include_terms, exclude_terms, allowlist_used = self._get_brand_term_filters(brand)
             brand_norm = (brand or "").strip().lower()
-            include_clauses = [SearchConsoleQuery.query.ilike(f"%{t}%") for t in include_terms]
-            if brand_norm:
-                include_clauses.append(func.lower(SearchConsoleQuery.query) == brand_norm)
-            if not allowlist_used:
-                include_clauses.append(SearchConsoleQuery.query.ilike(f"%{brand}%"))
+            brand_clause = SearchConsoleQuery.query.ilike(f"%{brand}%") if brand else None
+            exact_brand = func.lower(SearchConsoleQuery.query) == brand_norm if brand_norm else None
+            term_clauses = [SearchConsoleQuery.query.ilike(f"%{t}%") for t in include_terms]
+            if allowlist_used and brand_clause is not None and term_clauses:
+                include_expr = or_(exact_brand, and_(brand_clause, or_(*term_clauses)))
+            elif brand_clause is not None:
+                include_expr = or_(exact_brand, brand_clause)
+            else:
+                include_expr = exact_brand
 
             def _gsc_agg(start, end):
                 q = (
@@ -2104,7 +2108,7 @@ class BrandIntelligenceService:
                         func.sum(SearchConsoleQuery.impressions).label("impr"),
                     )
                     .filter(
-                        or_(*include_clauses),
+                        include_expr,
                         SearchConsoleQuery.date >= start.date() if hasattr(start, "date") else start,
                         SearchConsoleQuery.date < end.date() if hasattr(end, "date") else end,
                     )
@@ -2132,7 +2136,7 @@ class BrandIntelligenceService:
                     func.avg(SearchConsoleQuery.position).label("pos"),
                 )
                 .filter(
-                    or_(*include_clauses),
+                    include_expr,
                     SearchConsoleQuery.date >= cur_start.date() if hasattr(cur_start, "date") else cur_start,
                     SearchConsoleQuery.date < cur_end.date() if hasattr(cur_end, "date") else cur_end,
                 )
