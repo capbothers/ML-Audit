@@ -265,15 +265,15 @@ class BrandIntelligenceService:
             ads_spend = diagnostics["ads"]["campaign_spend"]
 
         total_rev = self._total_revenue(cur_start, cur_end)
-        payroll_total = self._get_period_payroll(cur_start, cur_end)
-        payroll_alloc = 0
-        if total_rev > 0 and payroll_total > 0:
-            payroll_alloc = round(payroll_total * (cur_totals["revenue"] / total_rev), 2)
+        overhead_total = self._get_period_overhead_ex_shipping(cur_start, cur_end)
+        overhead_alloc = 0
+        if total_rev > 0 and overhead_total > 0:
+            overhead_alloc = round(overhead_total * (cur_totals["revenue"] / total_rev), 2)
 
         net_margin = None
         if cur_totals["revenue"] > 0:
             net_margin = round(
-                (cur_totals["revenue"] - cur_totals["total_cogs"] - ads_spend - payroll_alloc)
+                (cur_totals["revenue"] - cur_totals["total_cogs"] - ads_spend - overhead_alloc)
                 / cur_totals["revenue"] * 100,
                 1,
             )
@@ -301,7 +301,7 @@ class BrandIntelligenceService:
                 "estimated_margin_pct": cur_totals.get("estimated_margin_pct"),
                 "has_cost_data": cur_totals.get("has_cost_data", False),
                 "ads_spend": ads_spend,
-                "wages_allocated": payroll_alloc,
+                "overhead_allocated": overhead_alloc,
                 "net_margin_pct": net_margin,
             },
         }
@@ -713,8 +713,8 @@ class BrandIntelligenceService:
         refunds = _dec(r.refunds) if r else 0
         return round(gross - discounts - refunds, 2)
 
-    def _get_period_payroll(self, start, end) -> float:
-        """Payroll from MonthlyPL summed across months overlapping the period."""
+    def _get_period_overhead_ex_shipping(self, start, end) -> float:
+        """Operating expenses excluding ads and shipping, summed across months."""
         # Normalize to month starts
         start_month = datetime(start.year, start.month, 1)
         end_month = datetime(end.year, end.month, 1)
@@ -731,7 +731,18 @@ class BrandIntelligenceService:
             return 0.0
 
         total = (
-            self.db.query(func.sum(MonthlyPL.payroll))
+            self.db.query(
+                func.sum(
+                    func.coalesce(MonthlyPL.payroll, 0)
+                    + func.coalesce(MonthlyPL.rent, 0)
+                    + func.coalesce(MonthlyPL.utilities, 0)
+                    + func.coalesce(MonthlyPL.insurance, 0)
+                    + func.coalesce(MonthlyPL.software, 0)
+                    + func.coalesce(MonthlyPL.marketing_other, 0)
+                    + func.coalesce(MonthlyPL.professional_services, 0)
+                    + func.coalesce(MonthlyPL.other_expenses, 0)
+                )
+            )
             .filter(MonthlyPL.month.in_(months))
             .scalar()
         )

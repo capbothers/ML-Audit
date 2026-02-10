@@ -1067,8 +1067,8 @@
         function fmtNetMarginDetail(s) {
             if (s.net_margin_pct == null) return '--';
             var spend = s.ads_spend != null ? fmt$(s.ads_spend) : '--';
-            var wages = s.wages_allocated != null ? fmt$(s.wages_allocated) : '--';
-            return s.net_margin_pct + '% <span style="font-size:11px;color:var(--slate)" title="Ads spend: ' + spend + ' • Wages: ' + wages + '">(after ads + wages)</span>';
+            var overhead = s.overhead_allocated != null ? fmt$(s.overhead_allocated) : '--';
+            return s.net_margin_pct + '% <span style="font-size:11px;color:var(--slate)" title="Ads spend: ' + spend + ' • Overhead (ex shipping): ' + overhead + '">(after ads + overhead)</span>';
         }
 
         function fmtAdsSpend(v) {
@@ -1813,7 +1813,7 @@
             }
 
             if (summary && summary.net_margin_pct != null) {
-                html += '<div class="diag-stat-row"><span class="diag-stat-label">Net Margin (After Ads + Wages)</span><span class="diag-stat-value">' + summary.net_margin_pct + '%</span></div>';
+                html += '<div class="diag-stat-row"><span class="diag-stat-label">Net Margin (After Ads + Overhead)</span><span class="diag-stat-value">' + summary.net_margin_pct + '%</span></div>';
             }
 
             // Margin distribution
