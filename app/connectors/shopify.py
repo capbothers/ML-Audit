@@ -524,6 +524,7 @@ class ShopifyConnector(BaseConnector):
                 order_number=order.order_number,
                 order_date=order.created_at,
 
+                line_item_id=item.get("id"),
                 shopify_product_id=item.get("product_id"),
                 shopify_variant_id=item.get("variant_id"),
                 sku=item.get("sku"),

@@ -40,6 +40,7 @@ from app.models.shopify import (
     ShopifyProduct,
     ShopifyCustomer,
     ShopifyRefund,
+    ShopifyRefundLineItem,
     ShopifyInventory
 )
 

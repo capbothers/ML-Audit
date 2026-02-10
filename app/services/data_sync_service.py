@@ -17,7 +17,7 @@ from app.connectors.search_console_connector import SearchConsoleConnector
 from app.connectors.google_sheets import GoogleSheetsConnector
 from app.config import get_settings
 from app.models.base import SessionLocal
-from app.models.shopify import ShopifyOrder, ShopifyProduct, ShopifyCustomer, ShopifyRefund, ShopifyInventory, ShopifyOrderItem
+from app.models.shopify import ShopifyOrder, ShopifyProduct, ShopifyCustomer, ShopifyRefund, ShopifyRefundLineItem, ShopifyInventory, ShopifyOrderItem
 from app.utils.url_parsing import parse_landing_site
 from app.models.search_console_data import SearchConsoleQuery, SearchConsolePage, SearchConsoleSitemap
 from app.models.ga4_data import (
@@ -489,7 +489,21 @@ class DataSyncService:
                     sync_result.records_created += customers_result['created']
                     sync_result.records_updated += customers_result['updated']
 
-                # Save refunds (if fetched)
+                # Fetch and save refunds for refunded/partially_refunded orders
+                if not data.get('refunds'):
+                    orders_list = data.get('orders', {})
+                    if isinstance(orders_list, dict):
+                        orders_list = orders_list.get('items', [])
+                    refund_order_ids = [
+                        o['id'] for o in orders_list
+                        if o.get('financial_status') in ('refunded', 'partially_refunded')
+                    ]
+                    if refund_order_ids:
+                        log.info(f"Fetching refunds for {len(refund_order_ids)} refunded orders")
+                        refund_items = await self.shopify._fetch_refunds(refund_order_ids)
+                        if refund_items:
+                            data['refunds'] = {'items': refund_items}
+
                 if data.get('refunds'):
                     refunds_result = self._save_shopify_refunds(data)
                     result['refunds_saved'] = refunds_result['created']
@@ -656,6 +670,7 @@ class DataSyncService:
                                 shopify_order_id=shopify_order_id,
                                 order_number=order_data.get('order_number'),
                                 order_date=order_created_at,
+                                line_item_id=item.get('id'),
                                 shopify_product_id=item.get('product_id'),
                                 shopify_variant_id=item.get('variant_id'),
                                 sku=sku,
@@ -932,6 +947,31 @@ class DataSyncService:
                         )
                         db.add(new_refund)
                         result['created'] += 1
+
+                    # Normalize refund line items
+                    refund_items = refund_data.get('refund_line_items') or []
+                    if refund_items:
+                        db.query(ShopifyRefundLineItem).filter(
+                            ShopifyRefundLineItem.shopify_refund_id == shopify_refund_id
+                        ).delete()
+                        for item in refund_items:
+                            try:
+                                new_item = ShopifyRefundLineItem(
+                                    shopify_refund_id=shopify_refund_id,
+                                    shopify_order_id=refund_data.get('order_id'),
+                                    line_item_id=item.get('line_item_id'),
+                                    shopify_product_id=item.get('product_id'),
+                                    sku=item.get('sku'),
+                                    quantity=int(item.get('quantity') or 0),
+                                    subtotal=Decimal(str(item.get('subtotal', 0))),
+                                    total_tax=Decimal(str(item.get('total_tax', 0))),
+                                    created_at=self._parse_datetime(refund_data.get('created_at')),
+                                    processed_at=self._parse_datetime(refund_data.get('processed_at')),
+                                    synced_at=datetime.utcnow(),
+                                )
+                                db.add(new_item)
+                            except Exception as item_e:
+                                log.warning(f"Failed to save refund line item for refund {shopify_refund_id}: {item_e}")
 
                 except Exception as e:
                     log.warning(f"Failed to save refund {shopify_refund_id}: {e}")

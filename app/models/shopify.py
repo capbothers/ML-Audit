@@ -207,6 +207,7 @@ class ShopifyOrderItem(Base):
     order_date = Column(DateTime, index=True, nullable=False)
 
     # Product identifiers
+    line_item_id = Column(BigInteger, index=True, nullable=True)  # Shopify line item ID
     shopify_product_id = Column(BigInteger, index=True, nullable=True)
     shopify_variant_id = Column(BigInteger, index=True, nullable=True)
     sku = Column(String, index=True, nullable=True)
@@ -268,6 +269,34 @@ class ShopifyRefund(Base):
     processed_at = Column(DateTime, nullable=True)
 
     # Sync metadata
+    synced_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ShopifyRefundLineItem(Base):
+    """
+    Shopify refund line items (normalized)
+
+    Synced from Shopify refunds API; allows accurate net sales by product/brand.
+    """
+    __tablename__ = "shopify_refund_line_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # Shopify identifiers
+    shopify_refund_id = Column(BigInteger, index=True, nullable=False)
+    shopify_order_id = Column(BigInteger, index=True, nullable=False)
+    line_item_id = Column(BigInteger, index=True, nullable=True)
+    shopify_product_id = Column(BigInteger, index=True, nullable=True)
+    sku = Column(String, index=True, nullable=True)
+
+    # Refund details
+    quantity = Column(Integer, default=0)
+    subtotal = Column(Numeric(10, 2), default=0)  # Refund before tax
+    total_tax = Column(Numeric(10, 2), default=0)
+
+    # Timestamps
+    created_at = Column(DateTime, index=True)
+    processed_at = Column(DateTime, nullable=True)
     synced_at = Column(DateTime, default=datetime.utcnow)
 
 

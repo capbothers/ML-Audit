@@ -14,7 +14,7 @@ from app.utils.logger import log
 from app import __version__
 
 # Import routers
-from app.api import health, insights, sync, llm, monitoring, profitability, attribution, data_quality, seo, email, journey, user_behavior, ad_spend, weekly_brief, content_gap, code_health, redirect_health, ml_intelligence, pricing_impact, performance, customer_intelligence, merchant_center_intelligence, strategic_intelligence, finance, site_health, auth
+from app.api import health, insights, sync, llm, monitoring, profitability, attribution, data_quality, seo, email, journey, user_behavior, ad_spend, weekly_brief, content_gap, code_health, redirect_health, ml_intelligence, pricing_impact, performance, customer_intelligence, merchant_center_intelligence, strategic_intelligence, finance, site_health, auth, brand_intelligence
 from app.middleware.auth_middleware import AuthMiddleware
 from app.middleware.security_middleware import SecurityMiddleware
 
@@ -127,6 +127,7 @@ app.include_router(merchant_center_intelligence.router)
 app.include_router(strategic_intelligence.router)
 app.include_router(finance.router)
 app.include_router(site_health.router)
+app.include_router(brand_intelligence.router)
 
 
 @app.get("/robots.txt", response_class=PlainTextResponse)
@@ -202,6 +203,12 @@ async def ads_intelligence_page():
 async def site_intelligence_page():
     """Serve the site intelligence dashboard"""
     return FileResponse(os.path.join(static_dir, "site_intelligence.html"))
+
+
+@app.get("/brand-intelligence")
+async def brand_intelligence_page():
+    """Serve the brand intelligence dashboard"""
+    return FileResponse(os.path.join(static_dir, "brand_intelligence.html"))
 
 
 @app.get("/")

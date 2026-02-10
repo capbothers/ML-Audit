@@ -1,0 +1,123 @@
+"""
+Brand Intelligence API Routes
+
+Endpoints for brand performance analysis:
+- Dashboard overview (KPIs + scorecard)
+- Brand detail (deep dive with WHY analysis)
+- Brand comparison
+"""
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
+
+from app.models.base import get_db
+from app.services.brand_intelligence_service import BrandIntelligenceService
+from app.services.brand_diagnosis_engine import BrandDiagnosisEngine
+from app.utils.logger import log
+from app.utils.cache import get_cached, set_cached, _MISS
+
+router = APIRouter(prefix="/brands", tags=["brands"])
+
+
+@router.get("/dashboard")
+async def get_brand_dashboard(
+    days: int = Query(30, description="Period in days (30, 90, 365)"),
+    db: Session = Depends(get_db),
+):
+    """Brand Intelligence dashboard — KPIs + scorecard for all brands."""
+    cache_key = f"brand_dashboard|{days}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
+
+    try:
+        service = BrandIntelligenceService(db)
+        data = service.get_dashboard(period_days=days)
+        result = {"success": True, "data": data}
+        set_cached(cache_key, result, 300)
+        return result
+    except Exception as e:
+        log.error(f"Error in /brands/dashboard: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/detail")
+async def get_brand_detail(
+    brand: str = Query(..., description="Brand/vendor name"),
+    days: int = Query(30, description="Period in days"),
+    db: Session = Depends(get_db),
+):
+    """Deep dive into a single brand with WHY analysis and recommendations."""
+    try:
+        service = BrandIntelligenceService(db)
+        data = service.get_brand_detail(brand_name=brand, period_days=days)
+
+        # Attach ML-ready diagnosis in parallel to existing WHY analysis
+        try:
+            engine = BrandDiagnosisEngine(db)
+            data["diagnosis"] = engine.diagnose(brand, period_days=days)
+        except Exception as diag_err:
+            log.error(f"Diagnosis engine failed for {brand}: {diag_err}")
+            data["diagnosis"] = None
+
+        return {"success": True, "data": data}
+    except Exception as e:
+        log.error(f"Error in /brands/detail: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/diagnosis")
+async def get_brand_diagnosis(
+    brand: str = Query(..., description="Brand/vendor name"),
+    days: int = Query(30, description="Period in days (30, 90, 365)"),
+    db: Session = Depends(get_db),
+):
+    """ML-ready brand diagnosis — structured decomposition with stock gating."""
+    try:
+        engine = BrandDiagnosisEngine(db)
+        data = engine.diagnose(brand, period_days=days)
+        return {"success": True, "data": data}
+    except Exception as e:
+        log.error(f"Error in /brands/diagnosis: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/executive")
+async def get_executive_summary(
+    days: int = Query(30, description="Period in days"),
+    db: Session = Depends(get_db),
+):
+    """Executive view — brands at risk, watchlist, overperformers."""
+    cache_key = f"brand_executive|{days}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
+
+    try:
+        service = BrandIntelligenceService(db)
+        data = service.get_executive_summary(period_days=days)
+        result = {"success": True, "data": data}
+        set_cached(cache_key, result, 300)
+        return result
+    except Exception as e:
+        log.error(f"Error in /brands/executive: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/compare")
+async def compare_brands(
+    brands: str = Query(..., description="Comma-separated brand names"),
+    days: int = Query(30, description="Period in days"),
+    db: Session = Depends(get_db),
+):
+    """Compare 2-5 brands side by side."""
+    brand_list = [b.strip() for b in brands.split(',') if b.strip()]
+    if len(brand_list) < 2 or len(brand_list) > 5:
+        raise HTTPException(status_code=400, detail="Provide 2-5 brand names")
+
+    try:
+        service = BrandIntelligenceService(db)
+        data = service.get_brand_comparison(brand_list, period_days=days)
+        return {"success": True, "data": data}
+    except Exception as e:
+        log.error(f"Error in /brands/compare: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

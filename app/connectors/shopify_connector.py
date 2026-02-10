@@ -257,6 +257,7 @@ class ShopifyConnector(BaseConnector):
                 "title": item.title,
                 "quantity": item.quantity,
                 "price": float(item.price) if item.price else 0,
+                "total_discount": float(item.total_discount) if getattr(item, 'total_discount', None) else 0,
                 "sku": item.sku,
                 "variant_id": item.variant_id,
                 "product_id": item.product_id,
