@@ -259,6 +259,17 @@ class BrandIntelligenceService:
             diagnostics=diagnostics,
         )
 
+        ads_spend = 0
+        if diagnostics.get("ads") and diagnostics["ads"].get("campaign_spend") is not None:
+            ads_spend = diagnostics["ads"]["campaign_spend"]
+
+        contrib_margin = None
+        if cur_totals["revenue"] > 0:
+            contrib_margin = round(
+                (cur_totals["revenue"] - cur_totals["total_cogs"] - ads_spend) / cur_totals["revenue"] * 100,
+                1,
+            )
+
         return {
             "brand": brand_name,
             "period_days": period_days,
@@ -281,6 +292,8 @@ class BrandIntelligenceService:
                 "cost_coverage_pct": cur_totals.get("cost_coverage_pct", 0),
                 "estimated_margin_pct": cur_totals.get("estimated_margin_pct"),
                 "has_cost_data": cur_totals.get("has_cost_data", False),
+                "ads_spend": ads_spend,
+                "contribution_margin_pct": contrib_margin,
             },
         }
 

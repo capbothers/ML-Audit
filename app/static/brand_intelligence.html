@@ -1064,6 +1064,12 @@
             return s.gross_margin_pct + '% <span style="font-size:11px;color:var(--amber)">(' + Math.round(cov) + '% cov)</span>';
         }
 
+        function fmtContributionMarginDetail(s) {
+            if (s.contribution_margin_pct == null) return '--';
+            var spend = s.ads_spend != null ? fmt$(s.ads_spend) : '--';
+            return s.contribution_margin_pct + '% <span style="font-size:11px;color:var(--slate)" title="Ads spend: ' + spend + '">(after ads)</span>';
+        }
+
         function fmtAdsSpend(v) {
             if (v == null || v <= 0) return '--';
             return fmt$(v);
@@ -1331,7 +1337,8 @@
                 + detailMetric('Net Sales', fmt$(s.current_revenue))
                 + detailMetric('YoY', '<span class="' + yoyCls + '">' + fmtPct(s.revenue_yoy_pct) + '</span>')
                 + detailMetric('Units', fmtNum(s.current_units))
-                + detailMetric('Margin', fmtMarginDetail(s))
+                + detailMetric('Gross Margin', fmtMarginDetail(s))
+                + detailMetric('Contribution Margin', fmtContributionMarginDetail(s))
                 + '</div></div>';
 
             // WHY analysis — only show BIS version when Decision Engine is NOT available
@@ -1804,8 +1811,8 @@
                 html += '<div class="gauge-bar"><div class="gauge-fill ' + piColor + '" style="width:' + piWidth + '%"></div></div>';
             }
 
-            if (summary && summary.gross_margin_pct != null) {
-                html += '<div class="diag-stat-row"><span class="diag-stat-label">True Margin (Orders)</span><span class="diag-stat-value">' + summary.gross_margin_pct + '%</span></div>';
+            if (summary && summary.contribution_margin_pct != null) {
+                html += '<div class="diag-stat-row"><span class="diag-stat-label">Contribution Margin (After Ads)</span><span class="diag-stat-value">' + summary.contribution_margin_pct + '%</span></div>';
             }
 
             // Margin distribution
