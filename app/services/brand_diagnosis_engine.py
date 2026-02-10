@@ -12,9 +12,10 @@ strict contract required by downstream ML pipelines.
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from decimal import Decimal
+import json
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case, literal_column, String, and_
+from sqlalchemy import func, case, literal_column, String, and_, or_
 
 from app.models.shopify import (
     ShopifyOrderItem, ShopifyProduct, ShopifyInventory,
@@ -24,6 +25,7 @@ from app.models.google_ads_data import GoogleAdsProductPerformance, GoogleAdsCam
 from app.models.ga4_data import GA4ProductPerformance
 from app.models.search_console_data import SearchConsoleQuery
 from app.models.competitive_pricing import CompetitivePricing
+from app.config import get_settings
 from app.utils.logger import log
 
 
@@ -481,6 +483,31 @@ class BrandDiagnosisEngine:
             score += min(0.3, (losing / total) * 0.8)
         return round(min(1.0, score), 3)
 
+    def _get_brand_term_filters(self, brand: str):
+        """Return include/exclude term lists for brand matching."""
+        settings = get_settings()
+        allowlist = {}
+        denylist = {}
+        if settings.brand_term_allowlist:
+            try:
+                allowlist = json.loads(settings.brand_term_allowlist)
+            except Exception as e:
+                log.debug(f"brand_term_allowlist parse failed: {e}")
+        if settings.brand_term_denylist:
+            try:
+                denylist = json.loads(settings.brand_term_denylist)
+            except Exception as e:
+                log.debug(f"brand_term_denylist parse failed: {e}")
+
+        key = (brand or "").strip().lower()
+        include_terms = [t for t in (allowlist.get(key) or []) if t]
+        exclude_terms = [t for t in (denylist.get(key) or []) if t]
+
+        if not include_terms:
+            include_terms = [brand]
+
+        return include_terms, exclude_terms
+
     def _ads_diagnostic(self, brand, cur_start, cur_end, yoy_start, yoy_end) -> Optional[Dict]:
         brand_pids = (
             self.db.query(func.cast(ShopifyProduct.shopify_product_id, String))
@@ -547,19 +574,24 @@ class BrandDiagnosisEngine:
         }
 
     def _demand_diagnostic(self, brand, cur_start, cur_end, yoy_start, yoy_end) -> Optional[Dict]:
+        include_terms, exclude_terms = self._get_brand_term_filters(brand)
+
         def _gsc(start, end):
-            row = (
+            inc = [SearchConsoleQuery.query.ilike(f"%{t}%") for t in include_terms]
+            q = (
                 self.db.query(
                     func.sum(SearchConsoleQuery.clicks).label("clicks"),
                     func.sum(SearchConsoleQuery.impressions).label("impr"),
                 )
                 .filter(
-                    SearchConsoleQuery.query.ilike(f"%{brand}%"),
+                    or_(*inc),
                     SearchConsoleQuery.date >= start.date() if hasattr(start, "date") else start,
                     SearchConsoleQuery.date < end.date() if hasattr(end, "date") else end,
                 )
-                .first()
             )
+            for term in exclude_terms:
+                q = q.filter(~SearchConsoleQuery.query.ilike(f"%{term}%"))
+            row = q.first()
             return {
                 "clicks": int(row.clicks or 0) if row else 0,
                 "impressions": int(row.impr or 0) if row else 0,

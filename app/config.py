@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     gsc_daily_sync_days: int = 3  # Days to sync in daily job (1-7)
     # Brand terms to exclude from non-brand query analysis (comma-separated)
     gsc_brand_terms: str = ""  # e.g., "cass,cass brothers,cassbrothers"
+    # Brand term allow/deny lists for short or ambiguous brands (JSON mapping)
+    # Example: {"zip":["zip tap","zip hydrotap"],"nike":["nike"]} / {"zip":["zip code","zip file"]}
+    brand_term_allowlist: str = ""
+    brand_term_denylist: str = ""
 
     # Google Sheets (for product cost data)
     google_sheets_credentials_path: str = "./credentials/google-sheets-credentials.json"

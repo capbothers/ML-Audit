@@ -9,10 +9,11 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from decimal import Decimal
 from collections import defaultdict
+import json
 import re as _re
 
 from sqlalchemy.orm import Session
-from sqlalchemy import func, case, literal_column, String, and_, extract
+from sqlalchemy import func, case, literal_column, String, and_, or_, extract
 
 from app.models.shopify import ShopifyOrderItem, ShopifyProduct, ShopifyInventory, ShopifyRefundLineItem
 from app.models.google_ads_data import GoogleAdsProductPerformance, GoogleAdsCampaign
@@ -20,6 +21,7 @@ from app.models.ga4_data import GA4ProductPerformance
 from app.models.search_console_data import SearchConsoleQuery
 from app.models.competitive_pricing import CompetitivePricing
 from app.models.product_cost import ProductCost
+from app.config import get_settings
 from app.utils.logger import log
 
 
@@ -325,6 +327,32 @@ class BrandIntelligenceService:
             ShopifyOrderItem.financial_status.in_(['paid', 'partially_refunded', 'refunded']),
         )
 
+    def _get_brand_term_filters(self, brand: str):
+        """Return include/exclude term lists for brand matching."""
+        settings = get_settings()
+        allowlist = {}
+        denylist = {}
+        if settings.brand_term_allowlist:
+            try:
+                allowlist = json.loads(settings.brand_term_allowlist)
+            except Exception as e:
+                log.debug(f"brand_term_allowlist parse failed: {e}")
+        if settings.brand_term_denylist:
+            try:
+                denylist = json.loads(settings.brand_term_denylist)
+            except Exception as e:
+                log.debug(f"brand_term_denylist parse failed: {e}")
+
+        key = (brand or "").strip().lower()
+        include_terms = [t for t in (allowlist.get(key) or []) if t]
+        exclude_terms = [t for t in (denylist.get(key) or []) if t]
+        allowlist_used = len(include_terms) > 0
+
+        if not include_terms:
+            include_terms = [brand]
+
+        return include_terms, exclude_terms, allowlist_used
+
     def _get_ads_product_summary(self, start, end) -> Dict[str, Dict]:
         """Product-level ad spend and ROAS aggregated by vendor."""
         try:
@@ -397,10 +425,21 @@ class BrandIntelligenceService:
     def _get_ads_campaign_metrics(self, brand: str, rows: List[Dict]) -> Dict:
         """Compute spend, ROAS, impression share, and lost IS for a brand via campaign name matching."""
         empty = {"spend": 0, "roas": None, "imp_share": None, "budget_lost": None, "rank_lost": None}
-        if not brand or len(brand) <= 2:
+        include_terms, exclude_terms, allowlist_used = self._get_brand_term_filters(brand)
+        if not brand or (len(brand) <= 2 and not allowlist_used):
             return empty
 
-        pattern = _re.compile(r"\b" + _re.escape(brand) + r"\b", _re.IGNORECASE)
+        if not include_terms:
+            return empty
+
+        include_patterns = [
+            _re.compile(r"\b" + _re.escape(term) + r"\b", _re.IGNORECASE)
+            for term in include_terms if term
+        ]
+        exclude_patterns = [
+            _re.compile(r"\b" + _re.escape(term) + r"\b", _re.IGNORECASE)
+            for term in exclude_terms if term
+        ]
         total_impr = 0
         total_cost_micros = 0
         total_conv_val = 0.0
@@ -409,7 +448,10 @@ class BrandIntelligenceService:
         rank_lost_num = 0.0
 
         for row in rows:
-            if not pattern.search(row["name"]):
+            name = row.get("name", "")
+            if exclude_patterns and any(p.search(name) for p in exclude_patterns):
+                continue
+            if include_patterns and not any(p.search(name) for p in include_patterns):
                 continue
             impr = row["impr"] or 0
             total_impr += impr
@@ -2042,19 +2084,24 @@ class BrandIntelligenceService:
     def _get_demand_signals(self, brand, cur_start, cur_end, yoy_start, yoy_end) -> Optional[Dict]:
         """Branded search demand from GSC."""
         try:
+            include_terms, exclude_terms, _ = self._get_brand_term_filters(brand)
+            include_clauses = [SearchConsoleQuery.query.ilike(f"%{t}%") for t in include_terms]
+
             def _gsc_agg(start, end):
-                row = (
+                q = (
                     self.db.query(
                         func.sum(SearchConsoleQuery.clicks).label("clicks"),
                         func.sum(SearchConsoleQuery.impressions).label("impr"),
                     )
                     .filter(
-                        SearchConsoleQuery.query.ilike(f"%{brand}%"),
+                        or_(*include_clauses),
                         SearchConsoleQuery.date >= start.date() if hasattr(start, "date") else start,
                         SearchConsoleQuery.date < end.date() if hasattr(end, "date") else end,
                     )
-                    .first()
                 )
+                for term in exclude_terms:
+                    q = q.filter(~SearchConsoleQuery.query.ilike(f"%{term}%"))
+                row = q.first()
                 return {
                     "clicks": int(row.clicks or 0) if row else 0,
                     "impressions": int(row.impr or 0) if row else 0,
@@ -2067,7 +2114,7 @@ class BrandIntelligenceService:
                 return None
 
             # Top queries
-            top_q = (
+            top_q_base = (
                 self.db.query(
                     SearchConsoleQuery.query,
                     func.sum(SearchConsoleQuery.clicks).label("clicks"),
@@ -2075,10 +2122,16 @@ class BrandIntelligenceService:
                     func.avg(SearchConsoleQuery.position).label("pos"),
                 )
                 .filter(
-                    SearchConsoleQuery.query.ilike(f"%{brand}%"),
+                    or_(*include_clauses),
                     SearchConsoleQuery.date >= cur_start.date() if hasattr(cur_start, "date") else cur_start,
                     SearchConsoleQuery.date < cur_end.date() if hasattr(cur_end, "date") else cur_end,
                 )
+            )
+            for term in exclude_terms:
+                top_q_base = top_q_base.filter(~SearchConsoleQuery.query.ilike(f"%{term}%"))
+
+            top_q = (
+                top_q_base
                 .group_by(SearchConsoleQuery.query)
                 .order_by(func.sum(SearchConsoleQuery.clicks).desc())
                 .limit(5)
