@@ -239,12 +239,6 @@ class BrandIntelligenceService:
             diagnostics["conversion"] = None
 
         try:
-            diagnostics["stocking_priorities"] = self._get_stocking_priorities(
-                brand_name, period_days=max(period_days, 90)
-            )
-        except Exception:
-            diagnostics["stocking_priorities"] = None
-        try:
             diagnostics["ads_yoy"] = self._get_brand_ad_data(
                 brand_name, cur_start, cur_end, yoy_start, yoy_end
             )
@@ -1130,21 +1124,6 @@ class BrandIntelligenceService:
                     category="stock",
                 )
 
-        sp = diagnostics.get("stocking_priorities")
-        if sp and sp.get("total_revenue_at_risk", 0) > 500:
-            sp_count = sp.get("total_candidates", 0)
-            sp_risk = sp["total_revenue_at_risk"]
-            sp_margin = sp.get("avg_margin_on_priorities", 0)
-            _add(
-                "Stocking opportunity identified",
-                "medium",
-                f"{sp_count} products with recent sales are OOS/low-stock. "
-                f"Restocking top priorities (avg {sp_margin:.0f}% margin) "
-                f"could recover up to ${sp_risk:,.0f} in revenue.",
-                impact_estimate=sp_risk * 0.5,
-                category="stock",
-            )
-
         pricing = diagnostics.get("pricing") or {}
         price_idx = pricing.get("price_index")
         if price_idx is not None and price_idx > 1.1 and revenue_down:
@@ -1275,24 +1254,6 @@ class BrandIntelligenceService:
                     f"could add ~${rev * 0.5 * (c2p * 0.5 / max(c2p, 0.1)):,.0f} in revenue"
                 ),
                 "sort_weight": rev * 0.3,
-            })
-
-        # ── 3. Stocking priorities ──
-        sp = diagnostics.get("stocking_priorities")
-        if sp and sp.get("priorities"):
-            sp_top = sp["priorities"][0]
-            sp_count = sp.get("total_candidates", 0)
-            sp_risk = sp.get("total_revenue_at_risk", 0)
-            recs.append({
-                "priority": "high" if sp_risk > 2000 else "medium",
-                "category": "stock",
-                "action": (
-                    f"Restock {sp_count} OOS/low-stock {brand} products. "
-                    f"Top priority: {sp_top['title']} "
-                    f"(${sp_top['recent_revenue']:,.0f} rev, score {sp_top['priority_score']:.0f})."
-                ),
-                "expected_impact": f"Up to ${sp_risk:,.0f} revenue recovery over 90 days",
-                "sort_weight": sp_risk,
             })
 
         # ── 4. Ads: scaling opportunity ──
@@ -1481,8 +1442,21 @@ class BrandIntelligenceService:
         priority_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
         recs.sort(key=lambda r: (priority_order.get(r["priority"], 9), -r.get("sort_weight", 0)))
 
-        # Remove sort_weight from output and cap at 8
+        # ── Next Actions enrichment ──
+        _metric_map = {
+            "root_cause": "revenue", "range": "revenue",
+            "demand": "revenue", "ads": "spend_efficiency",
+            "pricing": "margin", "margin": "margin", "conversion": "conversion",
+        }
+        _dep_map = {
+            "root_cause": 1, "pricing": 1,
+            "ads": 3,
+            "conversion": 4, "margin": 4, "range": 4, "demand": 4,
+        }
         for r in recs:
+            r["impacted_metric"] = _metric_map.get(r.get("category", ""), "revenue")
+            r["expected_impact_dollars"] = round(r.get("sort_weight", 0), 2)
+            r["dependency_order"] = _dep_map.get(r.get("category", ""), 4)
             r.pop("sort_weight", None)
         return recs[:8]
 
@@ -2424,6 +2398,170 @@ class BrandIntelligenceService:
             "overperformers": overperformers[:15],
             "recoverable_revenue": round(total_recoverable, 2),
         }
+
+    # ── Opportunity ranking ───────────────────────────────────
+
+    def get_opportunity_ranking(self, period_days: int = 30, limit: int = 10) -> Dict:
+        """Rank brands by forward-looking growth opportunity score."""
+        dashboard = self.get_dashboard(period_days)
+        brands = dashboard.get("brands", [])
+
+        if not brands:
+            return {"period_days": period_days, "opportunities": []}
+
+        now = datetime.utcnow()
+        cur_start = now - timedelta(days=period_days)
+        cur_end = now
+        yoy_start = cur_start - timedelta(days=365)
+        yoy_end = cur_end - timedelta(days=365)
+
+        # Phase 1: preliminary score from dashboard data (free)
+        prelim = []
+        for b in brands:
+            rev = b.get("revenue") or 0
+            if rev < 500:
+                continue
+            yoy = b.get("revenue_yoy_pct") or 0
+            roas = b.get("ads_roas") or 0
+            imp_share = b.get("ads_imp_share") or 100
+
+            momentum = max(min(yoy, 100), 0) / 100
+            ads_scale = 0
+            if roas >= 2:
+                ads_scale = min(roas, 10) / 10 * max(0, 1 - imp_share / 100)
+            p_score = 0.45 * momentum + 0.30 * ads_scale + 0.25 * min(rev, 500000) / 500000
+            prelim.append({"brand_data": b, "prelim": p_score})
+
+        prelim.sort(key=lambda x: x["prelim"], reverse=True)
+
+        # Phase 2: enrich top 15 with demand and pricing
+        enriched = []
+        scored_items = []
+
+        for item in prelim[:15]:
+            b = item["brand_data"]
+            brand = b["brand"]
+
+            # Demand
+            try:
+                demand = self._get_demand_signals(brand, cur_start, cur_end, yoy_start, yoy_end)
+            except Exception:
+                demand = None
+
+            # Price index (lightweight)
+            try:
+                latest_date = self.db.query(func.max(CompetitivePricing.pricing_date)).scalar()
+                if latest_date:
+                    rows = (
+                        self.db.query(
+                            CompetitivePricing.current_price,
+                            CompetitivePricing.lowest_competitor_price,
+                        )
+                        .filter(
+                            CompetitivePricing.vendor == brand,
+                            CompetitivePricing.pricing_date == latest_date,
+                            CompetitivePricing.current_price.isnot(None),
+                            CompetitivePricing.lowest_competitor_price > 0,
+                        )
+                        .all()
+                    )
+                    ratios = [float(r[0]) / float(r[1]) for r in rows if r[0] and r[1]]
+                    price_index = round(sum(ratios) / len(ratios), 2) if ratios else None
+                else:
+                    price_index = None
+            except Exception:
+                price_index = None
+
+            scored_items.append({
+                "brand_data": b,
+                "demand": demand,
+                "price_index": price_index,
+            })
+
+        # Compute final scores
+        for item in scored_items:
+            b = item["brand_data"]
+            demand = item["demand"]
+            pi = item["price_index"]
+
+            # 1. Demand tailwind (0.25)
+            clicks_yoy = (demand or {}).get("clicks_yoy_pct") or 0
+            demand_score = max(min(clicks_yoy, 200), 0) / 200
+
+            # 2. Ads scalability (0.20)
+            roas = b.get("ads_roas") or 0
+            imp_share = b.get("ads_imp_share") or 100
+            ads_score = 0
+            if roas >= 2:
+                ads_score = min(roas, 10) / 10 * max(0, 1 - imp_share / 100)
+
+            # 3. Pricing edge (0.20)
+            if pi is not None:
+                pricing_score = max(min(1.20 - pi, 0.30), 0) / 0.30
+            else:
+                pricing_score = 0.5  # neutral default
+
+            # 4. Momentum (0.25)
+            yoy = b.get("revenue_yoy_pct") or 0
+            momentum_score = max(min(yoy, 100), 0) / 100
+
+            opp_score = round((
+                0.30 * demand_score
+                + 0.25 * ads_score
+                + 0.20 * pricing_score
+                + 0.25 * momentum_score
+            ) * 100, 1)
+
+            if opp_score <= 0:
+                continue
+
+            # Top action: build a short summary from highest-scoring signal
+            best_signal = max(
+                [("demand_tailwind", demand_score), ("ads_scalability", ads_score),
+                 ("pricing_edge", pricing_score), ("momentum", momentum_score)],
+                key=lambda x: x[1],
+            )
+            top_action = self._opportunity_action_summary(
+                best_signal[0], b, demand, None, pi,
+            )
+
+            enriched.append({
+                "brand": b["brand"],
+                "opportunity_score": opp_score,
+                "revenue": b.get("revenue", 0),
+                "revenue_yoy_pct": b.get("revenue_yoy_pct"),
+                "signals": {
+                    "demand_tailwind": {"value": clicks_yoy, "score": round(demand_score, 3)},
+                    "ads_scalability": {"roas": roas, "imp_share": imp_share, "score": round(ads_score, 3)},
+                    "pricing_edge": {"price_index": pi, "score": round(pricing_score, 3)},
+                    "momentum": {"revenue_yoy_pct": yoy, "score": round(momentum_score, 3)},
+                },
+                "top_action": top_action,
+            })
+
+        enriched.sort(key=lambda x: x["opportunity_score"], reverse=True)
+
+        return {
+            "period_days": period_days,
+            "opportunities": enriched[:limit],
+        }
+
+    def _opportunity_action_summary(self, signal_name, brand_data, demand, stocking, price_index):
+        """Generate a short action summary based on the strongest opportunity signal."""
+        brand = brand_data["brand"]
+        if signal_name == "demand_tailwind" and demand:
+            yoy = demand.get("clicks_yoy_pct", 0)
+            return f"Demand up {yoy:.0f}% — ensure stock and ad coverage for {brand}"
+        elif signal_name == "ads_scalability":
+            roas = brand_data.get("ads_roas", 0)
+            imp = brand_data.get("ads_imp_share", 0)
+            return f"Scale {brand} ads (ROAS {roas:.1f}x, IS {imp:.0f}%) — capture missing auctions"
+        elif signal_name == "pricing_edge" and price_index is not None:
+            return f"{brand} priced {(1 - price_index) * 100:+.0f}% vs competitors — competitive advantage"
+        elif signal_name == "momentum":
+            yoy = brand_data.get("revenue_yoy_pct", 0)
+            return f"{brand} revenue up {yoy:.0f}% YoY — invest to sustain growth"
+        return f"Growth opportunity identified for {brand}"
 
 
 def _month_name(mo: str) -> str:

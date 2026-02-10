@@ -428,6 +428,46 @@
         .insight-badge.high { background: rgba(196, 154, 74, 0.2); color: var(--amber); border-color: rgba(196, 154, 74, 0.35); }
         .insight-badge.medium { background: rgba(47, 107, 58, 0.12); color: var(--green); border-color: rgba(47, 107, 58, 0.25); }
 
+        /* Decision engine */
+        .decision-state {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            border-radius: 10px;
+            margin-bottom: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .decision-state.down { background: var(--red-bg); color: var(--red); }
+        .decision-state.up { background: var(--green-bg); color: var(--green); }
+        .decision-state.stable { background: var(--amber-bg); color: var(--amber); }
+        .driver-bar {
+            height: 8px;
+            background: #eee;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .driver-bar-fill { height: 100%; }
+        .driver-bar-pos { background: var(--green); }
+        .driver-bar-neg { background: var(--red); }
+        .evidence-chip {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            font-size: 10px;
+            margin-right: 6px;
+            color: var(--slate);
+            background: var(--stone);
+        }
+        .whatif-card {
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 10px 12px;
+            background: var(--pearl);
+        }
+
         .driver-list { display: flex; flex-direction: column; gap: 8px; }
 
         .driver-item {
@@ -493,6 +533,64 @@
         .rec-body { flex: 1; }
         .rec-action { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
         .rec-impact { font-size: 12px; color: var(--slate); }
+
+        /* Metric badge */
+        .metric-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            background: #e8eaf0;
+            color: #555;
+            margin-left: 6px;
+        }
+        .metric-badge.revenue { background: var(--green-bg); color: var(--green); }
+        .metric-badge.margin { background: #fff3e0; color: #e65100; }
+        .metric-badge.conversion { background: #e3f2fd; color: #1565c0; }
+        .metric-badge.spend_efficiency { background: #f3e5f5; color: #7b1fa2; }
+
+        /* Next Actions step groups */
+        .na-step-header {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--slate);
+            padding: 12px 0 6px;
+            border-bottom: 1px solid var(--line);
+            margin-bottom: 8px;
+        }
+        .na-step-header:first-child { padding-top: 0; }
+        .na-impact-dollars { font-weight: 700; color: var(--green); }
+
+        /* Opportunity score bar */
+        .opp-bar-track {
+            width: 80px;
+            height: 8px;
+            background: #eee;
+            border-radius: 4px;
+            overflow: hidden;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+        .opp-bar-fill { height: 100%; border-radius: 4px; }
+        .opp-score-high { background: var(--green); }
+        .opp-score-mid { background: var(--amber); }
+        .opp-score-low { background: #ccc; }
+
+        .opp-signal-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            background: var(--green-bg);
+            color: var(--green);
+        }
 
         /* Product tables */
         .product-table {
@@ -844,6 +942,7 @@
                         </table>
                     </div>
                 </div>
+                <div id="opportunities-panel"></div>
             </div>
 
             <!-- Detail tab -->
@@ -1025,10 +1124,71 @@
                 renderFilterBar(dashboardData.tier_counts);
                 renderScorecard(dashboardData.brands);
                 renderCompareList(dashboardData.brands);
+                loadOpportunities();
             } catch (err) {
                 console.error(err);
                 document.getElementById('kpi-grid').innerHTML = '<div class="loading-text">Error loading data: ' + err.message + '</div>';
             }
+        }
+
+        async function loadOpportunities() {
+            try {
+                var res = await fetch('/brands/opportunities?days=' + periodDays);
+                var json = await res.json();
+                if (json.success && json.data && json.data.opportunities.length) {
+                    renderOpportunities(json.data.opportunities);
+                }
+            } catch (err) {
+                console.error('Opportunities load error:', err);
+            }
+        }
+
+        function renderOpportunities(opps) {
+            if (!opps || !opps.length) { document.getElementById('opportunities-panel').innerHTML = ''; return; }
+
+            var signalLabels = {
+                demand_tailwind: 'Demand', ads_scalability: 'Ads Headroom',
+                pricing_edge: 'Pricing', momentum: 'Momentum'
+            };
+
+            function bestSignal(signals) {
+                var best = '', bestScore = -1;
+                for (var k in signals) {
+                    if (signals[k].score > bestScore) { bestScore = signals[k].score; best = k; }
+                }
+                return signalLabels[best] || best;
+            }
+
+            function oppBar(score) {
+                var cls = score >= 60 ? 'opp-score-high' : score >= 30 ? 'opp-score-mid' : 'opp-score-low';
+                return '<span class="opp-bar-track"><span class="opp-bar-fill ' + cls + '" style="width:' + Math.min(score, 100) + '%"></span></span>'
+                    + '<strong>' + score.toFixed(1) + '</strong>';
+            }
+
+            var html = '<div class="card" style="margin-top:20px">'
+                + '<div class="card-title">Growth Opportunities</div>'
+                + '<div style="font-size:12px;color:var(--slate);margin-bottom:12px">Brands with highest upside based on demand, ads, pricing, and momentum</div>'
+                + '<div style="overflow-x:auto"><table class="product-table">'
+                + '<thead><tr>'
+                + '<th>#</th><th>Brand</th><th>Score</th><th>Key Signal</th>'
+                + '<th class="num">Revenue</th><th class="num">YoY %</th><th>Top Action</th>'
+                + '</tr></thead><tbody>';
+
+            for (var i = 0; i < opps.length; i++) {
+                var o = opps[i];
+                var yoyCls = (o.revenue_yoy_pct || 0) >= 0 ? 'up' : 'down';
+                html += '<tr style="cursor:pointer" onclick="openBrandDetail(\'' + escHtml(o.brand) + '\')">'
+                    + '<td>' + (i + 1) + '</td>'
+                    + '<td><strong>' + escHtml(o.brand) + '</strong></td>'
+                    + '<td>' + oppBar(o.opportunity_score) + '</td>'
+                    + '<td><span class="opp-signal-badge">' + bestSignal(o.signals) + '</span></td>'
+                    + '<td class="num">' + fmt$(o.revenue) + '</td>'
+                    + '<td class="num"><span class="' + yoyCls + '">' + fmtPct(o.revenue_yoy_pct) + '</span></td>'
+                    + '<td style="font-size:12px;max-width:300px">' + escHtml(o.top_action) + '</td>'
+                    + '</tr>';
+            }
+            html += '</tbody></table></div></div>';
+            document.getElementById('opportunities-panel').innerHTML = html;
         }
 
         // ── KPI cards ────────────────────────────────────────────
@@ -1142,10 +1302,16 @@
             document.getElementById('detail-content').innerHTML = '<div class="loading-text">Loading ' + escHtml(brand) + ' analysis...</div>';
 
             try {
-                var res = await fetch('/brands/detail?brand=' + encodeURIComponent(brand) + '&days=' + periodDays);
-                var json = await res.json();
-                if (!json.success) throw new Error(json.detail || 'API error');
-                renderBrandDetail(json.data);
+                var detailReq = fetch('/brands/detail?brand=' + encodeURIComponent(brand) + '&days=' + periodDays);
+                var decisionReq = fetch('/brands/decision?brand=' + encodeURIComponent(brand) + '&days=' + periodDays);
+                var responses = await Promise.all([detailReq, decisionReq]);
+                var detailJson = await responses[0].json();
+                if (!detailJson.success) throw new Error(detailJson.detail || 'API error');
+                var decisionJson = await responses[1].json();
+                if (decisionJson && decisionJson.success) {
+                    detailJson.data.decision = decisionJson.data;
+                }
+                renderBrandDetail(detailJson.data);
             } catch (err) {
                 console.error(err);
                 document.getElementById('detail-content').innerHTML = '<div class="loading-text">Error: ' + err.message + '</div>';
@@ -1215,11 +1381,15 @@
             var diag = data.diagnostics || {};
             html += '<div class="diag-grid">';
             html += renderPricingDiag(diag.pricing);
-            html += renderStockingPriorities(diag.stocking_priorities);
             html += renderAdsDiag(diag.ads);
             html += renderDemandDiag(diag.demand);
             html += renderConversionDiag(diag.conversion);
             html += '</div>';
+
+            // Decision Engine
+            if (data.decision) {
+                html += renderDecisionEngine(data.decision);
+            }
 
             // Product sections
             html += '<div class="section-grid">';
@@ -1258,16 +1428,31 @@
 
             html += '</div>';
 
-            // Recommendations
+            // Next Actions (dependency-ordered recommendations)
             if (data.recommendations.length) {
-                html += '<div class="card"><div class="card-title">Recommendations</div><div class="rec-list">';
-                for (var j = 0; j < data.recommendations.length; j++) {
-                    var r = data.recommendations[j];
+                var recs = data.recommendations.slice().sort(function(a, b) {
+                    var da = a.dependency_order || 4, db = b.dependency_order || 4;
+                    if (da !== db) return da - db;
+                    return (b.expected_impact_dollars || 0) - (a.expected_impact_dollars || 0);
+                });
+                var stepLabels = { 1: 'Fix Foundations', 2: 'Secure Supply', 3: 'Scale Spend', 4: 'Optimize' };
+                var lastStep = 0;
+                html += '<div class="card"><div class="card-title">Next Actions</div><div class="rec-list">';
+                for (var j = 0; j < recs.length; j++) {
+                    var r = recs[j];
+                    var step = r.dependency_order || 4;
+                    if (step !== lastStep) {
+                        html += '<div class="na-step-header">Step ' + step + ': ' + (stepLabels[step] || 'Other') + '</div>';
+                        lastStep = step;
+                    }
+                    var impactDollars = r.expected_impact_dollars ? '<span class="na-impact-dollars">' + fmt$(r.expected_impact_dollars) + '</span> — ' : '';
+                    var metricBadge = r.impacted_metric ? '<span class="metric-badge ' + r.impacted_metric + '">' + r.impacted_metric.replace('_', ' ') + '</span>' : '';
                     html += '<div class="rec-item">'
                         + '<span class="rec-priority ' + r.priority + '">' + r.priority + '</span>'
+                        + metricBadge
                         + '<div class="rec-body">'
                         + '<div class="rec-action">' + escHtml(r.action) + '</div>'
-                        + '<div class="rec-impact">' + escHtml(r.expected_impact) + '</div>'
+                        + '<div class="rec-impact">' + impactDollars + escHtml(r.expected_impact) + '</div>'
                         + '</div></div>';
                 }
                 html += '</div></div>';
@@ -1275,6 +1460,221 @@
 
             document.getElementById('detail-content').innerHTML = html;
             renderMonthlyChart(data.monthly_comparison);
+        }
+
+        // ── Decision Engine renderer ──────────────────────────────
+
+        function renderDecisionEngine(de) {
+            var stateCls = de.state || 'stable';
+            var strategyLabels = { recovery: 'Recovery Strategy', scaling: 'Scaling Strategy', activation: 'Growth Activation' };
+            var strategyLabel = strategyLabels[(de.how || {}).strategy] || 'Strategy';
+            var catColors = { ads: '#7b1fa2', pricing: '#e65100', assortment: 'var(--cass-teal)', funnel: '#1565c0', merchandising: 'var(--green)' };
+
+            var html = '<div class="card"><div class="card-title" style="display:flex;align-items:center;justify-content:space-between">'
+                + '<span>Decision Engine</span>';
+            if (de.confidence) {
+                var confCls = de.confidence.overall === 'high' ? 'var(--green)' : de.confidence.overall === 'medium' ? 'var(--amber)' : 'var(--red)';
+                html += '<span style="font-size:11px;padding:3px 10px;border-radius:999px;background:var(--stone);color:' + confCls + ';font-weight:600">'
+                    + de.confidence.overall + ' confidence</span>';
+            }
+            html += '</div>';
+
+            // State banner
+            html += '<div class="decision-state ' + stateCls + '">'
+                + '<span>' + escHtml(de.state_label || '') + '</span>'
+                + '<span>' + escHtml(strategyLabel) + '</span>'
+                + '</div>';
+
+            // WHY
+            if (de.why) {
+                html += '<div style="margin-bottom:16px">'
+                    + '<div class="kpi-label">WHY</div>'
+                    + '<div style="font-size:13px;color:var(--ink-soft);margin-bottom:8px">' + escHtml(de.why.summary || '') + '</div>';
+
+                // Driver contribution bars
+                if (de.why.drivers && de.why.drivers.length) {
+                    html += '<div style="display:grid;gap:6px;margin-bottom:10px">';
+                    for (var w = 0; w < Math.min(de.why.drivers.length, 6); w++) {
+                        var d = de.why.drivers[w];
+                        var pct = Math.min(Math.abs(d.pct_of_change || 0), 100);
+                        var barCls = (d.direction === 'positive') ? 'driver-bar-pos' : 'driver-bar-neg';
+                        var confBadge = d.confidence ? '<span class="conf-badge conf-' + d.confidence + '" style="font-size:9px;margin-left:6px">' + d.confidence + '</span>' : '';
+                        var dollarStr = d.dollars != null ? ' (' + (d.dollars >= 0 ? '+' : '') + fmt$(d.dollars) + ')' : '';
+                        html += '<div>'
+                            + '<div style="display:flex;justify-content:space-between;font-size:12px">'
+                            + '<span>' + escHtml(d.driver) + confBadge + '</span>'
+                            + '<span>' + (d.pct_of_change != null ? d.pct_of_change.toFixed(1) + '%' : '--') + dollarStr + '</span>'
+                            + '</div>'
+                            + '<div class="driver-bar"><div class="driver-bar-fill ' + barCls + '" style="width:' + pct + '%"></div></div>'
+                            + '</div>';
+                    }
+                    html += '</div>';
+                }
+
+                // Momentum
+                var mom = de.why.momentum;
+                if (mom && mom.score != null) {
+                    var momColor = mom.score >= 55 ? 'var(--green)' : mom.score >= 45 ? 'var(--amber)' : 'var(--red)';
+                    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+                        + '<span style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate)">Momentum</span>'
+                        + '<div class="opp-bar-track" style="width:100px"><div class="opp-bar-fill" style="width:' + mom.score + '%;background:' + momColor + '"></div></div>'
+                        + '<span style="font-size:12px;font-weight:600;color:' + momColor + '">' + mom.score.toFixed(0) + '/100 ' + escHtml(mom.label || '') + '</span>'
+                        + '</div>';
+                }
+
+                // Anomalies
+                var anom = de.why.anomalies;
+                if (anom && anom.items && anom.items.length) {
+                    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+                    for (var ai = 0; ai < anom.items.length; ai++) {
+                        var an = anom.items[ai];
+                        html += '<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;background:var(--amber-bg);color:var(--amber)">'
+                            + escHtml(an.description || an.signal) + '</span>';
+                    }
+                    html += '</div>';
+                }
+
+                html += '</div>';
+            }
+
+            // HOW — actions grouped by dependency_order
+            if (de.how && de.how.actions && de.how.actions.length) {
+                html += '<div style="margin-bottom:16px"><div class="kpi-label">HOW</div>';
+                var acts = de.how.actions.slice().sort(function(a, b) {
+                    var da = a.dependency_order || 4, db = b.dependency_order || 4;
+                    if (da !== db) return da - db;
+                    return (b.expected_impact_dollars || 0) - (a.expected_impact_dollars || 0);
+                });
+                var stepLabels = { 1: 'Fix Foundations', 2: 'Secure Supply', 3: 'Scale Spend', 4: 'Optimize' };
+                var lastStep = 0;
+                for (var h = 0; h < acts.length; h++) {
+                    var a = acts[h];
+                    var step = a.dependency_order || 4;
+                    if (step !== lastStep) {
+                        html += '<div class="na-step-header">Step ' + step + ': ' + (stepLabels[step] || 'Other') + '</div>';
+                        lastStep = step;
+                    }
+                    var catColor = catColors[a.category] || '#888';
+                    html += '<div style="padding:8px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:flex-start">';
+                    if (a.priority) {
+                        html += '<span class="rec-priority ' + a.priority + '">' + a.priority + '</span>';
+                    }
+                    html += '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;color:#fff;background:' + catColor + '">' + escHtml(a.category || '') + '</span>';
+                    html += '<div style="flex:1">'
+                        + '<div style="font-weight:600;font-size:13px">' + escHtml(a.action || '') + '</div>'
+                        + '<div style="font-size:12px;color:var(--slate)">' + escHtml(a.expected_impact || '');
+                    if (a.expected_impact_dollars) {
+                        html += ' <span class="na-impact-dollars">' + fmt$(a.expected_impact_dollars) + '</span>';
+                    }
+                    html += '</div>';
+                    if (a.evidence && a.evidence.length) {
+                        html += '<div style="margin-top:4px">';
+                        for (var e = 0; e < a.evidence.length; e++) {
+                            var ev = a.evidence[e];
+                            if (ev.value != null) {
+                                html += '<span class="evidence-chip">' + escHtml(ev.metric) + ': ' + escHtml(String(ev.value)) + '</span>';
+                            }
+                        }
+                        html += '</div>';
+                    }
+                    html += '</div></div>';
+                }
+
+                // Dependency chain
+                if (de.how.dependencies && de.how.dependencies.length) {
+                    html += '<div style="margin-top:8px;font-size:11px;color:var(--slate)">';
+                    for (var di = 0; di < de.how.dependencies.length; di++) {
+                        html += (di > 0 ? ' &rarr; ' : '') + escHtml(de.how.dependencies[di]);
+                    }
+                    html += '</div>';
+                }
+                html += '</div>';
+            }
+
+            // WHAT-IF scenarios
+            if (de.what_if && de.what_if.scenarios && de.what_if.scenarios.length) {
+                html += '<div style="margin-bottom:16px"><div class="kpi-label">WHAT-IF</div>'
+                    + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">';
+                for (var s = 0; s < de.what_if.scenarios.length; s++) {
+                    var sc = de.what_if.scenarios[s];
+                    var confColor = sc.confidence === 'high' ? 'var(--green)' : sc.confidence === 'medium' ? 'var(--amber)' : 'var(--slate)';
+                    html += '<div class="whatif-card">'
+                        + '<div style="display:flex;justify-content:space-between;align-items:center">'
+                        + '<span style="font-weight:600;font-size:13px">' + escHtml(sc.scenario) + '</span>'
+                        + '<span style="font-size:10px;font-weight:600;color:' + confColor + ';text-transform:uppercase">' + escHtml(sc.confidence || '') + '</span>'
+                        + '</div>'
+                        + '<div style="font-size:12px;color:var(--slate);margin-top:4px">' + escHtml(sc.description || '') + '</div>'
+                        + '<div style="margin-top:8px;display:flex;align-items:center;gap:6px">'
+                        + '<span style="font-size:12px;color:var(--slate)">' + fmt$(sc.impact_low) + '</span>'
+                        + '<div style="flex:1;height:6px;background:#eee;border-radius:3px;position:relative">'
+                        + '<div style="position:absolute;left:' + impactBarPct(sc.impact_low, sc.impact_high, sc.impact_mid) + '%;top:-2px;width:10px;height:10px;border-radius:50%;background:var(--cass-gold);border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></div>'
+                        + '</div>'
+                        + '<span style="font-size:12px;color:var(--slate)">' + fmt$(sc.impact_high) + '</span>'
+                        + '</div>'
+                        + '<div style="font-size:12px;font-weight:600;text-align:center;margin-top:4px">Expected: ' + fmt$(sc.impact_mid) + '</div>'
+                        + '<div style="font-size:10px;color:var(--slate);margin-top:4px">' + escHtml(sc.time_horizon || '') + '</div>'
+                        + '</div>';
+                }
+                html += '</div>'
+                    + '<div style="margin-top:10px;font-weight:700;font-size:14px">Total Addressable Upside: ' + fmt$(de.what_if.total_addressable_upside || 0) + '</div>'
+                    + '</div>';
+            }
+
+            // Guardrails (collapsed by default)
+            if (de.guardrails) {
+                var gr = de.guardrails;
+                var grNotes = [];
+                if (gr.pricing_violations && gr.pricing_violations.length) {
+                    for (var pi = 0; pi < gr.pricing_violations.length; pi++) {
+                        var pv = gr.pricing_violations[pi];
+                        grNotes.push(pv.count + ' ' + (pv.type === 'below_map' ? 'below MAP' : 'below cost') + ' — ' + (pv.action_blocked || ''));
+                    }
+                }
+                if (gr.low_confidence_signals && gr.low_confidence_signals.length) {
+                    grNotes.push('Low confidence: ' + gr.low_confidence_signals.join(', '));
+                }
+
+                html += '<details style="margin-bottom:12px"><summary style="font-size:12px;font-weight:600;color:var(--slate);cursor:pointer">Guardrails (' + grNotes.length + ')</summary>'
+                    + '<div style="padding:8px 0;font-size:12px;color:var(--ink-soft)">';
+                for (var gi = 0; gi < grNotes.length; gi++) {
+                    html += '<div style="padding:4px 0;border-bottom:1px solid var(--line)">' + grNotes[gi] + '</div>';
+                }
+                html += '</div></details>';
+            }
+
+            // Confidence footer — data source indicators
+            if (de.confidence && de.confidence.data_sources) {
+                var ds = de.confidence.data_sources;
+                var sources = [
+                    { key: 'orders', label: 'Orders', ok: ds.orders },
+                    { key: 'cogs', label: 'COGS', ok: ds.cogs > 0 },
+                    { key: 'ads', label: 'Ads', ok: ds.ads },
+                    { key: 'demand', label: 'Demand', ok: ds.demand },
+                    { key: 'conversion', label: 'Conversion', ok: ds.conversion },
+                    { key: 'pricing', label: 'Pricing', ok: ds.pricing },
+                    { key: 'customer', label: 'Customer', ok: ds.customer },
+                ];
+                html += '<div style="display:flex;flex-wrap:wrap;gap:10px;padding-top:8px;border-top:1px solid var(--line)">';
+                for (var si = 0; si < sources.length; si++) {
+                    var src = sources[si];
+                    var dotColor = src.ok ? 'var(--green)' : '#ccc';
+                    html += '<span style="font-size:11px;color:var(--slate);display:flex;align-items:center;gap:4px">'
+                        + '<span style="width:8px;height:8px;border-radius:50%;background:' + dotColor + '"></span>'
+                        + src.label + '</span>';
+                }
+                if (de.confidence.decomposition_coverage_pct != null) {
+                    html += '<span style="font-size:11px;color:var(--slate);margin-left:auto">Decomposition: ' + de.confidence.decomposition_coverage_pct.toFixed(0) + '%</span>';
+                }
+                html += '</div>';
+            }
+
+            html += '</div>';
+            return html;
+        }
+
+        function impactBarPct(low, high, mid) {
+            if (high <= low) return 50;
+            return Math.round((mid - low) / (high - low) * 100);
         }
 
         // ── Diagnostic panel renderers ───────────────────────────
@@ -1340,78 +1740,6 @@
             var pct = count / total * 100;
             if (pct < 1) return '';
             return '<div style="width:' + pct + '%;background:' + color + ';border-radius:3px" title="' + label + ': ' + count + '"></div>';
-        }
-
-        function renderStockingPriorities(sp) {
-            if (!sp) return '';
-            var hasData = sp.priorities && sp.priorities.length > 0;
-            var count = hasData ? sp.priorities.length : 0;
-
-            var badgeCls, badgeTxt;
-            if (count > 5) {
-                badgeCls = 'background:var(--red-bg);color:var(--red)';
-                badgeTxt = count + ' to restock';
-            } else if (count > 0) {
-                badgeCls = 'background:var(--amber-bg);color:var(--amber)';
-                badgeTxt = count + ' to restock';
-            } else {
-                badgeCls = 'background:var(--green-bg);color:var(--green)';
-                badgeTxt = '0 to restock';
-            }
-
-            var panelClass = count === 0 ? 'diag-panel collapsed' : 'diag-panel';
-            var html = '<div class="' + panelClass + '">'
-                + '<div class="diag-header" onclick="this.parentElement.classList.toggle(\'collapsed\')">'
-                + '<span class="diag-title">Stocking Priorities</span>'
-                + '<span class="diag-badge" style="' + badgeCls + '">' + badgeTxt + '</span></div>'
-                + '<div class="diag-body">';
-
-            if (!hasData) {
-                html += '<div style="color:var(--slate);font-size:12px;padding:8px 0">'
-                    + 'No out-of-stock products with recent revenue found.'
-                    + '</div></div></div>';
-                return html;
-            }
-
-            html += '<div class="diag-stat-row"><span class="diag-stat-label">Revenue at Risk (90d)</span>'
-                + '<span class="diag-stat-value" style="color:var(--red)">' + fmt$(sp.total_revenue_at_risk || 0) + '</span></div>';
-            html += '<div class="diag-stat-row"><span class="diag-stat-label">Avg Margin</span>'
-                + '<span class="diag-stat-value">' + (sp.avg_margin_on_priorities || 0) + '%</span></div>';
-            html += '<div class="diag-stat-row"><span class="diag-stat-label">Products to Restock</span>'
-                + '<span class="diag-stat-value">' + count + '</span></div>';
-
-            html += '<div style="margin-top:10px;overflow-x:auto">'
-                + '<table class="product-table"><thead><tr>'
-                + '<th>Product</th>'
-                + '<th>SKU</th>'
-                + '<th class="num">Rev (90d)</th>'
-                + '<th class="num">Vel/day</th>'
-                + '<th class="num">Intent %</th>'
-                + '<th class="num">Margin %</th>'
-                + '<th class="num">Priority</th>'
-                + '</tr></thead><tbody>';
-
-            for (var i = 0; i < sp.priorities.length; i++) {
-                var p = sp.priorities[i];
-                var scoreStyle = p.priority_score >= 70 ? 'color:var(--red);font-weight:700'
-                    : p.priority_score >= 40 ? 'color:var(--amber);font-weight:600' : '';
-                var intentTxt = p.view_to_cart_pct > 0 ? p.view_to_cart_pct.toFixed(1) + '%' : '<span style="color:#ccc">--</span>';
-                var marginTxt = p.margin_pct > 0 ? p.margin_pct.toFixed(1) + '%' : '<span style="color:#ccc">--</span>';
-
-                html += '<tr>'
-                    + '<td class="product-title-cell" title="' + escHtml(p.title) + '">' + escHtml(p.title) + '</td>'
-                    + '<td>' + escHtml(p.sku || '--') + '</td>'
-                    + '<td class="num">' + fmt$(p.recent_revenue) + '</td>'
-                    + '<td class="num">' + p.daily_velocity.toFixed(2) + '</td>'
-                    + '<td class="num">' + intentTxt + '</td>'
-                    + '<td class="num">' + marginTxt + '</td>'
-                    + '<td class="num" style="' + scoreStyle + '">' + p.priority_score.toFixed(1) + '</td>'
-                    + '</tr>';
-            }
-
-            html += '</tbody></table></div>';
-            html += '</div></div>';
-            return html;
         }
 
         function renderAdsDiag(d) {

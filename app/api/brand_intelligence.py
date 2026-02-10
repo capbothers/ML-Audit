@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.models.base import get_db
 from app.services.brand_intelligence_service import BrandIntelligenceService
 from app.services.brand_diagnosis_engine import BrandDiagnosisEngine
+from app.services.brand_decision_engine import BrandDecisionEngine
 from app.utils.logger import log
 from app.utils.cache import get_cached, set_cached, _MISS
 
@@ -100,6 +101,44 @@ async def get_executive_summary(
         return result
     except Exception as e:
         log.error(f"Error in /brands/executive: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/opportunities")
+async def get_opportunities(
+    days: int = Query(30, description="Period in days"),
+    db: Session = Depends(get_db),
+):
+    """Ranked brands by growth opportunity score."""
+    cache_key = f"brand_opportunities|{days}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
+
+    try:
+        service = BrandIntelligenceService(db)
+        data = service.get_opportunity_ranking(period_days=days)
+        result = {"success": True, "data": data}
+        set_cached(cache_key, result, 300)
+        return result
+    except Exception as e:
+        log.error(f"Error in /brands/opportunities: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/decision")
+async def get_brand_decision(
+    brand: str = Query(..., description="Brand/vendor name"),
+    days: int = Query(30, description="Period in days"),
+    db: Session = Depends(get_db),
+):
+    """Unified WHY / HOW / WHAT-IF decision contract."""
+    try:
+        engine = BrandDecisionEngine(db)
+        data = engine.decide(brand=brand, period_days=days)
+        return {"success": True, "data": data}
+    except Exception as e:
+        log.error(f"Error in /brands/decision: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
