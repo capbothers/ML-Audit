@@ -765,9 +765,12 @@ class BrandIntelligenceService:
 
     def _get_brand_shipping_cost(self, brand: str, start, end) -> Dict:
         """
-        Get actual shipping costs for a brand's orders from Shippit data.
+        Get shipping costs allocated to a brand by revenue share per order.
 
-        Allocates Shippit cost proportionally when orders have multiple vendors.
+        For each order with Shippit data, calculates the brand's share of
+        shipping cost proportional to the brand's revenue in that order.
+        This avoids double-counting for multi-brand orders and inflation
+        from multiple line items.
         """
         try:
             # Count total brand orders in period
@@ -787,18 +790,10 @@ class BrandIntelligenceService:
                 or 0
             )
 
-            # Sum Shippit costs for orders containing this brand's items
-            result = (
+            # Get distinct orders with Shippit cost that contain this brand
+            order_ids_with_brand = (
                 self.db.query(
-                    func.sum(ShippitOrder.shipping_cost).label("total_cost"),
-                    func.count(func.distinct(ShippitOrder.id)).label(
-                        "orders_with_cost"
-                    ),
-                )
-                .join(
-                    ShopifyOrderItem,
-                    ShopifyOrderItem.shopify_order_id
-                    == ShippitOrder.shopify_order_id,
+                    func.distinct(ShopifyOrderItem.shopify_order_id)
                 )
                 .filter(
                     ShopifyOrderItem.vendor == brand,
@@ -807,16 +802,48 @@ class BrandIntelligenceService:
                     ShopifyOrderItem.financial_status.in_(
                         ["paid", "partially_refunded", "refunded"]
                     ),
-                    ShippitOrder.shipping_cost.isnot(None),
                 )
-                .first()
             )
 
+            shippit_orders = (
+                self.db.query(ShippitOrder)
+                .filter(
+                    ShippitOrder.shopify_order_id.in_(order_ids_with_brand),
+                    ShippitOrder.shipping_cost.isnot(None),
+                )
+                .all()
+            )
+
+            total_cost = 0.0
+            orders_with_cost = 0
+
+            for so in shippit_orders:
+                ship_cost = float(so.shipping_cost)
+                # Get all items in this order to calculate brand's revenue share
+                items = (
+                    self.db.query(
+                        ShopifyOrderItem.vendor,
+                        func.sum(
+                            ShopifyOrderItem.price * ShopifyOrderItem.quantity
+                        ).label("rev"),
+                    )
+                    .filter(
+                        ShopifyOrderItem.shopify_order_id == so.shopify_order_id
+                    )
+                    .group_by(ShopifyOrderItem.vendor)
+                    .all()
+                )
+                order_rev = sum(float(i.rev or 0) for i in items)
+                brand_rev = sum(
+                    float(i.rev or 0) for i in items if i.vendor == brand
+                )
+                share = brand_rev / order_rev if order_rev > 0 else 0
+                total_cost += ship_cost * share
+                orders_with_cost += 1
+
             return {
-                "total_cost": float(result.total_cost or 0) if result else 0,
-                "orders_with_cost": (
-                    int(result.orders_with_cost or 0) if result else 0
-                ),
+                "total_cost": round(total_cost, 2),
+                "orders_with_cost": orders_with_cost,
                 "orders_total": total_brand_orders,
             }
         except Exception as e:
