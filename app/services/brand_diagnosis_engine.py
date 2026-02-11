@@ -1011,11 +1011,16 @@ class BrandDiagnosisEngine:
         if ads:
             roas_chg = ads.get("roas_change_pct")
             if roas_chg is not None and abs(roas_chg) > 50:
+                prev_r = ads.get("prev_roas", 0)
+                cur_r = ads.get("cur_roas", 0)
                 anomalies.append({
                     "signal": "ads_roas",
                     "value": roas_chg,
                     "threshold": 50,
-                    "description": f"ROAS {'surged' if roas_chg > 0 else 'collapsed'} {abs(roas_chg):.1f}% YoY",
+                    "description": (
+                        f"ROAS {'surged' if roas_chg > 0 else 'collapsed'} "
+                        f"{abs(roas_chg):.1f}% YoY ({prev_r:.1f}x → {cur_r:.1f}x)"
+                    ),
                 })
 
         if demand:

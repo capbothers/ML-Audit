@@ -168,7 +168,7 @@ class BrandDecisionEngine:
         roas_chg = ads.get("roas_change_pct")
         if roas_chg is not None and abs(roas_chg) > 30:
             direction = "up" if roas_chg > 0 else "down"
-            return f"{s1} Ads efficiency {direction} {abs(roas_chg):.0f}% YoY ({ads.get('cur_roas', 0):.1f}x → {ads.get('prev_roas', 0):.1f}x)."
+            return f"{s1} Ads efficiency {direction} {abs(roas_chg):.0f}% YoY ({ads.get('prev_roas', 0):.1f}x → {ads.get('cur_roas', 0):.1f}x)."
 
         return s1
 
@@ -340,7 +340,8 @@ class BrandDecisionEngine:
         stock_model = (diag or {}).get("stock_model") or {}
         if stock_model.get("gate_passed"):
             oos_ct = stock_model.get("oos_count", 0)
-            deps.append(f"Address {oos_ct} out-of-stock SKU(s) before advertising pushes")
+            total_skus = stock_model.get("total_skus", 0)
+            deps.append(f"Address {oos_ct} of {total_skus} out-of-stock SKU(s) before advertising pushes")
 
         return {
             "strategy": strategy,
@@ -366,7 +367,9 @@ class BrandDecisionEngine:
                 # Blocked: Scale ads
                 scenarios.append({
                     "scenario": "Scale ads +20%",
-                    "description": "ROAS is in decline — fix campaign efficiency first",
+                    "description": f"ROAS is in decline — fix campaign efficiency first (current ${spend:,.0f} at {roas:.1f}x)",
+                    "additional_spend": round(add_spend, 2),
+                    "new_total_spend": round(spend + add_spend, 2),
                     "impact_low": 0,
                     "impact_mid": 0,
                     "impact_high": 0,
@@ -401,12 +404,21 @@ class BrandDecisionEngine:
             else:
                 scenarios.append({
                     "scenario": "Scale ads +20%",
-                    "description": "Increase brand spend by 20% at current ROAS",
-                    "impact_low": add_spend * roas * 0.7,
-                    "impact_mid": add_spend * roas * 1.0,
-                    "impact_high": add_spend * roas * 1.2,
+                    "description": (
+                        f"Add ${add_spend:,.0f}/mo to current ${spend:,.0f} spend "
+                        f"(→ ${spend + add_spend:,.0f}) at {roas:.1f}x ROAS"
+                    ),
+                    "additional_spend": round(add_spend, 2),
+                    "new_total_spend": round(spend + add_spend, 2),
+                    "impact_low": round(add_spend * roas * 0.7, 2),
+                    "impact_mid": round(add_spend * roas * 1.0, 2),
+                    "impact_high": round(add_spend * roas * 1.2, 2),
                     "confidence": "high" if spend > 500 else "medium",
-                    "assumptions": ["ROAS holds", "Inventory coverage sufficient"],
+                    "assumptions": [
+                        f"Current spend: ${spend:,.0f}, ROAS: {roas:.1f}x",
+                        "ROAS holds at incremental spend",
+                        "Inventory coverage sufficient",
+                    ],
                     "time_horizon": "30 days",
                 })
 
