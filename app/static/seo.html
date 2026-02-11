@@ -433,6 +433,7 @@
                 <button class="tab-btn" onclick="switchTab('queries')">Query Intelligence</button>
                 <button class="tab-btn" onclick="switchTab('pages')">Page Intelligence</button>
                 <button class="tab-btn" onclick="switchTab('actions')">Action Plan</button>
+                <button class="tab-btn" onclick="switchTab('blog')">Blog Drafts</button>
             </div>
 
             <!-- ================================================================
@@ -833,6 +834,68 @@
                     </table>
                 </div>
             </div>
+
+            <!-- ================================================================
+                 TAB 5: BLOG DRAFTS
+                 ================================================================ -->
+            <div class="tab-content" id="tab-blog">
+
+                <!-- Suggested Topics -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Suggested Blog Topics</h3>
+                        <button class="pill-ctrl" onclick="loadBlogSuggestions()" id="suggest-btn">Get Suggestions</button>
+                    </div>
+                    <p class="muted" style="font-size:13px;margin-bottom:12px;">AI analyses your SEO underperformers and recommends the best blog topics to close ranking gaps.</p>
+                    <div id="blog-suggestions">
+                        <p style="color:var(--slate);font-size:13px;">Click "Get Suggestions" to analyse underperformers and recommend blog topics.</p>
+                    </div>
+                </div>
+
+                <!-- Generate Draft -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Generate Blog Draft</h3>
+                    </div>
+                    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+                        <div style="flex:1;min-width:250px;">
+                            <label style="font-size:12px;color:var(--slate);display:block;margin-bottom:4px;">Search Query</label>
+                            <input type="text" id="blog-query-input" placeholder="e.g. bathroom vanity 900mm"
+                                style="width:100%;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;">
+                        </div>
+                        <button class="pill-ctrl" onclick="generateBlogDraft()" id="generate-btn"
+                            style="padding:8px 20px;background:var(--cass-black);color:#f7f1e8;border-radius:8px;border:none;cursor:pointer;font:inherit;font-size:13px;font-weight:500;">
+                            Generate Draft
+                        </button>
+                    </div>
+                    <div id="generate-status" style="margin-top:12px;"></div>
+                </div>
+
+                <!-- Saved Drafts -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Saved Drafts</h3>
+                        <div class="card-badge" id="drafts-badge">--</div>
+                    </div>
+                    <div class="scroll-x">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th class="num">#</th>
+                                    <th>Title</th>
+                                    <th>Query</th>
+                                    <th>Type</th>
+                                    <th class="num">Words</th>
+                                    <th>Status</th>
+                                    <th>Generated</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="drafts-table"><tr><td colspan="8" style="text-align:center;color:var(--slate)">Loading...</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </section>
     </div>
 
@@ -863,11 +926,13 @@
     function switchTab(tab) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        const tabMap = {performance:'tab-performance', queries:'tab-queries', pages:'tab-pages', actions:'tab-actions'};
+        const tabMap = {performance:'tab-performance', queries:'tab-queries', pages:'tab-pages', actions:'tab-actions', blog:'tab-blog'};
         document.getElementById(tabMap[tab]).classList.add('active');
         event.target.classList.add('active');
         // Lazy load action plan tab
         if (tab === 'actions' && underperfData.length === 0) loadUnderperformers();
+        // Lazy load blog drafts tab
+        if (tab === 'blog') loadBlogDrafts();
     }
 
     /* ============================================================
@@ -1622,6 +1687,244 @@
     document.getElementById('modal-overlay').addEventListener('click', e => {
         if (e.target === document.getElementById('modal-overlay')) closeModal();
     });
+
+    /* ============================================================
+       BLOG DRAFTS TAB
+       ============================================================ */
+    let blogDraftsLoaded = false;
+
+    async function loadBlogDrafts() {
+        if (blogDraftsLoaded) return;
+        blogDraftsLoaded = true;
+        try {
+            const resp = await fetch('/seo/blog-drafts?limit=50');
+            const json = await resp.json();
+            const inner = json.data || json;
+            const drafts = inner.drafts || [];
+            setVal('drafts-badge', drafts.length + ' drafts');
+            renderBlogDraftsTable(drafts);
+        } catch (err) {
+            console.error('Failed to load blog drafts:', err);
+            document.getElementById('drafts-table').innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--red)">Failed to load drafts</td></tr>';
+        }
+    }
+
+    function renderBlogDraftsTable(drafts) {
+        const tbody = document.getElementById('drafts-table');
+        if (!drafts.length) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--slate);padding:16px 0;">No drafts yet. Generate your first blog draft above.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = drafts.map(d => {
+            const statusCls = d.status === 'published' ? 'success' : d.status === 'approved' ? 'info' : d.status === 'rejected' ? 'critical' : 'warning';
+            const genDate = d.generated_at ? new Date(d.generated_at).toLocaleDateString() : '--';
+            return `<tr>
+                <td class="num">${d.id}</td>
+                <td class="clickable" onclick="viewBlogDraft(${d.id})" style="cursor:pointer;color:var(--cass-teal);">${d.title || '--'}</td>
+                <td class="muted">${d.source_query || '--'}</td>
+                <td><span class="badge info">${d.opportunity_type || '--'}</span></td>
+                <td class="num">${(d.word_count || 0).toLocaleString()}</td>
+                <td><span class="badge ${statusCls}">${d.status}</span></td>
+                <td class="muted">${genDate}</td>
+                <td>
+                    <button class="pill-ctrl" onclick="viewBlogDraft(${d.id})" style="font-size:11px;padding:3px 8px;">View</button>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function loadBlogSuggestions() {
+        const btn = document.getElementById('suggest-btn');
+        const container = document.getElementById('blog-suggestions');
+        btn.disabled = true;
+        btn.textContent = 'Analysing...';
+        container.innerHTML = '<p style="color:var(--slate);font-size:13px;">Analysing SEO underperformers with AI... this may take 30-60 seconds.</p>';
+
+        try {
+            const resp = await fetch('/seo/blog-drafts/suggest?days=30&limit=5');
+            const json = await resp.json();
+            const suggestions = (json.data && json.data.suggestions) || json.suggestions || [];
+            if (!suggestions.length) {
+                container.innerHTML = '<p style="color:var(--slate);font-size:13px;">No blog-worthy topics found. Try expanding the date range.</p>';
+                return;
+            }
+            container.innerHTML = suggestions.map((s, i) => `
+                <div style="padding:12px;border:1px solid var(--line);border-radius:10px;margin-bottom:8px;background:rgba(255,255,255,0.5);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <strong style="font-size:14px;">${i + 1}. ${s.query || s.topic || '--'}</strong>
+                        <span class="badge ${s.priority === 'high' ? 'critical' : s.priority === 'medium' ? 'warning' : 'info'}">${s.priority || 'medium'} priority</span>
+                    </div>
+                    <p style="font-size:13px;color:var(--ink-soft);margin-bottom:6px;">${s.rationale || ''}</p>
+                    ${(s.suggested_angle || s.angle) ? `<p style="font-size:12px;color:var(--slate);"><strong>Angle:</strong> ${s.suggested_angle || s.angle}</p>` : ''}
+                    <button class="pill-ctrl" onclick="useSuggestion('${(s.query || s.topic || '').replace(/'/g, "\\'")}')"
+                        style="margin-top:6px;font-size:11px;padding:3px 10px;">
+                        Use This Topic
+                    </button>
+                </div>
+            `).join('');
+        } catch (err) {
+            console.error('Failed to load suggestions:', err);
+            container.innerHTML = '<p style="color:var(--red);font-size:13px;">Failed to get suggestions. Check that the LLM service is configured.</p>';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Get Suggestions';
+        }
+    }
+
+    function useSuggestion(query) {
+        document.getElementById('blog-query-input').value = query;
+        document.getElementById('blog-query-input').focus();
+    }
+
+    async function generateBlogDraft() {
+        const input = document.getElementById('blog-query-input');
+        const query = input.value.trim();
+        if (!query) { input.focus(); return; }
+
+        const btn = document.getElementById('generate-btn');
+        const status = document.getElementById('generate-status');
+        btn.disabled = true;
+        btn.textContent = 'Generating...';
+        status.innerHTML = '<p style="color:var(--slate);font-size:13px;">Generating blog draft with AI... this may take 60-90 seconds.</p>';
+
+        try {
+            const resp = await fetch('/seo/blog-drafts/generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({query: query, opportunity_type: 'manual', days: 30})
+            });
+            const json = await resp.json();
+            const data = json.data || json;
+            if (data && data.id) {
+                status.innerHTML = `<p style="color:var(--green);font-size:13px;">Draft generated: <strong>${data.title}</strong> (${data.word_count} words). <a href="#" onclick="viewBlogDraft(${data.id});return false;" style="color:var(--cass-teal);">View draft</a></p>`;
+                input.value = '';
+                blogDraftsLoaded = false;
+                loadBlogDrafts();
+            } else {
+                status.innerHTML = '<p style="color:var(--red);font-size:13px;">Generation failed. The LLM may not have returned a valid response.</p>';
+            }
+        } catch (err) {
+            console.error('Failed to generate draft:', err);
+            status.innerHTML = '<p style="color:var(--red);font-size:13px;">Failed to generate draft. Check LLM service configuration.</p>';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Generate Draft';
+        }
+    }
+
+    async function viewBlogDraft(id) {
+        const overlay = document.getElementById('modal-overlay');
+        const body = document.getElementById('modal-body');
+        document.getElementById('modal-title').textContent = 'Blog Draft';
+        overlay.classList.add('active');
+        body.innerHTML = '<p style="color:var(--slate)">Loading draft...</p>';
+
+        try {
+            const resp = await fetch(`/seo/blog-drafts/${id}`);
+            const json = await resp.json();
+            const d = json.data || json;
+            renderBlogDraftModal(d, body);
+            document.getElementById('modal-title').textContent = d.title || 'Blog Draft';
+        } catch (err) {
+            body.innerHTML = '<p style="color:var(--red)">Failed to load draft.</p>';
+        }
+    }
+
+    function renderBlogDraftModal(d, body) {
+        const seo = d.seo_snapshot || {};
+        const statusCls = d.status === 'published' ? 'success' : d.status === 'approved' ? 'info' : d.status === 'rejected' ? 'critical' : 'warning';
+
+        let html = '';
+
+        // Status + metadata bar
+        html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">';
+        html += `<span class="badge ${statusCls}">${d.status}</span>`;
+        html += `<span class="badge info">${d.opportunity_type || '--'}</span>`;
+        if (d.word_count) html += `<span class="badge" style="background:var(--line);color:var(--ink-soft);">${d.word_count} words</span>`;
+        if (d.estimated_reading_time) html += `<span class="badge" style="background:var(--line);color:var(--ink-soft);">${d.estimated_reading_time}</span>`;
+        if (d.llm_model) html += `<span class="badge" style="background:var(--line);color:var(--slate);">${d.llm_model}</span>`;
+        html += '</div>';
+
+        // SEO snapshot
+        html += '<div class="modal-stats">';
+        html += modalStat('Query', d.source_query);
+        html += modalStat('Position', seo.position);
+        html += modalStat('Impressions', seo.impressions);
+        html += modalStat('Click Gap', seo.click_gap);
+        html += '</div>';
+
+        // Meta description
+        if (d.meta_description) {
+            html += `<div style="margin:12px 0;padding:10px;background:rgba(31,111,107,0.05);border-radius:8px;font-size:13px;">
+                <strong style="font-size:11px;color:var(--slate);display:block;margin-bottom:4px;">Meta Description</strong>
+                ${d.meta_description}
+            </div>`;
+        }
+
+        // Slug
+        if (d.slug) {
+            html += `<p style="font-size:12px;color:var(--slate);margin-bottom:8px;"><strong>Slug:</strong> /${d.slug}</p>`;
+        }
+
+        // Target keywords
+        if (d.target_keywords && d.target_keywords.length) {
+            html += '<div style="margin-bottom:12px;">';
+            html += '<strong style="font-size:11px;color:var(--slate);display:block;margin-bottom:4px;">Target Keywords</strong>';
+            html += d.target_keywords.map(k => `<span class="badge info" style="margin:2px 4px 2px 0;">${k}</span>`).join('');
+            html += '</div>';
+        }
+
+        // Internal links
+        if (d.internal_links && d.internal_links.length) {
+            html += '<div style="margin-bottom:12px;">';
+            html += '<strong style="font-size:11px;color:var(--slate);display:block;margin-bottom:4px;">Internal Links</strong>';
+            html += '<ul style="font-size:12px;color:var(--ink-soft);padding-left:16px;margin:0;">';
+            d.internal_links.forEach(l => {
+                html += `<li>${l.text || l.anchor || '--'} → ${l.url || l.href || '--'}</li>`;
+            });
+            html += '</ul></div>';
+        }
+
+        // Content
+        if (d.content_html) {
+            html += '<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--line);">';
+            html += '<strong style="font-size:11px;color:var(--slate);display:block;margin-bottom:8px;">Content Preview</strong>';
+            html += `<div style="font-size:14px;line-height:1.7;max-height:500px;overflow-y:auto;padding-right:8px;">${d.content_html}</div>`;
+            html += '</div>';
+        }
+
+        // Action buttons
+        html += '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--line);display:flex;gap:8px;">';
+        if (d.status === 'draft') {
+            html += `<button class="pill-ctrl" onclick="updateDraftStatus(${d.id},'approved')" style="padding:6px 14px;background:var(--green);color:#fff;border:none;border-radius:8px;cursor:pointer;font:inherit;font-size:12px;">Approve</button>`;
+            html += `<button class="pill-ctrl" onclick="updateDraftStatus(${d.id},'rejected')" style="padding:6px 14px;background:var(--red);color:#fff;border:none;border-radius:8px;cursor:pointer;font:inherit;font-size:12px;">Reject</button>`;
+        }
+        if (d.status === 'approved') {
+            html += `<button class="pill-ctrl" onclick="updateDraftStatus(${d.id},'published')" style="padding:6px 14px;background:var(--cass-teal);color:#fff;border:none;border-radius:8px;cursor:pointer;font:inherit;font-size:12px;">Mark Published</button>`;
+        }
+        html += '</div>';
+
+        body.innerHTML = html;
+    }
+
+    async function updateDraftStatus(id, status) {
+        try {
+            const resp = await fetch(`/seo/blog-drafts/${id}/status`, {
+                method: 'PATCH',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({status: status})
+            });
+            const json = await resp.json();
+            const data = json.data || json;
+            if (data && data.id) {
+                renderBlogDraftModal(data, document.getElementById('modal-body'));
+                blogDraftsLoaded = false;
+                loadBlogDrafts();
+            }
+        } catch (err) {
+            console.error('Failed to update status:', err);
+        }
+    }
 
     /* ============================================================
        INIT
