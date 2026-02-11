@@ -85,9 +85,9 @@ class BrandIntelligenceService:
 
             ads = ads_product.get(b["brand"], {})
             ads_metrics = self._get_ads_campaign_metrics(b["brand"], ads_campaign_rows)
-            # Prefer campaign-level spend (more complete); fall back to product-level
-            spend = ads_metrics.get("spend", 0) or ads.get("spend", 0)
-            roas = ads_metrics.get("roas") if ads_metrics.get("spend") else ads.get("roas")
+            # Use max of campaign-name and product-level spend (product captures catch-all campaigns)
+            spend = max(ads_metrics.get("spend", 0), ads.get("spend", 0))
+            roas = ads.get("roas") if ads.get("spend") else ads_metrics.get("roas")
             ads_status = self._compute_ads_status(spend, roas, ads_metrics)
 
             brands.append({
@@ -276,12 +276,16 @@ class BrandIntelligenceService:
         shipping_data = self._get_brand_shipping_cost(brand_name, cur_start, cur_end)
         shipping_cost = shipping_data["total_cost"]
 
+        # Customer-paid shipping revenue (what customers paid at checkout)
+        shipping_revenue = self._get_brand_shipping_revenue(brand_name, cur_start, cur_end)
+
         net_margin = None
-        if cur_totals["revenue"] > 0:
+        total_rev_incl_shipping = cur_totals["revenue"] + shipping_revenue
+        if total_rev_incl_shipping > 0:
             net_margin = round(
-                (cur_totals["revenue"] - cur_totals["total_cogs"] - ads_spend
+                (total_rev_incl_shipping - cur_totals["total_cogs"] - ads_spend
                  - overhead_alloc - shipping_cost)
-                / cur_totals["revenue"] * 100,
+                / total_rev_incl_shipping * 100,
                 1,
             )
 
@@ -309,7 +313,9 @@ class BrandIntelligenceService:
                 "has_cost_data": cur_totals.get("has_cost_data", False),
                 "ads_spend": ads_spend,
                 "overhead_allocated": overhead_alloc,
+                "shipping_revenue": shipping_revenue,
                 "shipping_cost": shipping_cost,
+                "shipping_net": round(shipping_revenue - shipping_cost, 2),
                 "shipping_coverage_pct": round(
                     shipping_data["orders_with_cost"]
                     / max(shipping_data["orders_total"], 1)
@@ -382,35 +388,87 @@ class BrandIntelligenceService:
         return include_terms, exclude_terms, allowlist_used
 
     def _get_ads_product_summary(self, start, end) -> Dict[str, Dict]:
-        """Product-level ad spend and ROAS aggregated by vendor."""
+        """Product-level ad spend proportionally allocated by vendor.
+
+        PMax product performance data is an attribution metric (inflated 10-30x
+        vs actual campaign cost). We use product-level ratios to allocate
+        actual campaign spend proportionally across vendors.
+        """
         try:
+            start_d = start.date() if hasattr(start, "date") else start
+            end_d = end.date() if hasattr(end, "date") else end
+
+            # Build product_id → vendor lookup
+            vendor_map = {}
+            for r in self.db.query(ShopifyProduct.shopify_product_id, ShopifyProduct.vendor).filter(
+                ShopifyProduct.vendor.isnot(None), ShopifyProduct.vendor != '',
+            ).all():
+                vendor_map[str(r.shopify_product_id)] = r.vendor
+
+            # Get actual campaign-level spend
+            camp_rows = self._get_ads_campaign_rows(start, end)
+            campaign_actual = {}
+            for row in camp_rows:
+                name = row.get("name", "")
+                campaign_actual.setdefault(name, 0)
+                campaign_actual[name] += (row.get("cost_micros", 0) or 0) / 1_000_000
+
+            # Get product spend grouped by campaign for ratio calculation
             rows = (
                 self.db.query(
-                    ShopifyProduct.vendor,
+                    GoogleAdsProductPerformance.product_item_id,
+                    GoogleAdsProductPerformance.campaign_name,
                     func.sum(GoogleAdsProductPerformance.cost_micros).label("cost"),
                     func.sum(GoogleAdsProductPerformance.conversions_value).label("conv_val"),
                 )
-                .join(
-                    GoogleAdsProductPerformance,
-                    GoogleAdsProductPerformance.product_item_id
-                    == func.cast(ShopifyProduct.shopify_product_id, String),
-                )
                 .filter(
-                    ShopifyProduct.vendor.isnot(None),
-                    ShopifyProduct.vendor != '',
-                    GoogleAdsProductPerformance.date >= start.date() if hasattr(start, "date") else start,
-                    GoogleAdsProductPerformance.date < end.date() if hasattr(end, "date") else end,
+                    GoogleAdsProductPerformance.date >= start_d,
+                    GoogleAdsProductPerformance.date < end_d,
                 )
-                .group_by(ShopifyProduct.vendor)
+                .group_by(
+                    GoogleAdsProductPerformance.product_item_id,
+                    GoogleAdsProductPerformance.campaign_name,
+                )
                 .all()
             )
-            out = {}
+
+            # Per campaign: total product attribution $ and per-vendor breakdown
+            camp_total_prod = {}    # campaign -> total product-level $
+            camp_vendor_prod = {}   # campaign -> {vendor: product-level $}
+
             for r in rows:
-                spend = _dec(r.cost) / 1_000_000 if r.cost else 0
-                conv_val = _dec(r.conv_val)
-                roas = round(conv_val / spend, 1) if spend > 0 else None
-                out[r.vendor] = {"spend": round(spend, 2), "roas": roas}
-            return out
+                camp = r.campaign_name or ""
+                cost = int(r.cost or 0)
+                camp_total_prod.setdefault(camp, 0)
+                camp_total_prod[camp] += cost
+
+                m = _re.match(r'shopify_au_(\d+)_\d+', r.product_item_id or '')
+                if not m:
+                    continue
+                vendor = vendor_map.get(m.group(1))
+                if not vendor:
+                    continue
+                camp_vendor_prod.setdefault(camp, {})
+                camp_vendor_prod[camp].setdefault(vendor, 0)
+                camp_vendor_prod[camp][vendor] += cost
+
+            # Proportionally allocate actual campaign spend to vendors
+            vendor_spend = {}
+            for camp, vendor_breakdown in camp_vendor_prod.items():
+                total_prod = camp_total_prod.get(camp, 0)
+                actual = campaign_actual.get(camp, 0)
+                if total_prod <= 0 or actual <= 0:
+                    continue
+                for vendor, vendor_prod in vendor_breakdown.items():
+                    share = vendor_prod / total_prod
+                    vendor_spend.setdefault(vendor, 0)
+                    vendor_spend[vendor] += actual * share
+
+            result = {}
+            for vendor, spend in vendor_spend.items():
+                roas = None  # ROAS less meaningful at this level with proportional allocation
+                result[vendor] = {"spend": round(spend, 2), "roas": roas}
+            return result
         except Exception as e:
             log.debug(f"Ads product summary skipped: {e}")
             return {}
@@ -452,7 +510,7 @@ class BrandIntelligenceService:
 
     def _get_ads_campaign_metrics(self, brand: str, rows: List[Dict]) -> Dict:
         """Compute spend, ROAS, impression share, and lost IS for a brand via campaign name matching."""
-        empty = {"spend": 0, "roas": None, "imp_share": None, "budget_lost": None, "rank_lost": None}
+        empty = {"spend": 0, "roas": None, "imp_share": None, "budget_lost": None, "rank_lost": None, "matched_campaigns": set()}
         include_terms, exclude_terms, allowlist_used = self._get_brand_term_filters(brand)
         if not brand or (len(brand) <= 2 and not allowlist_used):
             return empty
@@ -474,6 +532,7 @@ class BrandIntelligenceService:
         imp_share_num = 0.0
         budget_lost_num = 0.0
         rank_lost_num = 0.0
+        matched_campaigns = set()
 
         for row in rows:
             name = row.get("name", "")
@@ -491,6 +550,7 @@ class BrandIntelligenceService:
                 pass
             else:
                 continue
+            matched_campaigns.add(name)
             impr = row["impr"] or 0
             total_impr += impr
             total_cost_micros += row.get("cost_micros", 0) or 0
@@ -503,7 +563,7 @@ class BrandIntelligenceService:
                 rank_lost_num += row["rank_lost"] * impr
 
         if total_impr == 0:
-            return empty
+            return {**empty, "matched_campaigns": matched_campaigns}
 
         spend = total_cost_micros / 1_000_000
         roas = round(total_conv_val / spend, 1) if spend > 0 else None
@@ -522,6 +582,7 @@ class BrandIntelligenceService:
             "imp_share": _pct_safe(imp_share_num / total_impr) if imp_share_num else None,
             "budget_lost": _pct_safe(budget_lost_num / total_impr) if budget_lost_num else None,
             "rank_lost": _pct_safe(rank_lost_num / total_impr) if rank_lost_num else None,
+            "matched_campaigns": matched_campaigns,
         }
 
     def _compute_ads_status(self, spend, roas, metrics) -> str:
@@ -849,6 +910,72 @@ class BrandIntelligenceService:
         except Exception as e:
             log.debug(f"Shipping cost lookup failed for {brand}: {e}")
             return {"total_cost": 0, "orders_with_cost": 0, "orders_total": 0}
+
+    def _get_brand_shipping_revenue(self, brand: str, start, end) -> float:
+        """
+        Get customer-paid shipping revenue allocated to a brand by revenue share.
+
+        Uses ShopifyOrder.total_shipping (what customer paid at checkout),
+        allocated proportionally by brand's product revenue in each order.
+        """
+        try:
+            order_ids_with_brand = (
+                self.db.query(
+                    func.distinct(ShopifyOrderItem.shopify_order_id)
+                )
+                .filter(
+                    ShopifyOrderItem.vendor == brand,
+                    ShopifyOrderItem.order_date >= start,
+                    ShopifyOrderItem.order_date < end,
+                    ShopifyOrderItem.financial_status.in_(
+                        ["paid", "partially_refunded", "refunded"]
+                    ),
+                )
+            ).subquery()
+
+            # Get orders with shipping charges
+            orders_with_shipping = (
+                self.db.query(
+                    ShopifyOrder.shopify_order_id,
+                    ShopifyOrder.total_shipping,
+                )
+                .filter(
+                    ShopifyOrder.shopify_order_id.in_(
+                        self.db.query(order_ids_with_brand)
+                    ),
+                    ShopifyOrder.total_shipping > 0,
+                )
+                .all()
+            )
+
+            total_shipping_rev = 0.0
+            for order in orders_with_shipping:
+                shipping_charged = float(order.total_shipping or 0)
+                # Allocate by brand revenue share in this order
+                items = (
+                    self.db.query(
+                        ShopifyOrderItem.vendor,
+                        func.sum(
+                            ShopifyOrderItem.price * ShopifyOrderItem.quantity
+                        ).label("rev"),
+                    )
+                    .filter(
+                        ShopifyOrderItem.shopify_order_id == order.shopify_order_id
+                    )
+                    .group_by(ShopifyOrderItem.vendor)
+                    .all()
+                )
+                order_rev = sum(float(i.rev or 0) for i in items)
+                brand_rev = sum(
+                    float(i.rev or 0) for i in items if i.vendor == brand
+                )
+                share = brand_rev / order_rev if order_rev > 0 else 0
+                total_shipping_rev += shipping_charged * share
+
+            return round(total_shipping_rev, 2)
+        except Exception as e:
+            log.debug(f"Shipping revenue lookup failed for {brand}: {e}")
+            return 0.0
 
     def _monthly_breakdown(self, brand: str, start, end) -> List[Dict]:
         rpi = self._refund_per_item_subquery()
@@ -2192,9 +2319,15 @@ class BrandIntelligenceService:
             return None
 
     def _get_ads_diagnostic(self, brand, cur_start, cur_end) -> Optional[Dict]:
-        """Ad performance diagnostic for a brand."""
+        """Ad performance diagnostic for a brand.
+
+        Spend is computed in two parts:
+        1. Brand-specific campaigns (name contains brand) → campaign-level spend
+        2. Catch-all campaigns → actual campaign spend allocated by brand's
+           product-level share (PMax product spend is inflated 10-30x so we
+           only use it for proportional allocation, never absolute spend)
+        """
         try:
-            # Campaign-level: use Python-side regex matching (same as dashboard)
             ads_campaign_rows = self._get_ads_campaign_rows(cur_start, cur_end)
             metrics = self._get_ads_campaign_metrics(brand, ads_campaign_rows)
 
@@ -2203,63 +2336,86 @@ class BrandIntelligenceService:
             imp_share = metrics.get("imp_share")
             budget_lost = metrics.get("budget_lost")
             rank_lost = metrics.get("rank_lost")
+            matched_campaigns = metrics.get("matched_campaigns", set())
 
-            # Product-level
+            start_d = cur_start.date() if hasattr(cur_start, "date") else cur_start
+            end_d = cur_end.date() if hasattr(cur_end, "date") else cur_end
+
+            # Use pre-computed product summary for catch-all allocation
+            product_summary = self._get_ads_product_summary(cur_start, cur_end)
+            brand_product_spend = product_summary.get(brand, {}).get("spend", 0)
+
+            # shared_spend = brand's proportional allocation minus what's
+            # already counted in brand-specific campaigns
+            shared_spend = max(brand_product_spend - camp_spend, 0)
+
+            total_spend = camp_spend + shared_spend
+
+            # Product-level top performers (only for this brand's products)
+            product_perf = []
+            wasted = []
             brand_pids = (
-                self.db.query(func.cast(ShopifyProduct.shopify_product_id, String))
+                self.db.query(ShopifyProduct.shopify_product_id)
                 .filter(ShopifyProduct.vendor == brand)
                 .all()
             )
-            pid_list = [str(r[0]) for r in brand_pids] if brand_pids else []
+            brand_pid_set = {str(r[0]) for r in brand_pids} if brand_pids else set()
 
-            product_perf = []
-            wasted = []
-            if pid_list:
-                prod_rows = (
+            if brand_pid_set:
+                # Build LIKE patterns for top products only (limit query scope)
+                like_patterns = [f"shopify_au_{pid}_%" for pid in brand_pid_set]
+
+                # Query only this brand's products (much faster than all 238k rows)
+                from sqlalchemy import or_
+                brand_prod_rows = (
                     self.db.query(
                         GoogleAdsProductPerformance.product_item_id,
                         GoogleAdsProductPerformance.product_title,
-                        func.sum(GoogleAdsProductPerformance.cost_micros).label("cost"),
                         func.sum(GoogleAdsProductPerformance.clicks).label("clicks"),
                         func.sum(GoogleAdsProductPerformance.conversions).label("conv"),
                         func.sum(GoogleAdsProductPerformance.conversions_value).label("conv_val"),
                     )
                     .filter(
-                        GoogleAdsProductPerformance.product_item_id.in_(pid_list),
-                        GoogleAdsProductPerformance.date >= cur_start.date() if hasattr(cur_start, "date") else cur_start,
-                        GoogleAdsProductPerformance.date < cur_end.date() if hasattr(cur_end, "date") else cur_end,
+                        GoogleAdsProductPerformance.date >= start_d,
+                        GoogleAdsProductPerformance.date < end_d,
+                        or_(*[GoogleAdsProductPerformance.product_item_id.like(p) for p in like_patterns[:50]]),
                     )
-                    .group_by(GoogleAdsProductPerformance.product_item_id, GoogleAdsProductPerformance.product_title)
+                    .group_by(
+                        GoogleAdsProductPerformance.product_item_id,
+                        GoogleAdsProductPerformance.product_title,
+                    )
+                    .order_by(func.sum(GoogleAdsProductPerformance.clicks).desc())
+                    .limit(10)
                     .all()
                 )
-                for pr in prod_rows:
-                    spend = _dec(pr.cost) / 1_000_000
-                    conv_val = _dec(pr.conv_val)
-                    conv = _dec(pr.conv)
-                    roas = round(conv_val / spend, 1) if spend > 0 else 0
+
+                for pr in brand_prod_rows:
+                    clicks = int(pr.clicks or 0)
+                    conv = float(pr.conv or 0)
+                    conv_val = float(pr.conv_val or 0)
                     entry = {
                         "product_id": pr.product_item_id,
                         "title": pr.product_title or "Unknown",
-                        "spend": round(spend, 2),
-                        "clicks": int(pr.clicks or 0),
+                        "spend": 0,  # Not available at product level (inflated)
+                        "clicks": clicks,
                         "conversions": round(conv, 1),
-                        "roas": roas,
+                        "roas": 0,
                     }
                     product_perf.append(entry)
-                    if spend > 50 and conv == 0:
+                    if clicks > 50 and conv == 0:
                         wasted.append(entry)
 
-                product_perf.sort(key=lambda x: x["spend"], reverse=True)
-
-            if camp_spend == 0 and not product_perf:
+            if total_spend == 0 and not product_perf:
                 return None
 
             scaling = (imp_share is not None and imp_share < 80 and camp_roas > 3)
 
             return {
-                "metric_scope": "campaign-level",
+                "metric_scope": "campaign+product",
                 "time_window": f"{cur_start.strftime('%Y-%m-%d')} to {cur_end.strftime('%Y-%m-%d')}",
-                "campaign_spend": round(camp_spend, 2),
+                "campaign_spend": round(total_spend, 2),
+                "campaign_spend_branded": round(camp_spend, 2),
+                "campaign_spend_shared": round(shared_spend, 2),
                 "campaign_roas": camp_roas,
                 "impression_share": imp_share,
                 "budget_lost_share": budget_lost,

@@ -96,7 +96,8 @@ from app.models.content_gap import (
     ContentOpportunity,
     ContentPerformance,
     ContentInsight,
-    CategoryContentHealth
+    CategoryContentHealth,
+    BlogDraft
 )
 
 from app.models.code_health import (

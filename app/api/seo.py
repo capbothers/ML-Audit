@@ -7,12 +7,25 @@ Answers: "Where are my easy SEO wins?"
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
+from pydantic import BaseModel
 
 from app.services.seo_service import SEOService
 from app.services.llm_service import LLMService
+from app.services.blog_draft_service import BlogDraftService
 from app.models.base import get_db
 from app.utils.logger import log
 from app.utils.cache import get_cached, set_cached, _MISS
+
+
+class GenerateBlogDraftRequest(BaseModel):
+    query: str
+    opportunity_type: str = "manual"
+    days: int = 30
+
+
+class UpdateDraftStatusRequest(BaseModel):
+    status: str
+    reviewer_notes: Optional[str] = None
 
 router = APIRouter(prefix="/seo", tags=["seo"])
 
@@ -539,3 +552,159 @@ async def analyze_page_performance(
             "opportunity_score": latest.opportunity_score
         }
     }
+
+
+# ── Blog Draft Endpoints ──────────────────────────────────────────
+
+
+@router.get("/blog-drafts/suggest")
+async def suggest_blog_topics(
+    days: int = Query(30, description="Number of days to analyze"),
+    limit: int = Query(5, description="Number of topics to suggest"),
+    db=Depends(get_db),
+):
+    """
+    Auto-suggest the best blog post topics based on SEO underperformers.
+
+    Analyzes declining pages, close-to-page-1 queries, and content decay
+    to recommend which queries would benefit most from blog content.
+    """
+    service = BlogDraftService(db)
+
+    if not service.llm_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="LLM service not available. Configure ANTHROPIC_API_KEY in .env",
+        )
+
+    try:
+        suggestions = await service.suggest_topics(days=days, limit=limit)
+
+        return {
+            "success": True,
+            "data": {"suggestions": suggestions, "count": len(suggestions)},
+        }
+
+    except Exception as e:
+        log.error(f"Error suggesting blog topics: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/blog-drafts/generate")
+async def generate_blog_draft(
+    request: GenerateBlogDraftRequest,
+    db=Depends(get_db),
+):
+    """
+    Generate a full LLM blog post draft for a specific underperforming query.
+
+    Takes a search query from the SEO dashboard and generates a complete
+    SEO-optimized blog post draft with title, meta, HTML content, and internal links.
+    """
+    service = BlogDraftService(db)
+
+    if not service.llm_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="LLM service not available. Configure ANTHROPIC_API_KEY in .env",
+        )
+
+    try:
+        draft = await service.generate_draft_for_query(
+            query=request.query,
+            opportunity_type=request.opportunity_type,
+            days=request.days,
+        )
+
+        if not draft:
+            raise HTTPException(
+                status_code=500, detail="Failed to generate blog draft"
+            )
+
+        return {"success": True, "data": draft}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Error generating blog draft: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/blog-drafts")
+async def list_blog_drafts(
+    status: Optional[str] = Query(
+        None,
+        description="Filter by status: draft, reviewed, approved, published, rejected",
+    ),
+    limit: int = Query(20, description="Max results"),
+    offset: int = Query(0, description="Offset for pagination"),
+    db=Depends(get_db),
+):
+    """List all blog drafts with optional status filter."""
+    try:
+        service = BlogDraftService(db)
+        result = service.list_drafts(
+            status=status, limit=limit, offset=offset
+        )
+        return {"success": True, "data": result}
+
+    except Exception as e:
+        log.error(f"Error listing blog drafts: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/blog-drafts/{draft_id}")
+async def get_blog_draft(draft_id: int, db=Depends(get_db)):
+    """Get a specific blog draft by ID with full content."""
+    try:
+        service = BlogDraftService(db)
+        draft = service.get_draft(draft_id)
+
+        if not draft:
+            raise HTTPException(
+                status_code=404, detail="Blog draft not found"
+            )
+
+        return {"success": True, "data": draft}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Error getting blog draft: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/blog-drafts/{draft_id}/status")
+async def update_blog_draft_status(
+    draft_id: int,
+    request: UpdateDraftStatusRequest,
+    db=Depends(get_db),
+):
+    """Update draft status (reviewed, approved, published, rejected)."""
+    valid_statuses = {"draft", "reviewed", "approved", "published", "rejected"}
+    if request.status not in valid_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid status. Must be one of: {', '.join(sorted(valid_statuses))}",
+        )
+
+    try:
+        service = BlogDraftService(db)
+        draft = service.update_draft_status(
+            draft_id=draft_id,
+            status=request.status,
+            reviewer_notes=request.reviewer_notes,
+        )
+
+        if not draft:
+            raise HTTPException(
+                status_code=404, detail="Blog draft not found"
+            )
+
+        return {"success": True, "data": draft}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Error updating blog draft status: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

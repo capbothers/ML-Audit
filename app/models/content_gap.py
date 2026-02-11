@@ -344,3 +344,52 @@ class CategoryContentHealth(Base):
 
     def __repr__(self):
         return f"<CategoryContentHealth {self.category_name} - {self.overall_health_score}/100>"
+
+
+class BlogDraft(Base):
+    """LLM-generated blog post drafts based on SEO underperformers"""
+    __tablename__ = "blog_drafts"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # SEO trigger data
+    source_query = Column(String, index=True, nullable=False)
+    source_page = Column(String, nullable=True)
+    opportunity_type = Column(String, index=True, nullable=False)
+    # Types: close_to_page_one, declining, high_impression_low_ctr, content_decay, manual
+
+    # SEO metrics snapshot at generation time
+    position_at_generation = Column(Float, nullable=True)
+    impressions_at_generation = Column(Integer, nullable=True)
+    clicks_at_generation = Column(Integer, nullable=True)
+    click_gap_at_generation = Column(Integer, nullable=True)
+    priority_score = Column(Integer, nullable=True)
+
+    # Generated content
+    title = Column(String, nullable=False)
+    meta_description = Column(String(300), nullable=True)
+    slug = Column(String, nullable=True)
+    content_html = Column(Text, nullable=False)
+    outline = Column(JSON, nullable=True)
+    target_keywords = Column(JSON, nullable=True)
+    internal_links = Column(JSON, nullable=True)
+    word_count = Column(Integer, nullable=True)
+    estimated_reading_time = Column(Integer, nullable=True)
+
+    # Status workflow
+    status = Column(String, default="draft", index=True)
+    # Status: draft, reviewed, approved, published, rejected
+    reviewer_notes = Column(Text, nullable=True)
+
+    # LLM metadata
+    llm_model = Column(String, nullable=True)
+    generation_tokens = Column(Integer, nullable=True)
+
+    # Timestamps
+    generated_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    published_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<BlogDraft '{self.title}' ({self.status})>"

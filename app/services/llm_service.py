@@ -3,6 +3,7 @@ LLM Service for AI-Powered Insights
 Transforms structured data into natural language explanations
 """
 import json
+import re
 from typing import Dict, List, Optional
 from datetime import datetime
 
@@ -2463,6 +2464,295 @@ Prioritize by revenue impact. A 404 causing $2,000/month loss should be fixed be
         except Exception as e:
             log.error(f"Error analyzing 404 health: {str(e)}")
             return None
+
+    def generate_seo_blog_post(
+        self,
+        query: str,
+        page_url: Optional[str],
+        opportunity_type: str,
+        seo_data: Dict,
+        product_context: List[Dict],
+        site_url: str
+    ) -> Optional[Dict]:
+        """
+        Generate a full SEO-optimized blog post draft targeting an underperforming query.
+
+        Returns dict with: title, meta_description, slug, content_html, outline,
+        target_keywords, internal_links, word_count
+        """
+        if not self.enabled:
+            return None
+
+        try:
+            context = f'TARGET QUERY: "{query}"\n'
+            context += f"OPPORTUNITY TYPE: {opportunity_type}\n"
+            context += f"SITE URL: {site_url}\n\n"
+
+            context += "SEO DATA:\n"
+            context += f"- Current Position: {seo_data.get('position', 'N/A')}\n"
+            context += f"- Impressions: {seo_data.get('impressions', 0)}/month\n"
+            context += f"- Clicks: {seo_data.get('clicks', 0)}\n"
+            context += f"- Click Gap: {seo_data.get('click_gap', 0)}\n"
+            context += f"- CTR: {seo_data.get('actual_ctr', 'N/A')}%\n"
+
+            if page_url:
+                context += f"\nEXISTING PAGE: {page_url}\n"
+                context += "(This page needs content expansion/refresh)\n"
+            else:
+                context += "\nNO EXISTING PAGE — this is NEW content to create.\n"
+
+            if seo_data.get("related_queries"):
+                context += "\nRELATED QUERIES (also target these):\n"
+                for rq in seo_data["related_queries"][:10]:
+                    context += f'- "{rq["query"]}" (pos {rq.get("position", "?")}, {rq.get("impressions", 0)} imp)\n'
+
+            if product_context:
+                context += "\nRELEVANT PRODUCTS TO REFERENCE:\n"
+                for p in product_context[:8]:
+                    context += f"- {p['title']} ({p.get('vendor', '')})"
+                    if p.get("handle"):
+                        context += f" — /products/{p['handle']}"
+                    context += "\n"
+
+            prompt = f"""You are an expert SEO content writer for an Australian e-commerce site that sells bathroom, kitchen and plumbing products.
+
+{context}
+
+Write a COMPLETE blog post (1200-1800 words) optimized for the target query.
+
+Return your response in this EXACT format:
+
+TITLE: [SEO-optimized title, 55-60 chars, include target keyword]
+
+META_DESCRIPTION: [Compelling meta description, 150-155 chars, include target keyword]
+
+SLUG: [url-friendly-slug]
+
+TARGET_KEYWORDS: [comma-separated list of 5-8 keywords to target]
+
+OUTLINE:
+H2: [First section heading]
+  H3: [Subsection if needed]
+H2: [Second section heading]
+H2: [Third section heading]
+  H3: [Subsection]
+H2: [FAQ or Conclusion]
+
+INTERNAL_LINKS:
+- "anchor text" -> /products/handle (reason: relevant product)
+- "anchor text" -> /collections/category (reason: category page)
+
+CONTENT:
+[Full blog post in HTML format with <h2>, <h3>, <p>, <ul>, <ol>, <strong> tags.
+Naturally integrate the target keyword 3-5 times.
+Include a FAQ section with 3-4 common questions.
+Reference relevant products with links where natural.
+Write for Australian audience (favour, colour, etc.).
+Include specific, helpful information — not generic filler.
+End with a clear call-to-action.]
+
+Requirements:
+1. Title must include the primary keyword naturally
+2. Use H2/H3 hierarchy for clear structure
+3. Include internal links to relevant product pages
+4. Write naturally — avoid keyword stuffing
+5. Include FAQ schema-ready questions
+6. Australian English spelling
+7. Actionable, helpful content that answers searcher intent
+8. End with CTA linking to relevant product category"""
+
+            response = self.client.messages.create(
+                model=settings.llm_model,
+                max_tokens=4000,
+                messages=[{"role": "user", "content": prompt}]
+            )
+
+            raw = response.content[0].text
+            parsed = self._parse_blog_response(raw)
+            parsed["generation_tokens"] = (
+                response.usage.output_tokens if hasattr(response, "usage") else None
+            )
+            parsed["llm_model"] = settings.llm_model
+
+            log.info(f"Generated blog draft for query: {query}")
+            return parsed
+
+        except Exception as e:
+            log.error(f"Error generating blog post: {str(e)}")
+            return None
+
+    def _parse_blog_response(self, raw: str) -> Dict:
+        """Parse structured blog generation response into dict."""
+        result = {
+            "title": "",
+            "meta_description": "",
+            "slug": "",
+            "content_html": "",
+            "outline": [],
+            "target_keywords": [],
+            "internal_links": [],
+            "word_count": 0,
+            "estimated_reading_time": 1,
+        }
+
+        title_match = re.search(r"TITLE:\s*(.+)", raw)
+        if title_match:
+            result["title"] = title_match.group(1).strip()
+
+        meta_match = re.search(r"META_DESCRIPTION:\s*(.+)", raw)
+        if meta_match:
+            result["meta_description"] = meta_match.group(1).strip()[:300]
+
+        slug_match = re.search(r"SLUG:\s*(.+)", raw)
+        if slug_match:
+            result["slug"] = slug_match.group(1).strip()
+
+        kw_match = re.search(r"TARGET_KEYWORDS:\s*(.+)", raw)
+        if kw_match:
+            result["target_keywords"] = [
+                k.strip() for k in kw_match.group(1).split(",")
+            ]
+
+        # Extract outline section
+        outline_match = re.search(
+            r"OUTLINE:\s*\n((?:.*H[23]:.*\n?)+)", raw
+        )
+        if outline_match:
+            current_h2 = None
+            for line in outline_match.group(1).strip().split("\n"):
+                line = line.strip()
+                if line.startswith("H2:"):
+                    current_h2 = {
+                        "heading": line[3:].strip(),
+                        "subheadings": [],
+                    }
+                    result["outline"].append(current_h2)
+                elif line.startswith("H3:") and current_h2:
+                    current_h2["subheadings"].append(line[3:].strip())
+
+        # Extract internal links
+        links_match = re.search(
+            r"INTERNAL_LINKS:\s*\n((?:.*->.*\n?)+)", raw
+        )
+        if links_match:
+            for line in links_match.group(1).strip().split("\n"):
+                link_match = re.match(
+                    r'-\s*"(.+?)"\s*->\s*(\S+)\s*(?:\(reason:\s*(.+?)\))?',
+                    line,
+                )
+                if link_match:
+                    result["internal_links"].append(
+                        {
+                            "text": link_match.group(1),
+                            "url": link_match.group(2),
+                            "context": link_match.group(3) or "",
+                        }
+                    )
+
+        # Extract content (everything after CONTENT:)
+        content_match = re.search(r"CONTENT:\s*\n([\s\S]+)", raw)
+        if content_match:
+            result["content_html"] = content_match.group(1).strip()
+        else:
+            result["content_html"] = raw
+
+        # Word count (strip HTML tags)
+        text_only = re.sub(r"<[^>]+>", "", result["content_html"])
+        result["word_count"] = len(text_only.split())
+        result["estimated_reading_time"] = max(1, result["word_count"] // 250)
+
+        return result
+
+    def suggest_blog_topics(
+        self,
+        underperformers: List[Dict],
+        limit: int = 5,
+    ) -> Optional[List[Dict]]:
+        """
+        Given SEO underperformers, suggest the best blog post topics.
+
+        Returns list of dicts with: query, rationale, suggested_angle, priority
+        """
+        if not self.enabled or not underperformers:
+            return None
+
+        try:
+            context = "SEO UNDERPERFORMERS (sorted by priority):\n\n"
+            for i, u in enumerate(underperformers[:20], 1):
+                context += f'{i}. "{u["query"]}" — pos {u.get("position", "?")}, '
+                context += f'{u.get("impressions", 0)} imp, {u.get("clicks", 0)} clicks, '
+                context += f'click gap: {u.get("click_gap", 0)}, '
+                context += f'decay: {u.get("content_decay", False)}, '
+                context += f'fix: {u.get("fix_first", "N/A")}\n'
+                if u.get("page"):
+                    context += f'   Page: {u["page"]}\n'
+
+            prompt = f"""You are an SEO content strategist for an Australian e-commerce site selling bathroom, kitchen and plumbing products.
+
+{context}
+
+From these underperforming queries, pick the TOP {limit} that would benefit MOST from a new or refreshed blog post.
+
+For each, return in this EXACT format:
+
+QUERY: "exact query"
+RATIONALE: Why blog content helps this query rank better
+ANGLE: Specific blog topic/title angle
+PRIORITY: high or medium
+---
+
+Only recommend blog posts where long-form content would actually help rank better.
+Skip queries where a simple title/meta fix is sufficient.
+Focus on queries where content depth, FAQs, buying guides, or how-to content would close the click gap.
+Consider the searcher's intent — informational queries benefit most from blog content."""
+
+            response = self.client.messages.create(
+                model=settings.llm_model,
+                max_tokens=1500,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            raw = response.content[0].text
+            suggestions = self._parse_topic_suggestions(raw)
+            log.info(f"Generated {len(suggestions)} blog topic suggestions")
+            return suggestions[:limit]
+
+        except Exception as e:
+            log.error(f"Error suggesting blog topics: {str(e)}")
+            return None
+
+    def _parse_topic_suggestions(self, raw: str) -> List[Dict]:
+        """Parse topic suggestion response into list of dicts."""
+        suggestions = []
+        blocks = re.split(r"\n---\n?", raw)
+
+        for block in blocks:
+            block = block.strip()
+            if not block:
+                continue
+
+            query_match = re.search(r'QUERY:\s*"?(.+?)"?\s*$', block, re.MULTILINE)
+            rationale_match = re.search(r"RATIONALE:\s*(.+)", block)
+            angle_match = re.search(r"ANGLE:\s*(.+)", block)
+            priority_match = re.search(r"PRIORITY:\s*(.+)", block)
+
+            if query_match:
+                suggestions.append(
+                    {
+                        "query": query_match.group(1).strip(),
+                        "rationale": rationale_match.group(1).strip()
+                        if rationale_match
+                        else "",
+                        "suggested_angle": angle_match.group(1).strip()
+                        if angle_match
+                        else "",
+                        "priority": priority_match.group(1).strip().lower()
+                        if priority_match
+                        else "medium",
+                    }
+                )
+
+        return suggestions
 
     def is_available(self) -> bool:
         """Check if LLM service is available"""

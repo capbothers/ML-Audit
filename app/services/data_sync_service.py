@@ -5,6 +5,7 @@ Orchestrates data syncing from all sources and persists to database
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from decimal import Decimal
+import re
 import pytz
 from dateutil import parser as date_parser
 from app.connectors.shopify_connector import ShopifyConnector
@@ -554,6 +555,51 @@ class DataSyncService:
         db = SessionLocal()
 
         try:
+            # Build comprehensive SKU -> cost lookup (supports fuzzy matching)
+            cost_rows = db.query(
+                ProductCost.vendor_sku,
+                ProductCost.description,
+                ProductCost.nett_nett_cost_inc_gst,
+                ProductCost.has_active_special,
+                ProductCost.special_cost_inc_gst,
+            ).filter(
+                ProductCost.nett_nett_cost_inc_gst.isnot(None),
+            ).all()
+
+            _cost_exact = {}       # exact vendor_sku -> cost
+            _cost_lower = {}       # lowercase vendor_sku -> cost
+            _cost_desc_prefix = {} # first token of description -> cost (Oliveri)
+
+            for _sku, _desc, _nett, _has_sp, _sp_cost in cost_rows:
+                if not _sku or not _nett:
+                    continue
+                _active = _sp_cost if _has_sp and _sp_cost else _nett
+                _cost_exact[_sku] = _active
+                _cost_lower[_sku.lower()] = _active
+                if _desc:
+                    _tok = _desc.split()[0] if _desc.strip() else None
+                    if _tok and _tok != _sku and re.search(r'[A-Za-z]', _tok):
+                        _cost_desc_prefix[_tok] = _active
+                        _cost_desc_prefix[_tok.upper()] = _active
+
+            def _lookup_cost(sku):
+                """Fuzzy SKU -> cost lookup with 4 strategies."""
+                if sku in _cost_exact:
+                    return _cost_exact[sku]
+                if sku.lower() in _cost_lower:
+                    return _cost_lower[sku.lower()]
+                if sku in _cost_desc_prefix:
+                    return _cost_desc_prefix[sku]
+                if sku.upper() in _cost_desc_prefix:
+                    return _cost_desc_prefix[sku.upper()]
+                base = re.sub(r'G\d.*$', '', sku)
+                if base != sku:
+                    if base in _cost_exact:
+                        return _cost_exact[base]
+                    if base.lower() in _cost_lower:
+                        return _cost_lower[base.lower()]
+                return None
+
             for order_data in orders:
                 shopify_order_id = order_data.get('id')
 
@@ -659,14 +705,8 @@ class DataSyncService:
 
                         for item in line_items:
                             sku = item.get('sku')
-                            # Look up COGS from product_costs table
-                            cost_per_item = None
-                            if sku:
-                                cost_row = db.query(ProductCost).filter(
-                                    ProductCost.vendor_sku == sku
-                                ).first()
-                                if cost_row:
-                                    cost_per_item = cost_row.get_active_cost()
+                            # Look up COGS from product_costs table (fuzzy matching)
+                            cost_per_item = _lookup_cost(sku.strip()) if sku else None
 
                             item_price = Decimal(str(item.get('price', 0)))
                             item_qty = int(item.get('quantity', 1))
