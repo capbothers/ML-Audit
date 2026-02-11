@@ -512,6 +512,7 @@ class BrandDiagnosisEngine:
             stock_weight = 0.01  # near-zero
 
         return {
+            "scope": f"{brand} inventory",
             "total_skus": total,
             "oos_count": oos_count,
             "oos_rate": oos_rate,
@@ -770,6 +771,7 @@ class BrandDiagnosisEngine:
         prev_eff = prev["conv_val"] / prev["spend"] if prev["spend"] > 0 else 0
 
         return {
+            "metric_scope": "campaign-level YoY",
             "cur_spend": round(cur["spend"], 2),
             "prev_spend": round(prev["spend"], 2),
             "spend_change_pct": spend_chg_pct,
@@ -1212,6 +1214,7 @@ class BrandDiagnosisEngine:
             "num_weeks": num_weeks,
             "revenue": revenue_weeks,
             "ads": ads_weeks,
+            "ads_metric_scope": "campaign-level weekly",
             "search": search_weeks,
             "trends": {
                 "revenue": rev_trend,

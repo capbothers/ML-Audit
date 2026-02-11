@@ -22,6 +22,8 @@ from app.models.search_console_data import SearchConsoleQuery
 from app.models.competitive_pricing import CompetitivePricing
 from app.models.product_cost import ProductCost
 from app.models.business_expense import MonthlyPL
+from app.models.shippit import ShippitOrder
+from app.models.shopify import ShopifyOrder
 from app.config import get_settings
 from app.utils.logger import log
 
@@ -270,10 +272,15 @@ class BrandIntelligenceService:
         if total_rev > 0 and overhead_total > 0:
             overhead_alloc = round(overhead_total * (cur_totals["revenue"] / total_rev), 2)
 
+        # Shipping cost from Shippit (per-order, allocated by brand revenue share)
+        shipping_data = self._get_brand_shipping_cost(brand_name, cur_start, cur_end)
+        shipping_cost = shipping_data["total_cost"]
+
         net_margin = None
         if cur_totals["revenue"] > 0:
             net_margin = round(
-                (cur_totals["revenue"] - cur_totals["total_cogs"] - ads_spend - overhead_alloc)
+                (cur_totals["revenue"] - cur_totals["total_cogs"] - ads_spend
+                 - overhead_alloc - shipping_cost)
                 / cur_totals["revenue"] * 100,
                 1,
             )
@@ -302,6 +309,14 @@ class BrandIntelligenceService:
                 "has_cost_data": cur_totals.get("has_cost_data", False),
                 "ads_spend": ads_spend,
                 "overhead_allocated": overhead_alloc,
+                "shipping_cost": shipping_cost,
+                "shipping_coverage_pct": round(
+                    shipping_data["orders_with_cost"]
+                    / max(shipping_data["orders_total"], 1)
+                    * 100,
+                    1,
+                ),
+                "has_shipping_cost_data": shipping_data["orders_with_cost"] > 0,
                 "net_margin_pct": net_margin,
             },
         }
@@ -748,6 +763,66 @@ class BrandIntelligenceService:
         )
         return float(total or 0)
 
+    def _get_brand_shipping_cost(self, brand: str, start, end) -> Dict:
+        """
+        Get actual shipping costs for a brand's orders from Shippit data.
+
+        Allocates Shippit cost proportionally when orders have multiple vendors.
+        """
+        try:
+            # Count total brand orders in period
+            total_brand_orders = (
+                self.db.query(
+                    func.count(func.distinct(ShopifyOrderItem.shopify_order_id))
+                )
+                .filter(
+                    ShopifyOrderItem.vendor == brand,
+                    ShopifyOrderItem.order_date >= start,
+                    ShopifyOrderItem.order_date < end,
+                    ShopifyOrderItem.financial_status.in_(
+                        ["paid", "partially_refunded", "refunded"]
+                    ),
+                )
+                .scalar()
+                or 0
+            )
+
+            # Sum Shippit costs for orders containing this brand's items
+            result = (
+                self.db.query(
+                    func.sum(ShippitOrder.shipping_cost).label("total_cost"),
+                    func.count(func.distinct(ShippitOrder.id)).label(
+                        "orders_with_cost"
+                    ),
+                )
+                .join(
+                    ShopifyOrderItem,
+                    ShopifyOrderItem.shopify_order_id
+                    == ShippitOrder.shopify_order_id,
+                )
+                .filter(
+                    ShopifyOrderItem.vendor == brand,
+                    ShopifyOrderItem.order_date >= start,
+                    ShopifyOrderItem.order_date < end,
+                    ShopifyOrderItem.financial_status.in_(
+                        ["paid", "partially_refunded", "refunded"]
+                    ),
+                    ShippitOrder.shipping_cost.isnot(None),
+                )
+                .first()
+            )
+
+            return {
+                "total_cost": float(result.total_cost or 0) if result else 0,
+                "orders_with_cost": (
+                    int(result.orders_with_cost or 0) if result else 0
+                ),
+                "orders_total": total_brand_orders,
+            }
+        except Exception as e:
+            log.debug(f"Shipping cost lookup failed for {brand}: {e}")
+            return {"total_cost": 0, "orders_with_cost": 0, "orders_total": 0}
+
     def _monthly_breakdown(self, brand: str, start, end) -> List[Dict]:
         rpi = self._refund_per_item_subquery()
         yr_col = extract('year', ShopifyOrderItem.order_date).label('yr')
@@ -1067,6 +1142,7 @@ class BrandIntelligenceService:
         return {
             "driver": "ad_spend",
             "label": "Advertising",
+            "metric_scope": "product-level",
             "impact_dollars": round(impact, 2),
             "direction": direction,
             "explanation": ". ".join(parts) if parts else f"${cur['spend']:,.0f} ad spend",
@@ -1818,6 +1894,7 @@ class BrandIntelligenceService:
                     oos_products.sort(key=lambda x: x["recent_revenue"], reverse=True)
 
             return {
+                "scope": f"{brand} inventory",
                 "total_skus": total,
                 "unknown_inventory": unknown_count,
                 "oos_count": oos_count,
@@ -2153,6 +2230,8 @@ class BrandIntelligenceService:
             scaling = (imp_share is not None and imp_share < 80 and camp_roas > 3)
 
             return {
+                "metric_scope": "campaign-level",
+                "time_window": f"{cur_start.strftime('%Y-%m-%d')} to {cur_end.strftime('%Y-%m-%d')}",
                 "campaign_spend": round(camp_spend, 2),
                 "campaign_roas": camp_roas,
                 "impression_share": imp_share,

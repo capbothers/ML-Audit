@@ -267,9 +267,9 @@ class BrandDecisionEngine:
                         "impacted_metric": "spend_efficiency",
                         "dependency_order": 1,
                         "evidence": [
-                            {"source": "diagnosis", "metric": "roas_trend", "value": roas_trend},
-                            {"source": "diagnosis", "metric": "cur_roas", "value": ads_model.get("cur_roas")},
-                            {"source": "diagnosis", "metric": "prev_roas", "value": ads_model.get("prev_roas")},
+                            {"source": "diagnosis", "metric": "roas_trend", "label": f"ROAS Trend: {roas_trend}", "value": roas_trend},
+                            {"source": "diagnosis", "metric": "cur_roas", "label": f"Current ROAS: {ads_model.get('cur_roas', 0):.1f}x", "value": ads_model.get("cur_roas")},
+                            {"source": "diagnosis", "metric": "prev_roas", "label": f"Prior-Year ROAS: {ads_model.get('prev_roas', 0):.1f}x", "value": ads_model.get("prev_roas")},
                         ],
                     })
 
@@ -285,7 +285,7 @@ class BrandDecisionEngine:
                         "impacted_metric": "revenue",
                         "dependency_order": 3,
                         "evidence": [
-                            {"source": "diagnosis", "metric": "budget_lost_share", "value": budget_lost},
+                            {"source": "diagnosis", "metric": "budget_lost_share", "label": f"Budget Lost Share: {budget_lost:.0f}%", "value": budget_lost},
                         ],
                     })
 
@@ -410,9 +410,9 @@ class BrandDecisionEngine:
                     ),
                     "additional_spend": round(add_spend, 2),
                     "new_total_spend": round(spend + add_spend, 2),
-                    "impact_low": round(add_spend * roas * 0.7, 2),
-                    "impact_mid": round(add_spend * roas * 1.0, 2),
-                    "impact_high": round(add_spend * roas * 1.2, 2),
+                    "impact_low": round(add_spend * roas * 0.7),
+                    "impact_mid": round(add_spend * roas * 1.0),
+                    "impact_high": round(add_spend * roas * 1.2),
                     "confidence": "high" if spend > 500 else "medium",
                     "assumptions": [
                         f"Current spend: ${spend:,.0f}, ROAS: {roas:.1f}x",
@@ -430,9 +430,9 @@ class BrandDecisionEngine:
             scenarios.append({
                 "scenario": "Fix pricing violations",
                 "description": "Lift below-cost SKUs to minimum margin",
-                "impact_low": losing * avg_margin * 0.5,
-                "impact_mid": losing * avg_margin * 0.75,
-                "impact_high": losing * avg_margin * 1.0,
+                "impact_low": round(losing * avg_margin * 0.5),
+                "impact_mid": round(losing * avg_margin * 0.75),
+                "impact_high": round(losing * avg_margin * 1.0),
                 "confidence": "medium",
                 "assumptions": ["No volume collapse from price lift"],
                 "time_horizon": "90 days",
@@ -446,9 +446,9 @@ class BrandDecisionEngine:
             scenarios.append({
                 "scenario": "Improve conversion +1pp",
                 "description": "Lift overall conversion by 1pp",
-                "impact_low": views * 0.01 * aov * 0.5,
-                "impact_mid": views * 0.01 * aov * 1.0,
-                "impact_high": views * 0.01 * aov * 1.5,
+                "impact_low": round(views * 0.01 * aov * 0.5),
+                "impact_mid": round(views * 0.01 * aov * 1.0),
+                "impact_high": round(views * 0.01 * aov * 1.5),
                 "confidence": "medium" if views > 1000 else "low",
                 "assumptions": ["Traffic quality stable"],
                 "time_horizon": "30 days",
@@ -557,16 +557,46 @@ class BrandDecisionEngine:
         if category == "ads":
             ads = diagnostics.get("ads") or {}
             if ads:
-                evidence.append({"source": "ads_diagnostic", "metric": "roas", "value": ads.get("campaign_roas")})
-                evidence.append({"source": "ads_diagnostic", "metric": "impression_share", "value": ads.get("impression_share")})
+                roas_val = ads.get("campaign_roas")
+                imp_val = ads.get("impression_share")
+                evidence.append({
+                    "source": "ads_diagnostic",
+                    "metric": "campaign_roas",
+                    "label": f"Campaign ROAS: {roas_val:.1f}x" if roas_val else "Campaign ROAS: N/A",
+                    "value": roas_val,
+                })
+                evidence.append({
+                    "source": "ads_diagnostic",
+                    "metric": "impression_share",
+                    "label": f"Impression Share: {imp_val:.0f}%" if imp_val is not None else "Impression Share: N/A",
+                    "value": imp_val,
+                })
         elif category == "pricing":
             pricing = diagnostics.get("pricing") or {}
             if pricing:
-                evidence.append({"source": "pricing", "metric": "price_index", "value": pricing.get("price_index")})
-                evidence.append({"source": "pricing", "metric": "losing_money", "value": pricing.get("losing_money")})
+                pi_val = pricing.get("price_index")
+                losing_val = pricing.get("losing_money")
+                evidence.append({
+                    "source": "pricing",
+                    "metric": "price_index",
+                    "label": f"Price Index: {pi_val:.2f}" if pi_val else "Price Index: N/A",
+                    "value": pi_val,
+                })
+                evidence.append({
+                    "source": "pricing",
+                    "metric": "losing_money",
+                    "label": f"SKUs Below Cost: {losing_val}" if losing_val else "SKUs Below Cost: 0",
+                    "value": losing_val,
+                })
         elif category == "conversion":
             conv = diagnostics.get("conversion") or {}
             if conv:
-                evidence.append({"source": "conversion", "metric": "view_to_cart_pct", "value": conv.get("view_to_cart_pct")})
+                v2c = conv.get("view_to_cart_pct")
+                evidence.append({
+                    "source": "conversion",
+                    "metric": "view_to_cart_pct",
+                    "label": f"View-to-Cart: {v2c:.1f}%" if v2c is not None else "View-to-Cart: N/A",
+                    "value": v2c,
+                })
 
         return evidence[:3]
