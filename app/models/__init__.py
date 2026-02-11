@@ -194,5 +194,7 @@ from app.models.business_expense import (
     MonthlyPL
 )
 
+from app.models.shippit import ShippitOrder
+
 from app.models.site_health import SiteHealthEvent
 from app.models.user import User, UserSession

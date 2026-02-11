@@ -687,6 +687,42 @@ class ShopifyConnector(BaseConnector):
             log.error(traceback.format_exc())
             return []
 
+    async def fetch_fulfillment_tracking(
+        self, order_ids: List[int]
+    ) -> Dict[int, List[str]]:
+        """
+        Fetch tracking numbers from Shopify fulfillments for the given order IDs.
+
+        Returns a dict mapping shopify_order_id -> [tracking_number, ...].
+        """
+        if not self.session:
+            await self.connect()
+
+        result: Dict[int, List[str]] = {}
+        for order_id in order_ids:
+            try:
+                fulfillments = shopify.Fulfillment.find(order_id=order_id)
+                tracking_numbers = []
+                for f in fulfillments:
+                    tn = getattr(f, "tracking_number", None)
+                    if tn:
+                        tracking_numbers.append(str(tn))
+                    # Some fulfillments have multiple tracking numbers
+                    tns = getattr(f, "tracking_numbers", None)
+                    if tns:
+                        for t in tns:
+                            if t and str(t) not in tracking_numbers:
+                                tracking_numbers.append(str(t))
+                if tracking_numbers:
+                    result[order_id] = tracking_numbers
+                await asyncio.sleep(0.25)  # Shopify rate limit
+            except Exception as e:
+                log.debug(f"Error fetching fulfillments for order {order_id}: {e}")
+        log.info(
+            f"Found tracking numbers for {len(result)} of {len(order_ids)} orders"
+        )
+        return result
+
     async def fetch_backfill_data(self, days: int = 365) -> Dict[str, Any]:
         """
         Fetch full historical data for backfill.

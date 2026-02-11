@@ -331,6 +331,36 @@ async def sync_merchant_center_quick():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/shippit")
+async def sync_shippit(
+    days: int = Query(7, description="Number of days of fulfilled orders to check"),
+):
+    """
+    Sync Shippit shipping cost data.
+
+    Looks up fulfilled Shopify orders in Shippit to get actual shipping costs.
+    """
+    try:
+        result = await data_sync.sync_shippit(days=days)
+        return result
+    except Exception as e:
+        log.error(f"Shippit sync error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/shippit/backfill")
+async def backfill_shippit(
+    days: int = Query(90, description="Days of history to backfill"),
+):
+    """Backfill Shippit shipping costs for historical orders."""
+    try:
+        result = await data_sync.sync_shippit(days=days)
+        return result
+    except Exception as e:
+        log.error(f"Shippit backfill error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/github")
 async def sync_github(
     days: int = Query(7, description="Days of commit history"),

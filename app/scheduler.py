@@ -375,6 +375,26 @@ async def sync_merchant_center():
         log.error(f"Merchant Center sync error: {str(e)}")
 
 
+async def sync_shippit():
+    """Sync Shippit shipping costs (every 6 hours)"""
+    try:
+        log.info("Starting Shippit sync...")
+        sync_service = DataSyncService()
+        result = await sync_service.sync_shippit(days=7)
+
+        if result.get('success'):
+            log.info(
+                f"Shippit sync completed: "
+                f"{result.get('orders_saved', 0)} new, "
+                f"{result.get('orders_updated', 0)} updated in {result.get('duration', 0):.1f}s"
+            )
+        else:
+            log.error(f"Shippit sync failed: {result.get('error')}")
+
+    except Exception as e:
+        log.error(f"Shippit sync error: {str(e)}")
+
+
 async def sync_caprice_pricing():
     """Import new Caprice pricing files (daily at 1pm)"""
     try:
@@ -632,6 +652,18 @@ def setup_scheduler():
         max_instances=1
     )
 
+    # ── Shippit ────────────────────────────────────────────
+    # Every 6 hours (shipping costs update when orders are dispatched)
+    if settings.shippit_api_key:
+        scheduler.add_job(
+            sync_shippit,
+            trigger=IntervalTrigger(hours=6),
+            id='shippit_sync',
+            name='Shippit Shipping Cost Sync',
+            replace_existing=True,
+            max_instances=1
+        )
+
     log.info("Scheduler configured with all sync jobs (timezone: Australia/Sydney)")
 
 
@@ -671,6 +703,7 @@ def run_sync_now(connector_name: str) -> dict:
         'hotjar': sync_hotjar,
         'github': sync_github,
         'caprice': sync_caprice_pricing,
+        'shippit': sync_shippit,
     }
 
     if connector_name not in sync_functions:

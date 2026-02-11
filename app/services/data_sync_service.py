@@ -15,9 +15,11 @@ from app.connectors.merchant_center_connector import MerchantCenterConnector
 from app.connectors.github_connector import GitHubConnector
 from app.connectors.search_console_connector import SearchConsoleConnector
 from app.connectors.google_sheets import GoogleSheetsConnector
+from app.connectors.shippit_connector import ShippitConnector
 from app.config import get_settings
 from app.models.base import SessionLocal
 from app.models.shopify import ShopifyOrder, ShopifyProduct, ShopifyCustomer, ShopifyRefund, ShopifyRefundLineItem, ShopifyInventory, ShopifyOrderItem
+from app.models.shippit import ShippitOrder
 from app.utils.url_parsing import parse_landing_site
 from app.models.search_console_data import SearchConsoleQuery, SearchConsolePage, SearchConsoleSitemap
 from app.models.ga4_data import (
@@ -316,6 +318,7 @@ class DataSyncService:
         self.merchant_center = MerchantCenterConnector()
         self.github = GitHubConnector()
         self.search_console = SearchConsoleConnector()
+        self.shippit = ShippitConnector() if settings.shippit_api_key else None
         self.google_sheets = None
 
     def _parse_datetime(self, val) -> Optional[datetime]:
@@ -363,8 +366,11 @@ class DataSyncService:
             'klaviyo': await self.sync_klaviyo(days=days),
             'ga4': await self.sync_ga4(days=days),
             'google_ads': await self.sync_google_ads(days=days),
-            'merchant_center': await self.sync_merchant_center()
+            'merchant_center': await self.sync_merchant_center(),
         }
+
+        if self.shippit:
+            results['shippit'] = await self.sync_shippit(days=days)
 
         # Summary
         success_count = sum(1 for r in results.values() if r.get('success'))
@@ -3649,14 +3655,238 @@ class DataSyncService:
         finally:
             db.close()
 
+    async def sync_shippit(self, days: int = 7) -> Dict:
+        """
+        Sync Shippit shipping cost data.
+
+        1. Find fulfilled Shopify orders without a ShippitOrder record
+        2. Fetch tracking numbers from Shopify fulfillments API
+        3. Look up each tracking number in Shippit to get shipping cost
+        """
+        if not self.shippit:
+            return {"success": False, "error": "Shippit not configured (no API key)"}
+
+        with track_sync("shippit", "incremental") as sync_result:
+            start_date, end_date = self._get_sydney_date_range(days)
+
+            # Find fulfilled Shopify orders without Shippit cost data
+            db = SessionLocal()
+            try:
+                from sqlalchemy import or_
+
+                fulfilled_orders = (
+                    db.query(ShopifyOrder.order_number, ShopifyOrder.shopify_order_id)
+                    .outerjoin(
+                        ShippitOrder,
+                        ShippitOrder.shopify_order_id == ShopifyOrder.shopify_order_id,
+                    )
+                    .filter(
+                        ShopifyOrder.created_at >= start_date,
+                        ShopifyOrder.fulfillment_status.in_(["fulfilled", "partial"]),
+                        or_(
+                            ShippitOrder.id.is_(None),
+                            ShippitOrder.state.notin_(["delivered", "completed"]),
+                        ),
+                    )
+                    .all()
+                )
+                order_ids = [
+                    o.shopify_order_id for o in fulfilled_orders if o.shopify_order_id
+                ]
+            finally:
+                db.close()
+
+            if not order_ids:
+                sync_result.records_processed = 0
+                sync_log_id = _persist_sync_log(sync_result)
+                return {
+                    "success": True,
+                    "orders_checked": 0,
+                    "orders_saved": 0,
+                    "duration": sync_result.duration_seconds,
+                    "sync_log_id": sync_log_id,
+                }
+
+            # Step 2: Get tracking numbers from Shopify fulfillments
+            log.info(f"Fetching tracking numbers for {len(order_ids)} fulfilled orders")
+            tracking_map = await self.shopify.fetch_fulfillment_tracking(order_ids)
+
+            all_tracking = []
+            for tn_list in tracking_map.values():
+                all_tracking.extend(tn_list)
+
+            if not all_tracking:
+                sync_result.records_processed = 0
+                sync_log_id = _persist_sync_log(sync_result)
+                return {
+                    "success": True,
+                    "orders_checked": len(order_ids),
+                    "tracking_found": 0,
+                    "orders_saved": 0,
+                    "duration": sync_result.duration_seconds,
+                    "sync_log_id": sync_log_id,
+                }
+
+            log.info(
+                f"Found {len(all_tracking)} tracking numbers, "
+                f"looking up in Shippit"
+            )
+
+            # Step 3: Look up tracking numbers in Shippit
+            result = await self.shippit.sync(
+                start_date, end_date, tracking_numbers=all_tracking
+            )
+
+            retry_stats = result.get("retry_stats", {})
+            sync_result.retry_attempts = retry_stats.get("retries", 0) + 1
+            sync_result.retry_delay_seconds = retry_stats.get("total_delay_seconds", 0)
+            sync_result.retry_errors = retry_stats.get("errors", [])
+
+            if not result.get("success"):
+                sync_result.status = "failed"
+                sync_result.error_message = result.get("error", "Unknown error")
+                _persist_sync_log(sync_result)
+                return result
+
+            sync_log_id = _persist_sync_log(sync_result)
+            result["sync_log_id"] = sync_log_id
+
+            data = result.get("data", {})
+            save_result = self._save_shippit_orders(data, sync_log_id=sync_log_id)
+
+            sync_result.records_created = save_result["created"]
+            sync_result.records_updated = save_result["updated"]
+            sync_result.records_failed = save_result["failed"]
+            sync_result.records_processed = save_result["processed"]
+
+            _update_sync_log(sync_log_id, sync_result)
+
+            result["orders_checked"] = len(order_ids)
+            result["tracking_found"] = len(all_tracking)
+            result["orders_saved"] = save_result["created"]
+            result["orders_updated"] = save_result["updated"]
+            result["duration"] = sync_result.duration_seconds
+
+        return result
+
+    def _save_shippit_orders(self, data: Dict, sync_log_id: int = None) -> Dict:
+        """Save Shippit orders to database, resolving shopify_order_id."""
+        result = {"processed": 0, "created": 0, "updated": 0, "failed": 0}
+
+        orders = data.get("orders", [])
+        if not orders:
+            return result
+
+        db = SessionLocal()
+        try:
+            for order_data in orders:
+                tracking = order_data.get("tracking_number")
+                if not tracking:
+                    result["failed"] += 1
+                    continue
+
+                result["processed"] += 1
+
+                try:
+                    retailer_ref = order_data.get("retailer_order_number")
+                    # Resolve shopify_order_id: prefer direct ID from retailer_reference
+                    shopify_order_id = None
+                    ref_str = order_data.get("shopify_order_id_from_ref", "")
+                    if ref_str:
+                        try:
+                            shopify_order_id = int(ref_str)
+                        except (ValueError, TypeError):
+                            pass
+                    # Fallback: resolve from retailer_invoice → order_number
+                    if not shopify_order_id and retailer_ref:
+                        try:
+                            ref_int = int(retailer_ref.replace("INT", ""))
+                            shopify_order = (
+                                db.query(ShopifyOrder.shopify_order_id)
+                                .filter(ShopifyOrder.order_number == ref_int)
+                                .first()
+                            )
+                            if shopify_order:
+                                shopify_order_id = shopify_order.shopify_order_id
+                        except (ValueError, TypeError):
+                            pass
+
+                    # Upsert by tracking_number
+                    existing = (
+                        db.query(ShippitOrder)
+                        .filter(ShippitOrder.tracking_number == tracking)
+                        .first()
+                    )
+
+                    cost = order_data.get("shipping_cost")
+                    shipping_cost = Decimal(str(cost)) if cost is not None else None
+
+                    if existing:
+                        existing.shipping_cost = shipping_cost
+                        existing.state = order_data.get("state")
+                        existing.courier_name = order_data.get("courier_name")
+                        existing.courier_type = order_data.get("courier_type")
+                        existing.shopify_order_id = (
+                            shopify_order_id or existing.shopify_order_id
+                        )
+                        existing.raw_response = order_data.get("raw_response")
+                        existing.synced_at = datetime.utcnow()
+                        result["updated"] += 1
+                    else:
+                        new_order = ShippitOrder(
+                            tracking_number=tracking,
+                            retailer_order_number=retailer_ref,
+                            shopify_order_id=shopify_order_id,
+                            courier_name=order_data.get("courier_name"),
+                            courier_type=order_data.get("courier_type"),
+                            service_level=order_data.get("service_level"),
+                            shipping_cost=shipping_cost,
+                            state=order_data.get("state"),
+                            parcel_count=order_data.get("parcel_count", 1),
+                            created_at=self._parse_datetime(
+                                order_data.get("created_at")
+                            ),
+                            delivered_at=self._parse_datetime(
+                                order_data.get("delivered_at")
+                            ),
+                            raw_response=order_data.get("raw_response"),
+                            synced_at=datetime.utcnow(),
+                        )
+                        db.add(new_order)
+                        result["created"] += 1
+
+                    if result["processed"] % 50 == 0:
+                        db.commit()
+
+                except Exception as e:
+                    log.warning(f"Error saving Shippit order {tracking}: {e}")
+                    db.rollback()
+                    result["failed"] += 1
+
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            log.error(f"Error saving Shippit orders: {e}")
+        finally:
+            db.close()
+
+        log.info(
+            f"Shippit save: {result['created']} created, "
+            f"{result['updated']} updated, {result['failed']} failed"
+        )
+        return result
+
     def get_sync_status(self) -> Dict:
         """Get sync status for all connectors"""
-        return {
+        status = {
             'shopify': self.shopify.get_status(),
             'klaviyo': self.klaviyo.get_status(),
             'ga4': self.ga4.get_status(),
             'google_ads': self.google_ads.get_status(),
             'merchant_center': self.merchant_center.get_status(),
             'github': self.github.get_status(),
-            'search_console': self.search_console.get_status()
+            'search_console': self.search_console.get_status(),
         }
+        if self.shippit:
+            status['shippit'] = self.shippit.get_status()
+        return status

@@ -77,6 +77,10 @@ class Settings(BaseSettings):
     merchant_center_id: str = ""
     merchant_center_credentials_path: str = "./credentials/google-sheets-sa.json"
 
+    # Shippit (shipping fulfillment cost tracking)
+    shippit_api_key: Optional[str] = None
+    shippit_api_base_url: str = "https://app.shippit.com/api/3"
+
     # Hotjar
     hotjar_site_id: Optional[str] = None
     hotjar_api_key: Optional[str] = None
