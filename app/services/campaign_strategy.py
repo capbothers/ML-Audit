@@ -176,6 +176,10 @@ _WHY_NOW_TEMPLATES = {
         "Low ROAS ({roas:.1f}x) but high strategic signals "
         "(score {score}/100). Check attribution lag before cutting."
     ),
+    'fix_landing_page': (
+        "Ad traffic is healthy but landing page conversion degraded. "
+        "Fix LP/checkout before adjusting budget."
+    ),
 }
 
 # Name patterns for classification (lowercased)

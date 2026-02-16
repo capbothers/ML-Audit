@@ -448,3 +448,315 @@ def test_why_now_action_coherence_in_source():
     assert 'from app.services.campaign_strategy import format_why_now' in source, (
         "format_why_now must be imported for fallback regeneration"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 12 — Causal Triage: demand signal
+# ---------------------------------------------------------------------------
+
+def test_triage_demand_signal():
+    """SC clicks down 30% → primary_cause='demand'."""
+    from unittest.mock import MagicMock, patch
+    from app.services.causal_triage import CausalTriageService
+
+    mock_db = MagicMock()
+
+    svc = CausalTriageService(mock_db)
+
+    # Mock _score_demand to return high score
+    with patch.object(svc, '_score_demand', return_value={'cause': 'demand', 'score': 0.8, 'evidence': 'SC clicks -30%'}), \
+         patch.object(svc, '_score_auction_pressure', return_value={'cause': 'auction_pressure', 'score': 0.1, 'evidence': 'Stable'}), \
+         patch.object(svc, '_score_landing_page', return_value={'cause': 'landing_page', 'score': 0.0, 'evidence': 'LP OK', 'cvr_change': 0, 'bounce_change': 0}), \
+         patch.object(svc, '_score_attribution', return_value={'cause': 'attribution_lag', 'score': 0.0, 'evidence': 'OK'}), \
+         patch.object(svc, '_score_catalog_feed', return_value={'cause': 'catalog_feed', 'score': 0.0, 'evidence': 'Feed OK'}), \
+         patch.object(svc, '_score_measurement', return_value={'cause': 'measurement', 'score': 0.0, 'evidence': 'Fresh'}):
+        result = svc.diagnose('campaign_1', date(2026, 1, 1), date(2026, 1, 30))
+
+    assert result['primary_cause'] == 'demand', f"Expected demand, got {result['primary_cause']}"
+    assert result['confidence'] > 0.5, f"Expected high confidence, got {result['confidence']}"
+
+
+def test_triage_auction_pressure():
+    """Rank-lost IS up 10pp → primary_cause='auction_pressure'."""
+    from unittest.mock import MagicMock, patch
+    from app.services.causal_triage import CausalTriageService
+
+    mock_db = MagicMock()
+    svc = CausalTriageService(mock_db)
+
+    with patch.object(svc, '_score_demand', return_value={'cause': 'demand', 'score': 0.1, 'evidence': 'Stable'}), \
+         patch.object(svc, '_score_auction_pressure', return_value={'cause': 'auction_pressure', 'score': 0.75, 'evidence': 'Rank-lost IS +10pp'}), \
+         patch.object(svc, '_score_landing_page', return_value={'cause': 'landing_page', 'score': 0.0, 'evidence': 'LP OK', 'cvr_change': 0, 'bounce_change': 0}), \
+         patch.object(svc, '_score_attribution', return_value={'cause': 'attribution_lag', 'score': 0.0, 'evidence': 'OK'}), \
+         patch.object(svc, '_score_catalog_feed', return_value={'cause': 'catalog_feed', 'score': 0.0, 'evidence': 'Feed OK'}), \
+         patch.object(svc, '_score_measurement', return_value={'cause': 'measurement', 'score': 0.0, 'evidence': 'Fresh'}):
+        result = svc.diagnose('campaign_1', date(2026, 1, 1), date(2026, 1, 30))
+
+    assert result['primary_cause'] == 'auction_pressure'
+
+
+def test_triage_landing_page():
+    """LP CVR down 25% → primary_cause='landing_page'."""
+    from unittest.mock import MagicMock, patch
+    from app.services.causal_triage import CausalTriageService
+
+    mock_db = MagicMock()
+    svc = CausalTriageService(mock_db)
+
+    with patch.object(svc, '_score_demand', return_value={'cause': 'demand', 'score': 0.1, 'evidence': 'Stable'}), \
+         patch.object(svc, '_score_auction_pressure', return_value={'cause': 'auction_pressure', 'score': 0.0, 'evidence': 'Stable'}), \
+         patch.object(svc, '_score_landing_page', return_value={'cause': 'landing_page', 'score': 0.85, 'evidence': 'CVR -25%', 'cvr_change': -0.25, 'bounce_change': 0.1}), \
+         patch.object(svc, '_score_attribution', return_value={'cause': 'attribution_lag', 'score': 0.0, 'evidence': 'OK'}), \
+         patch.object(svc, '_score_catalog_feed', return_value={'cause': 'catalog_feed', 'score': 0.0, 'evidence': 'Feed OK'}), \
+         patch.object(svc, '_score_measurement', return_value={'cause': 'measurement', 'score': 0.0, 'evidence': 'Fresh'}):
+        result = svc.diagnose('campaign_1', date(2026, 1, 1), date(2026, 1, 30))
+
+    assert result['primary_cause'] == 'landing_page'
+
+
+# ---------------------------------------------------------------------------
+# Test 13 — Attribution confidence tiers
+# ---------------------------------------------------------------------------
+
+def test_attribution_confidence_tiers():
+    """gclid match >50% → 'high', 20-50% → 'medium', <20% → 'low'."""
+    source = Path("app/services/ad_spend_processor.py").read_text()
+    assert 'attr_confidence' in source, "Processor must compute attribution confidence"
+    assert "conv_ratio >= 0.5" in source, "High tier should be >= 0.5"
+    assert "conv_ratio >= 0.2" in source, "Medium tier should be >= 0.2"
+
+
+def test_low_attribution_blocks_reduce():
+    """Low attr conf + reduce → investigate (in processor source)."""
+    source = Path("app/services/ad_spend_processor.py").read_text()
+    # The attribution gate should exist
+    assert "attr_confidence == 'low'" in source, "Attribution gate missing in processor"
+    assert "'reduce', 'pause'" in source or "('reduce', 'pause')" in source, (
+        "Attribution gate must block reduce/pause actions"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 14 — LP friction overrides reduce
+# ---------------------------------------------------------------------------
+
+def test_lp_friction_overrides_reduce():
+    """When LP CVR drops and action is reduce → fix_landing_page (arbitrator rule 2)."""
+    from app.services.decision_arbitration import DecisionArbitrator
+
+    arbitrator = DecisionArbitrator()
+    campaign = {
+        'true_metrics': {'roas': 1.8},
+    }
+    evidence = {
+        'strategy': {
+            'action': 'reduce',
+            'confidence': 'medium',
+            'type': 'fast_turn',
+            'decision_score': 35,
+            'short_term_status': 'Underperforming',
+            'strategic_value': 'Low Value',
+        },
+        'diminishing_returns': None,
+        'causal_triage': {
+            'primary_cause': 'landing_page',
+            'confidence': 0.8,
+            'causes': [
+                {'cause': 'landing_page', 'score': 0.85, 'evidence': 'CVR -30%'},
+                {'cause': 'demand', 'score': 0.1, 'evidence': 'Stable'},
+            ],
+        },
+        'attribution': {'confidence': 'high', 'gap_pct': 10},
+        'waste': {'is_wasting': False},
+    }
+
+    result = arbitrator.arbitrate(campaign, evidence)
+    assert result['final_action'] == 'fix_landing_page', (
+        f"LP friction should override reduce to fix_landing_page, got {result['final_action']}"
+    )
+    assert any(o['module'] == 'landing_page' for o in result['overrides'])
+
+
+# ---------------------------------------------------------------------------
+# Test 15 — Arbitrator: profitability protection
+# ---------------------------------------------------------------------------
+
+def test_arbitrator_profitability_protection():
+    """High-conf profitable + low-conf negative → no downgrade below maintain."""
+    from app.services.decision_arbitration import DecisionArbitrator
+
+    arbitrator = DecisionArbitrator()
+    campaign = {
+        'true_metrics': {'roas': 5.0},
+    }
+    evidence = {
+        'strategy': {
+            'action': 'reduce',  # incorrectly classified
+            'confidence': 'high',
+            'type': 'fast_turn',
+            'decision_score': 65,
+            'short_term_status': 'Performing',
+            'strategic_value': 'High Value',
+        },
+        'diminishing_returns': None,
+        'causal_triage': None,
+        'attribution': {'confidence': 'high', 'gap_pct': 5},
+        'waste': {'is_wasting': False},
+    }
+
+    result = arbitrator.arbitrate(campaign, evidence)
+    assert result['final_action'] == 'maintain', (
+        f"Profitable campaign at 5x ROAS should floor at maintain, got {result['final_action']}"
+    )
+    assert any(o['module'] == 'profitability_protection' for o in result['overrides'])
+
+
+# ---------------------------------------------------------------------------
+# Test 16 — Arbitrator: high-conf DR downgrades scale
+# ---------------------------------------------------------------------------
+
+def test_arbitrator_high_conf_dr_downgrades_scale():
+    """High-conf DR + scale → investigate (or maintain if profitability protection kicks in)."""
+    from app.services.decision_arbitration import DecisionArbitrator
+
+    arbitrator = DecisionArbitrator()
+    # Use medium confidence so profitability protection doesn't override the DR finding
+    campaign = {
+        'true_metrics': {'roas': 3.5},
+    }
+    evidence = {
+        'strategy': {
+            'action': 'scale',
+            'confidence': 'medium',
+            'type': 'high_consideration',
+            'decision_score': 80,
+            'short_term_status': 'Performing',
+            'strategic_value': 'High Value',
+        },
+        'diminishing_returns': {
+            'overspend_per_day': 120,
+            'optimal_daily_spend': 200,
+            'current_daily_spend': 320,
+            'dr_confidence': 'high',
+            'active_days': 28,
+        },
+        'causal_triage': None,
+        'attribution': {'confidence': 'high', 'gap_pct': 5},
+        'waste': {'is_wasting': False},
+    }
+
+    result = arbitrator.arbitrate(campaign, evidence)
+    assert result['final_action'] == 'investigate', (
+        f"High-conf DR overspend should downgrade scale to investigate, got {result['final_action']}"
+    )
+    assert any(o['module'] == 'diminishing_returns' for o in result['overrides'])
+
+
+# ---------------------------------------------------------------------------
+# Test 17 — Arbitrator: why_now matches final action
+# ---------------------------------------------------------------------------
+
+def test_arbitrator_why_now_matches_final_action():
+    """why_now must be generated from the final action, not the original."""
+    from app.services.decision_arbitration import DecisionArbitrator
+
+    arbitrator = DecisionArbitrator()
+    # Use medium confidence to prevent profitability protection from overriding DR
+    campaign = {'true_metrics': {'roas': 4.0}}
+    evidence = {
+        'strategy': {
+            'action': 'scale',
+            'confidence': 'medium',
+            'type': 'fast_turn',
+            'decision_score': 85,
+            'short_term_status': 'Performing',
+            'strategic_value': 'High Value',
+        },
+        'diminishing_returns': {
+            'overspend_per_day': 80,
+            'optimal_daily_spend': 150,
+            'current_daily_spend': 230,
+            'dr_confidence': 'high',
+            'active_days': 25,
+        },
+        'causal_triage': None,
+        'attribution': {'confidence': 'medium', 'gap_pct': 5},
+        'waste': {'is_wasting': False},
+    }
+
+    result = arbitrator.arbitrate(campaign, evidence)
+    assert result['final_action'] == 'investigate'
+    # why_now should NOT mention "Scale budget"
+    assert 'Scale budget' not in (result['why_now'] or ''), (
+        f"why_now says 'Scale budget' but final action is investigate: {result['why_now']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 18 — Feedback snapshot model
+# ---------------------------------------------------------------------------
+
+def test_snapshot_model_has_required_fields():
+    """DecisionSnapshot must have all required fields for feedback loop."""
+    from app.models.decision_feedback import DecisionSnapshot
+    required = [
+        'campaign_id', 'campaign_name', 'strategy_type', 'decided_at',
+        'action', 'confidence', 'decision_score', 'primary_cause', 'why_now',
+        'true_roas', 'total_spend', 'true_profit',
+        'outcome_7d_roas', 'outcome_7d_profit', 'outcome_30d_roas', 'outcome_30d_profit',
+        'outcome_verdict', 'outcome_scored_at',
+        'user_action', 'user_override_to', 'user_feedback_at',
+    ]
+    for field in required:
+        assert hasattr(DecisionSnapshot, field), f"DecisionSnapshot missing field: {field}"
+
+
+# ---------------------------------------------------------------------------
+# Test 19 — Feedback API endpoint exists
+# ---------------------------------------------------------------------------
+
+def test_feedback_endpoint_exists():
+    """POST /ads/feedback/{campaign_id} must exist."""
+    source = Path("app/api/ad_spend.py").read_text()
+    assert '/feedback/{campaign_id}' in source, "Missing feedback endpoint"
+    assert 'record_feedback' in source, "Missing record_feedback call"
+
+
+# ---------------------------------------------------------------------------
+# Test 20 — Decision Arbitrator uses all evidence modules
+# ---------------------------------------------------------------------------
+
+def test_arbitrator_uses_enhanced_dashboard():
+    """Enhanced dashboard must use DecisionArbitrator, not ad-hoc overrides."""
+    source = Path("app/api/ad_spend.py").read_text()
+    assert 'DecisionArbitrator' in source, (
+        "Enhanced dashboard must use DecisionArbitrator"
+    )
+    assert 'arbitrator.arbitrate' in source, (
+        "Enhanced dashboard must call arbitrator.arbitrate()"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 21 — fix_landing_page action template exists
+# ---------------------------------------------------------------------------
+
+def test_fix_landing_page_template():
+    """campaign_strategy.py must have fix_landing_page in WHY_NOW_TEMPLATES."""
+    source = Path("app/services/campaign_strategy.py").read_text()
+    assert "'fix_landing_page'" in source, (
+        "Missing fix_landing_page template in campaign_strategy.py"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 22 — Scheduler has outcome scoring jobs
+# ---------------------------------------------------------------------------
+
+def test_scheduler_has_outcome_scoring_jobs():
+    """Scheduler must have 7d and 30d outcome scoring jobs."""
+    source = Path("app/scheduler.py").read_text()
+    assert 'score_decision_outcomes_7d' in source, "Missing 7d outcome scoring job"
+    assert 'score_decision_outcomes_30d' in source, "Missing 30d outcome scoring job"
+    assert 'decision_outcomes_7d' in source, "Missing job ID for 7d scoring"
+    assert 'decision_outcomes_30d' in source, "Missing job ID for 30d scoring"

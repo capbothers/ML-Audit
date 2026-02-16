@@ -752,8 +752,8 @@
             const _stratLabels = {high_consideration:'HC', fast_turn:'FT', brand_defense:'BD', prospecting:'PR', unknown:'??'};
             const _stsLabels = {strong:'Strong', healthy:'Healthy', marginal:'Marginal', weak:'Weak'};
             const _svLabels = {high:'High SV', moderate:'Med SV', low:'Low SV'};
-            const _actionLabels = {scale_aggressively:'Scale 50%', scale:'Scale 25%', maintain:'Maintain', optimize:'Optimize', reduce:'Reduce 50%', pause:'Pause', investigate:'Investigate'};
-            const _actionCardClass = {scale_aggressively:'scale', scale:'scale', maintain:'maintain', optimize:'optimize', reduce:'reduce', pause:'pause', investigate:'investigate'};
+            const _actionLabels = {scale_aggressively:'Scale 50%', scale:'Scale 25%', maintain:'Maintain', optimize:'Optimize', reduce:'Reduce 50%', pause:'Pause', investigate:'Investigate', fix_landing_page:'Fix LP'};
+            const _actionCardClass = {scale_aggressively:'scale', scale:'scale', maintain:'maintain', optimize:'optimize', reduce:'reduce', pause:'pause', investigate:'investigate', fix_landing_page:'investigate'};
 
             sorted.forEach(c => {
                 const profit = c.true_metrics?.profit || 0;
@@ -810,11 +810,24 @@
                         return `<span class="scorecard-badge ${badgeClass}">${status}</span>`;
                     })();
 
-                const actionLabel = strat?.action ? (_actionLabels[strat.action] || strat.action) : (c.recommendation?.action || '--');
-                const actionClass = strat?.action === 'investigate' ? ' investigate' : '';
+                const actionLabel = strat?.action ? (_actionLabels[strat.action] || (strat.action === 'fix_landing_page' ? 'Fix LP' : strat.action)) : (c.recommendation?.action || '--');
+                const actionClass = strat?.action === 'investigate' ? ' investigate' : (strat?.action === 'fix_landing_page' ? ' investigate' : '');
                 const whyNow = strat?.why_now ? `<div class="why-now">${strat.why_now}</div>` : '';
                 const conflictNote = strat?.conflict_note ? `<div class="why-now" style="color:#b45309">\u26A0 ${strat.conflict_note}</div>` : '';
                 const confBadge = strat?.confidence ? ` <span style="font-size:10px;color:var(--slate)">(${strat.confidence} conf)</span>` : '';
+
+                // Causal triage badge
+                const triage = c.causal_triage;
+                const _causeLabels = {demand:'Demand','auction_pressure':'Auction','landing_page':'Landing Page','attribution_lag':'Attribution','catalog_feed':'Feed','measurement':'Data Quality'};
+                const triageBadge = triage?.primary_cause ? `<span style="display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;background:#fef3c7;color:#92400e;margin-left:4px" title="Root cause: ${triage.primary_cause} (conf ${(triage.confidence*100).toFixed(0)}%)">${_causeLabels[triage.primary_cause] || triage.primary_cause}</span>` : '';
+
+                // Attribution confidence badge
+                const attrConf = strat?.attribution_confidence;
+                const attrBadge = attrConf === 'low' ? `<span style="display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;background:#fef9c3;color:#854d0e;margin-left:4px" title="Low attribution confidence — Shopify matches ${strat.attribution_gap_pct != null ? (100 - strat.attribution_gap_pct).toFixed(0) + '%' : '?'} of Google conversions">Low attr.</span>` : '';
+
+                // Evidence chain (collapsible)
+                const overrides = strat?.overrides || [];
+                const overrideHtml = overrides.length ? `<div style="margin-top:4px;font-size:11px;color:#6b7280">${overrides.map(o => `<div style="padding:1px 0">\u21B3 <strong>${o.module}</strong>: ${o.reason}</div>`).join('')}</div>` : '';
 
                 html += `
                 <div class="scorecard ${cardClass}">
@@ -849,10 +862,15 @@
                     </div>` : ''}
                     ${whyNow}
                     ${conflictNote}
+                    ${overrideHtml}
                     <div class="scorecard-footer">
-                        Action: <span class="action${actionClass}">${actionLabel}</span>${confBadge}
+                        Action: <span class="action${actionClass}">${actionLabel}</span>${confBadge}${triageBadge}${attrBadge}
                         ${perf.clicks ? ' &middot; ' + perf.clicks.toLocaleString() + ' clicks' : ''}
                         ${c.true_metrics?.conversions ? ' &middot; ' + c.true_metrics.conversions + ' conv' : ''}
+                    </div>
+                    <div style="display:flex;gap:6px;margin-top:4px">
+                        <button onclick="sendFeedback('${c.campaign_id}','accepted')" style="font-size:10px;padding:2px 8px;border:1px solid #d1d5db;border-radius:3px;background:#f9fafb;cursor:pointer" title="Accept this recommendation">Accept</button>
+                        <button onclick="sendFeedback('${c.campaign_id}','rejected')" style="font-size:10px;padding:2px 8px;border:1px solid #d1d5db;border-radius:3px;background:#f9fafb;cursor:pointer" title="Reject this recommendation">Reject</button>
                     </div>
                 </div>`;
             });
@@ -1454,6 +1472,21 @@
             } catch (err) {
                 console.error('Dashboard load error:', err);
                 document.getElementById('kpi-grid').innerHTML = '<div class="loading" style="grid-column:1/-1;color:var(--red)">Error loading dashboard: ' + err.message + '</div>';
+            }
+        }
+
+        async function sendFeedback(campaignId, action) {
+            try {
+                const resp = await fetch(`/ads/feedback/${encodeURIComponent(campaignId)}?action=${action}`, {method:'POST'});
+                const data = await resp.json();
+                if (data.success) {
+                    // Visual confirmation — briefly flash the button
+                    event.target.style.background = '#d1fae5';
+                    event.target.textContent = action === 'accepted' ? 'Accepted' : 'Rejected';
+                    setTimeout(() => { event.target.style.background = '#f9fafb'; }, 2000);
+                }
+            } catch (err) {
+                console.error('Feedback error:', err);
             }
         }
 

@@ -95,8 +95,22 @@ class CampaignPerformance(Base):
     decision_score = Column(Integer, nullable=True)                  # 0-100 composite
     short_term_status = Column(String, nullable=True)                # strong, healthy, marginal, weak
     strategic_value = Column(String, nullable=True)                  # high, moderate, low
-    strategy_action = Column(String, nullable=True, index=True)      # scale_aggressively, scale, maintain, optimize, reduce, pause, investigate
+    strategy_action = Column(String, nullable=True, index=True)      # scale_aggressively, scale, maintain, optimize, reduce, pause, investigate, fix_landing_page
     strategy_confidence = Column(String, nullable=True)              # high, medium, low
+
+    # Causal triage (Capability 1)
+    primary_cause = Column(String, nullable=True)                    # demand, auction_pressure, landing_page, attribution_lag, catalog_feed, measurement
+    cause_confidence = Column(Float, nullable=True)                  # 0-1
+    cause_evidence = Column(JSON, nullable=True)                     # [{cause, score, evidence}]
+
+    # Attribution confidence (Capability 2)
+    attribution_confidence = Column(String, nullable=True)           # high, medium, low
+    attribution_gap_pct = Column(Float, nullable=True)               # % gap: Google vs Shopify conversions
+
+    # Landing page friction (Capability 3)
+    lp_cvr_change = Column(Float, nullable=True)                    # Period-over-period CVR change %
+    lp_bounce_change = Column(Float, nullable=True)                 # Period-over-period bounce change %
+    lp_is_friction = Column(Boolean, nullable=True)                 # True if LP is primary issue
 
     # Analysis period
     period_start = Column(DateTime, nullable=True)

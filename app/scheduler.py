@@ -513,6 +513,34 @@ async def sync_cost_sheet():
         log.error(f"Cost sheet sync error: {str(e)}")
 
 
+async def score_decision_outcomes_7d():
+    """Score 7-day decision outcomes (daily at 4am)"""
+    try:
+        log.info("Scoring 7-day decision outcomes...")
+        db = next(get_db())
+        from app.services.decision_feedback import DecisionFeedbackService
+        svc = DecisionFeedbackService(db)
+        scored = svc.score_outcomes(7)
+        log.info(f"Scored {scored} decision outcomes (7d)")
+        db.close()
+    except Exception as e:
+        log.error(f"Decision outcome scoring (7d) error: {str(e)}")
+
+
+async def score_decision_outcomes_30d():
+    """Score 30-day decision outcomes (daily at 4:15am)"""
+    try:
+        log.info("Scoring 30-day decision outcomes...")
+        db = next(get_db())
+        from app.services.decision_feedback import DecisionFeedbackService
+        svc = DecisionFeedbackService(db)
+        scored = svc.score_outcomes(30)
+        log.info(f"Scored {scored} decision outcomes (30d)")
+        db.close()
+    except Exception as e:
+        log.error(f"Decision outcome scoring (30d) error: {str(e)}")
+
+
 # Schedule Configuration
 
 def setup_scheduler():
@@ -693,6 +721,26 @@ def setup_scheduler():
         trigger=CronTrigger(hour=7, minute=30, timezone=SYDNEY_TZ),
         id='competitor_blogs_sync',
         name='Competitor Blog Daily Scrape',
+        replace_existing=True,
+        max_instances=1
+    )
+
+    # ── Decision Outcome Scoring ──────────────────────────
+    # Daily at 4am AEST: score 7-day outcomes
+    scheduler.add_job(
+        score_decision_outcomes_7d,
+        trigger=CronTrigger(hour=4, minute=0, timezone=SYDNEY_TZ),
+        id='decision_outcomes_7d',
+        name='Score 7-Day Decision Outcomes',
+        replace_existing=True,
+        max_instances=1
+    )
+    # Daily at 4:15am AEST: score 30-day outcomes
+    scheduler.add_job(
+        score_decision_outcomes_30d,
+        trigger=CronTrigger(hour=4, minute=15, timezone=SYDNEY_TZ),
+        id='decision_outcomes_30d',
+        name='Score 30-Day Decision Outcomes',
         replace_existing=True,
         max_instances=1
     )

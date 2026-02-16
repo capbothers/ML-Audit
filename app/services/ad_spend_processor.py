@@ -362,6 +362,58 @@ class AdSpendProcessor:
             if is_wasting_budget and decision['action'] in ('scale', 'scale_aggressively'):
                 decision['action'] = 'investigate'
 
+            # ── Attribution confidence (Capability 2) ──
+            if shopify is not None and google_conversions > 0:
+                conv_ratio = actual_conversions / google_conversions
+                if conv_ratio >= 0.5:
+                    attr_confidence = 'high'
+                elif conv_ratio >= 0.2:
+                    attr_confidence = 'medium'
+                else:
+                    attr_confidence = 'low'
+                attr_gap_pct = round((1 - conv_ratio) * 100, 1)
+            elif shopify is None:
+                attr_confidence = 'low'
+                attr_gap_pct = None
+            else:
+                attr_confidence = 'medium'
+                attr_gap_pct = None
+
+            # Attribution gate: low confidence cannot trigger hard cut
+            if attr_confidence == 'low' and decision['action'] in ('reduce', 'pause'):
+                decision['action'] = 'investigate'
+
+            # ── Causal triage (Capability 1) — only for non-scaling campaigns ──
+            primary_cause = None
+            cause_confidence = None
+            cause_evidence = None
+            lp_cvr_change = None
+            lp_bounce_change = None
+            lp_is_friction = None
+
+            if decision['action'] not in ('scale', 'scale_aggressively'):
+                try:
+                    from app.services.causal_triage import CausalTriageService
+                    triage_svc = CausalTriageService(self.db)
+                    triage = triage_svc.diagnose(
+                        agg["campaign_id"], period_start, period_end,
+                        google_conversions, actual_conversions,
+                    )
+                    primary_cause = triage['primary_cause']
+                    cause_confidence = triage['confidence']
+                    cause_evidence = triage['causes']
+
+                    # Extract LP metrics for storage
+                    lp_cause = next(
+                        (c for c in triage['causes'] if c['cause'] == 'landing_page'), None
+                    )
+                    if lp_cause:
+                        lp_cvr_change = lp_cause.get('cvr_change')
+                        lp_bounce_change = lp_cause.get('bounce_change')
+                        lp_is_friction = lp_cause['score'] >= 0.7
+                except Exception as e:
+                    logger.warning(f"Triage failed for {agg['campaign_id']}: {e}")
+
             results.append({
                 "campaign_id": agg["campaign_id"],
                 "campaign_name": agg["campaign_name"],
@@ -410,6 +462,14 @@ class AdSpendProcessor:
                 "strategic_value": decision['strategic_value'],
                 "strategy_action": decision['action'],
                 "strategy_confidence": decision['confidence'],
+                "primary_cause": primary_cause,
+                "cause_confidence": cause_confidence,
+                "cause_evidence": cause_evidence,
+                "attribution_confidence": attr_confidence,
+                "attribution_gap_pct": attr_gap_pct,
+                "lp_cvr_change": lp_cvr_change,
+                "lp_bounce_change": lp_bounce_change,
+                "lp_is_friction": lp_is_friction,
                 "period_start": datetime.combine(period_start, datetime.min.time()),
                 "period_end": datetime.combine(period_end, datetime.min.time()),
                 "period_days": days,

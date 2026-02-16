@@ -44,6 +44,16 @@ def process_ad_spend_data(
     try:
         processor = AdSpendProcessor(db)
         result = processor.process(days=days)
+
+        # Snapshot decisions for feedback loop
+        try:
+            from app.services.decision_feedback import DecisionFeedbackService
+            feedback_svc = DecisionFeedbackService(db)
+            snap_count = feedback_svc.snapshot_decisions()
+            result['decisions_snapshotted'] = snap_count
+        except Exception as snap_err:
+            log.warning(f"Decision snapshot failed: {snap_err}")
+
         return {"success": True, "data": result}
     except Exception as e:
         log.error(f"Error processing ad spend data: {str(e)}")
@@ -603,65 +613,48 @@ async def get_enhanced_dashboard(
             'budget_reallocations': reallocations,
         })
 
-        # Cross-reference strategy vs diminishing returns — auto-downgrade action
-        # Gates: (1) overspend is material (>$50/day AND current spend >= $50/day,
-        #             OR >20% above optimal AND current spend >= $50/day)
-        #         (2) DR curve confidence is high (≥21 active days, ≥5 days per bucket)
+        # ── Decision Arbitration: replace ad-hoc overrides with policy engine ──
+        from app.services.decision_arbitration import DecisionArbitrator
+        arbitrator = DecisionArbitrator()
         dr_overspend = {dr['campaign_id']: dr for dr in diminishing if dr.get('overspend_per_day', 0) > 0}
+
         for c in campaigns:
             strat = c.get('strategy')
             if not strat:
                 continue
+
+            evidence = {
+                'strategy': strat,
+                'diminishing_returns': dr_overspend.get(c['campaign_id']),
+                'causal_triage': c.get('causal_triage'),
+                'attribution': {
+                    'confidence': strat.get('attribution_confidence'),
+                    'gap_pct': strat.get('attribution_gap_pct'),
+                },
+                'waste': {
+                    'is_wasting': c['indicators']['is_wasting_budget'],
+                    'reasons': c['indicators'].get('waste_reasons'),
+                },
+            }
+
+            result = arbitrator.arbitrate(c, evidence)
+            # Regenerate why_now from final action via arbitrator output.
+            strat['original_action'] = strat['action'] if result['final_action'] != strat['action'] else None
+            strat['action'] = result['final_action']
+            strat['why_now'] = result['why_now'] or strat.get('why_now')
+            strat['evidence_chain'] = result['evidence_chain']
+            strat['overrides'] = result['overrides']
+
+            # Preserve conflict_note for DR monitoring (non-override) cases
             dr = dr_overspend.get(c['campaign_id'])
-            if dr and strat['action'] in ('scale', 'scale_aggressively'):
+            if dr and not any(o['module'] == 'diminishing_returns' for o in result['overrides']):
                 overspend = dr.get('overspend_per_day', 0)
-                optimal = dr.get('optimal_daily_spend', 0)
-                current = dr.get('current_daily_spend', 0)
-                pct_over = (overspend / optimal) if optimal > 0 else 0
-                # Spend floor: don't override low-dollar campaigns where pct swings are noise
-                is_material = current >= 50 and (overspend > 50 or pct_over > 0.20)
                 dr_conf = dr.get('dr_confidence', 'low')
-                if is_material and dr_conf == 'high':
-                    strat['original_action'] = strat['action']
-                    strat['action'] = 'investigate'
-                    strat['conflict_note'] = (
-                        f"Diminishing returns (high confidence, {dr.get('active_days', '?')} days) "
-                        f"suggests overspending by ${overspend:.0f}/day ({pct_over:.0%} above optimal) "
-                        f"\u2014 downgraded from "
-                        f"{strat['original_action'].replace('_', ' ')} to investigate."
-                    )
-                elif is_material:
+                if overspend > 0:
                     strat['conflict_note'] = (
                         f"Diminishing returns detected (${overspend:.0f}/day over optimal) "
-                        f"but DR confidence is {dr_conf} ({dr.get('active_days', '?')} days, "
-                        f"min {dr.get('min_bucket_days', '?')}/bucket) \u2014 monitoring only."
+                        f"— DR confidence: {dr_conf}. Monitoring only."
                     )
-                elif overspend > 0:
-                    strat['conflict_note'] = (
-                        f"Minor diminishing returns detected (${overspend:.0f}/day over optimal) "
-                        f"\u2014 monitoring, no action override."
-                    )
-
-        # Final pass: regenerate why_now from *final* action after all overrides
-        for c in campaigns:
-            strat = c.get('strategy')
-            if not strat or not strat.get('original_action'):
-                continue  # no override happened — why_now is already correct
-            roas = c.get('true_metrics', {}).get('roas') or 0
-            stype = strat.get('type', 'unknown')
-            if strat['action'] == 'investigate' and strat.get('conflict_note'):
-                # DR-specific why_now: explain the DR finding, not generic investigate text
-                overspend_str = strat['conflict_note'].split('$')[1].split('/')[0] if '$' in strat.get('conflict_note', '') else '?'
-                strat['why_now'] = (
-                    f"ROAS {roas:.1f}x looks strong but DR analysis shows "
-                    f"${overspend_str}/day overspend. Verify efficiency before scaling."
-                )
-            else:
-                strat['why_now'] = format_why_now(
-                    strat['action'], roas, stype,
-                    STRATEGY_THRESHOLDS.get(stype),
-                    strat.get('decision_score'),
-                )
 
         # Summary
         total_spend = sum(c.get('spend', 0) for c in campaigns)
@@ -903,4 +896,46 @@ async def get_google_vs_reality(
         }
     except Exception as e:
         log.error(f"Error comparing Google vs reality: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/feedback/{campaign_id}")
+async def record_feedback(
+    campaign_id: str,
+    action: str = Query(..., description="accepted, rejected, or modified"),
+    override_to: Optional[str] = Query(None, description="New action if modified"),
+    db: Session = Depends(get_db),
+):
+    """Record user acceptance/rejection of a campaign recommendation."""
+    from app.services.decision_feedback import DecisionFeedbackService
+    try:
+        svc = DecisionFeedbackService(db)
+        snap = svc.record_feedback(campaign_id, action, override_to)
+        if not snap:
+            raise HTTPException(status_code=404, detail=f"No snapshot found for campaign {campaign_id}")
+        return {
+            "success": True,
+            "data": {
+                "campaign_id": snap.campaign_id,
+                "action_recorded": snap.user_action,
+                "override_to": snap.user_override_to,
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Error recording feedback for {campaign_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/decision-accuracy")
+async def get_decision_accuracy(db: Session = Depends(get_db)):
+    """Get accuracy breakdown per strategy type for threshold calibration."""
+    from app.services.decision_feedback import DecisionFeedbackService
+    try:
+        svc = DecisionFeedbackService(db)
+        accuracy = svc.get_accuracy_by_type()
+        return {"success": True, "data": accuracy}
+    except Exception as e:
+        log.error(f"Error getting decision accuracy: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -205,6 +205,8 @@ class AdSpendService:
                     'strategic_value': campaign.strategic_value,
                     'action': campaign.strategy_action,
                     'confidence': campaign.strategy_confidence,
+                    'attribution_confidence': campaign.attribution_confidence,
+                    'attribution_gap_pct': campaign.attribution_gap_pct,
                     'why_now': format_why_now(
                         campaign.strategy_action,
                         campaign.true_roas,
@@ -213,6 +215,15 @@ class AdSpendService:
                         campaign.decision_score,
                     ) if campaign.strategy_type else None,
                 } if campaign.strategy_type else None,
+
+                'causal_triage': {
+                    'primary_cause': campaign.primary_cause,
+                    'confidence': campaign.cause_confidence,
+                    'causes': campaign.cause_evidence,
+                    'lp_cvr_change': campaign.lp_cvr_change,
+                    'lp_bounce_change': campaign.lp_bounce_change,
+                    'lp_is_friction': campaign.lp_is_friction,
+                } if campaign.primary_cause else None,
             }
 
             results.append(result)
