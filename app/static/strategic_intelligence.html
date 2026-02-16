@@ -716,8 +716,9 @@ function fmtD(n) { return '$' + (n || 0).toLocaleString('en-AU', {minimumFractio
 function fmtPct(n) { return (n || 0).toFixed(2) + '%'; }
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 function delta(curr, prev) {
-    if (!prev || prev === 0) return '';
+    if (curr == null || prev == null || prev === 0) return '';
     const pct = ((curr - prev) / prev * 100);
+    if (!isFinite(pct)) return '';
     const cls = pct >= 0 ? 'up' : 'down';
     const arrow = pct >= 0 ? '&#9650;' : '&#9660;';
     return `<span class="kpi-delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</span>`;
