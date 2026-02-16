@@ -58,6 +58,18 @@ _MODULE_DATA_DEPS = {
     'journey': ['ga4'], 'attribution': ['ga4', 'google_ads'],
     'email': ['shopify'], 'data_quality': [], 'code_health': [],
 }
+# Dep name → DataSyncStatus.source_name (when they differ)
+_DEP_TO_FRESHNESS_KEY = {
+    'product_costs': 'google_sheets_costs',
+    'competitive_pricing': 'google_sheets_costs',
+}
+# Normalize LLM-generated module names to _MODULE_DATA_DEPS keys
+_MODULE_ALIASES = {
+    'customer_analytics': 'customer', 'retention': 'customer',
+    'google_shopping': 'merchant_center', 'anomaly_detection': 'ml_intelligence',
+    'ads': 'ad_spend', 'search': 'seo', 'site_speed': 'behavior',
+    'traffic': 'behavior', 'analytics': 'behavior',
+}
 # Urgency → weight for priority scoring
 _URGENCY_WEIGHTS = {
     'immediate': 4, 'today': 4, 'this_week': 3,
@@ -2083,21 +2095,24 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
                         for mod_name in _MODULE_DATA_DEPS:
                             if mod_name.replace('_', ' ') in text_blob or mod_name in text_blob:
                                 source_mods.append(mod_name)
+                    # Normalize LLM module names to known keys
+                    source_mods = [_MODULE_ALIASES.get(m, m) for m in source_mods]
 
                     # Data-as-of per recommendation (Req 2)
                     data_as_of = {}
                     for mod in source_mods:
                         for dep in _MODULE_DATA_DEPS.get(mod, []):
-                            info = freshness.get(dep, {})
+                            fkey = _DEP_TO_FRESHNESS_KEY.get(dep, dep)
+                            info = freshness.get(fkey, {})
                             if info.get('last_sync'):
                                 data_as_of[dep] = info['last_sync']
 
                     # Confidence from data staleness (Req 2)
                     stale_count = sum(1 for dep in data_as_of
-                                      if freshness.get(dep, {}).get('is_stale', True))
+                                      if freshness.get(_DEP_TO_FRESHNESS_KEY.get(dep, dep), {}).get('is_stale', True))
                     missing_count = sum(1 for mod in source_mods
                                         for dep in _MODULE_DATA_DEPS.get(mod, [])
-                                        if dep not in freshness)
+                                        if _DEP_TO_FRESHNESS_KEY.get(dep, dep) not in freshness)
                     if missing_count > 0:
                         conf = 0.4
                     elif stale_count > 0:
@@ -2163,7 +2178,8 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
                     })
                     enriched_priorities.append(enriched)
 
-            # Overwrite todays_priorities on the brief with enriched version
+            # Sort by priority_score desc, then overwrite on brief
+            enriched_priorities.sort(key=lambda x: x.get('priority_score', 0), reverse=True)
             brief.todays_priorities = enriched_priorities
 
             # Save correlations

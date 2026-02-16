@@ -607,9 +607,14 @@ async def get_enhanced_dashboard(
         total_profit = sum(c['true_metrics'].get('profit', 0) for c in campaigns)
         total_waste = sum(w['waste_metrics']['monthly_waste'] for w in waste)
 
+        # Data freshness
+        ads_end = service._get_ads_data_end_date()
+        data_as_of = str(ads_end) if ads_end else None
+
         return {
             "success": True,
             "data": {
+                "data_as_of": data_as_of,
                 "summary": {
                     "total_spend": total_spend,
                     "total_profit": total_profit,

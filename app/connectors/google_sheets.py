@@ -158,11 +158,12 @@ class GoogleSheetsConnector(BaseConnector):
             )
 
             # Build with a timeout-aware http transport
+            import google_auth_httplib2
             http = httplib2.Http(timeout=SHEETS_API_TIMEOUT)
+            authed_http = google_auth_httplib2.AuthorizedHttp(credentials, http=http)
             self.service = build(
                 'sheets', 'v4',
-                credentials=credentials,
-                http=credentials.authorize(http),
+                http=authed_http,
             )
 
             # Test authentication with a timeout-guarded call

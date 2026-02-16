@@ -270,6 +270,7 @@
     <div class="container">
         <h1 class="page-title">Ads Intelligence</h1>
         <p class="page-subtitle">Campaign performance, profitability, and optimization opportunities — last 30 days</p>
+        <div id="data-as-of" style="font-size:11px;color:var(--slate);margin-top:-4px;margin-bottom:8px"></div>
 
         <!-- 2. KPI Row -->
         <div class="kpi-grid" id="kpi-grid">
@@ -1311,6 +1312,9 @@
 
                 if (dashRes.success) {
                     const d = dashRes.data;
+                    if (d.data_as_of) {
+                        document.getElementById('data-as-of').textContent = 'Data as of ' + d.data_as_of;
+                    }
                     renderAlertBanner(d.anomalies);
                     renderKPIs(d);
                     renderHealthScores(d.health_scores);

@@ -816,6 +816,29 @@ def import_google_ads_from_sheet(
         if not campaign_result.get("success"):
             raise HTTPException(status_code=500, detail=campaign_result.get("error", "Unknown error"))
 
+        # Update DataSyncStatus so freshness checks see google_ads as current
+        try:
+            from app.models.data_quality import DataSyncStatus
+            from app.models.base import SessionLocal
+            _db = SessionLocal()
+            status_row = _db.query(DataSyncStatus).filter(
+                DataSyncStatus.source_name == 'google_ads'
+            ).first()
+            if status_row:
+                status_row.last_successful_sync = datetime.utcnow()
+                status_row.records_synced = campaign_result.get('rows_imported', 0)
+            else:
+                status_row = DataSyncStatus(
+                    source_name='google_ads',
+                    last_successful_sync=datetime.utcnow(),
+                    records_synced=campaign_result.get('rows_imported', 0),
+                )
+                _db.add(status_row)
+            _db.commit()
+            _db.close()
+        except Exception as status_err:
+            log.warning(f"Failed to update google_ads sync status: {status_err}")
+
         return {
             "success": True,
             "campaigns": campaign_result,
