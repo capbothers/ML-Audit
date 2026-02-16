@@ -567,7 +567,12 @@ class StrategicIntelligenceService:
 
         try:
             # Shopify orders — use latest order date if target has no data
-            latest_order_date = self.db.query(func.max(func.date(ShopifyOrder.created_at))).scalar()
+            latest_order_raw = self.db.query(func.max(func.date(ShopifyOrder.created_at))).scalar()
+            # SQLite returns date strings; parse to date object
+            if isinstance(latest_order_raw, str):
+                latest_order_date = date.fromisoformat(latest_order_raw)
+            else:
+                latest_order_date = latest_order_raw
             shopify_effective = target
             if latest_order_date and latest_order_date < target:
                 shopify_effective = latest_order_date
@@ -665,16 +670,16 @@ class StrategicIntelligenceService:
             from sqlalchemy import distinct
             cutoff_at_risk = datetime.now() - timedelta(days=90)
             cutoff_lost = datetime.now() - timedelta(days=365)
-            at_risk = self.db.query(func.count(distinct(ShopifyOrder.shopify_customer_id))).filter(
-                ShopifyOrder.shopify_customer_id.isnot(None),
+            at_risk = self.db.query(func.count(distinct(ShopifyOrder.customer_id))).filter(
+                ShopifyOrder.customer_id.isnot(None),
             ).filter(
-                ~ShopifyOrder.shopify_customer_id.in_(
-                    self.db.query(ShopifyOrder.shopify_customer_id).filter(
+                ~ShopifyOrder.customer_id.in_(
+                    self.db.query(ShopifyOrder.customer_id).filter(
                         ShopifyOrder.created_at >= cutoff_at_risk
                     )
                 ),
-                ShopifyOrder.shopify_customer_id.in_(
-                    self.db.query(ShopifyOrder.shopify_customer_id).filter(
+                ShopifyOrder.customer_id.in_(
+                    self.db.query(ShopifyOrder.customer_id).filter(
                         ShopifyOrder.created_at >= cutoff_lost
                     )
                 ),
