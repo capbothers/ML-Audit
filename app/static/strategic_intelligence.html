@@ -932,17 +932,11 @@ function renderDaily() {
     document.getElementById('kpiSessD').innerHTML = delta(kpi.sessions_7d, kpi.sessions_prev_7d);
     document.getElementById('kpiCart').textContent = (kpi.cart_abandonment_rate || 0).toFixed(1) + '%';
 
-    // Decisions (Req 1 — action-first cards)
+    // Decisions (Req 1 — action-first cards, enriched in backend)
     const priorities = d.todays_priorities || [];
-    const recs = d.recommendations || [];
-    document.getElementById('priorityCount').textContent = priorities.length + ' decisions';
+    document.getElementById('priorityCount').textContent = priorities.length + (priorities.length === 1 ? ' decision' : ' decisions');
     if (priorities.length) {
-        // Merge recommendation details if available (by matching rank/title)
-        const merged = priorities.map((p, i) => {
-            const match = recs.find(r => r.title === p.title || r.priority_rank === (p.rank || i + 1));
-            return match ? { ...p, ...match } : p;
-        });
-        document.getElementById('priorityList').innerHTML = merged.map((p, i) => renderDecisionCard(p, i)).join('');
+        document.getElementById('priorityList').innerHTML = priorities.map((p, i) => renderDecisionCard(p, i)).join('');
     }
 
     // What's Working
@@ -976,16 +970,11 @@ function renderWeekly() {
     document.getElementById('wSessD').innerHTML = delta(kpi.sessions_7d, kpi.sessions_prev_7d);
     document.getElementById('wRisk').textContent = fmt(kpi.at_risk_customers);
 
-    // Decisions (Req 1 — action-first cards)
+    // Decisions (Req 1 — action-first cards, enriched in backend)
     const priorities = d.todays_priorities || [];
-    const recs = d.recommendations || [];
-    document.getElementById('weeklyPriorityCount').textContent = priorities.length + ' decisions';
+    document.getElementById('weeklyPriorityCount').textContent = priorities.length + (priorities.length === 1 ? ' decision' : ' decisions');
     if (priorities.length) {
-        const merged = priorities.map((p, i) => {
-            const match = recs.find(r => r.title === p.title || r.priority_rank === (p.rank || i + 1));
-            return match ? { ...p, ...match } : p;
-        });
-        document.getElementById('weeklyPriorityList').innerHTML = merged.map((p, i) => renderDecisionCard(p, i)).join('');
+        document.getElementById('weeklyPriorityList').innerHTML = priorities.map((p, i) => renderDecisionCard(p, i)).join('');
     }
 
     // Correlations

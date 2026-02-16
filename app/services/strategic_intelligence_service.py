@@ -2060,7 +2060,11 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
             freshness = getattr(self, '_freshness_cache', {})
             kpi_snapshot = data.get('kpi_snapshot', {})
 
-            for p in (data.get('todays_priorities') or []):
+            # Hard cap to 3 decisions (LLM sometimes returns more)
+            raw_priorities = (data.get('todays_priorities') or [])[:3]
+            enriched_priorities = []
+
+            for p in raw_priorities:
                 if isinstance(p, dict):
                     urgency = p.get('urgency', 'this_week')
                     due = self._derive_due_date(urgency)
@@ -2105,6 +2109,9 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
                     baseline_val = float(kpi_snapshot.get('revenue_7d', 0) or 0)
                     target_val = round(baseline_val + impact_val, 2)
 
+                    team = p.get('responsible_team', 'marketing')
+                    due_iso = due.isoformat() if due else None
+
                     rec = BriefRecommendation(
                         brief_id=brief.id,
                         category='decision',
@@ -2120,7 +2127,7 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
                         source_modules=source_mods,
                         effort_hours=effort_h,
                         effort_level=p.get('effort', 'medium'),
-                        responsible_team=p.get('responsible_team', 'marketing'),
+                        responsible_team=team,
                         status='new',
                         due_date=due,
                         data_as_of=data_as_of,
@@ -2133,6 +2140,26 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
                         is_cross_functional=True,
                     )
                     self.db.add(rec)
+
+                    # Enrich the priority dict so frontend can render
+                    # all decision-layer fields without a DB join
+                    enriched = dict(p)
+                    enriched.update({
+                        'source_modules': source_mods,
+                        'data_as_of': data_as_of,
+                        'confidence_score': conf,
+                        'priority_score': pscore,
+                        'responsible_team': team,
+                        'due_date': due_iso,
+                        'baseline_metric_name': baseline_name,
+                        'baseline_metric_value': baseline_val,
+                        'target_metric_value': target_val,
+                        'status': 'new',
+                    })
+                    enriched_priorities.append(enriched)
+
+            # Overwrite todays_priorities on the brief with enriched version
+            brief.todays_priorities = enriched_priorities
 
             # Save correlations
             for c in (data.get('cross_module_correlations') or []):
