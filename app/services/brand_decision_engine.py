@@ -538,6 +538,14 @@ class BrandDecisionEngine:
                 )
             else:
                 parts.append("Ads ROAS in sustained decline")
+        elif ads_trend == "recovering":
+            ads_data = weekly.get("ads") or []
+            roas_vals = [w["roas"] for w in ads_data if w.get("roas") is not None]
+            recent = roas_vals[-4:] if len(roas_vals) >= 4 else roas_vals
+            if recent:
+                parts.append(
+                    f"ROAS recovering week-over-week ({' → '.join(str(r) for r in recent)})"
+                )
 
         rev_trend = trends.get("revenue", "")
         if rev_trend == "accelerating_decline":

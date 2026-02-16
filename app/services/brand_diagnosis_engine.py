@@ -1283,6 +1283,10 @@ class BrandDiagnosisEngine:
         pos_count = sum(1 for c in recent if c > 0.05)
 
         if neg_count >= 3:
+            # If most recent change is a strong positive reversal,
+            # this is recovery not decline (e.g. 11.74→9.14→6.12→11.38)
+            if recent[-1] > 0.15:
+                return "recovering"
             if len(recent) >= 2 and recent[-1] < recent[-2]:
                 return "accelerating_decline"
             return "declining"
