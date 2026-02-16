@@ -1431,6 +1431,7 @@ class AdSpendService:
 
             severity = 'critical' if len(anomalies_found) >= 2 else 'warning'
 
+            weekly_spend = curr['spend']
             for anomaly in anomalies_found:
                 results.append({
                     'campaign_id': cid,
@@ -1442,7 +1443,12 @@ class AdSpendService:
                     'severity': severity,
                     'interpretation': anomaly['interpretation'],
                     'sentiment': anomaly['sentiment'],
+                    'weekly_spend': round(weekly_spend, 2),
                 })
+
+        # Sort: negative anomalies from high-spend campaigns first, positive last
+        _sent_rank = {'negative': 0, 'neutral': 1, 'positive': 2}
+        results.sort(key=lambda a: (_sent_rank.get(a['sentiment'], 1), -(a.get('weekly_spend') or 0)))
 
         log.info(f"Detected {len(results)} anomalies")
         return results

@@ -602,7 +602,7 @@ async def get_enhanced_dashboard(
             'budget_reallocations': reallocations,
         })
 
-        # Cross-reference strategy vs diminishing returns
+        # Cross-reference strategy vs diminishing returns — auto-downgrade action
         dr_overspend = {dr['campaign_id']: dr for dr in diminishing if dr.get('overspend_per_day', 0) > 0}
         for c in campaigns:
             strat = c.get('strategy')
@@ -610,9 +610,12 @@ async def get_enhanced_dashboard(
                 continue
             dr = dr_overspend.get(c['campaign_id'])
             if dr and strat['action'] in ('scale', 'scale_aggressively'):
+                strat['original_action'] = strat['action']
+                strat['action'] = 'investigate'
                 strat['conflict_note'] = (
                     f"Diminishing returns suggests overspending by "
-                    f"${dr['overspend_per_day']:.0f}/day \u2014 investigate before scaling."
+                    f"${dr['overspend_per_day']:.0f}/day \u2014 downgraded from "
+                    f"{strat['original_action'].replace('_', ' ')} to investigate."
                 )
 
         # Summary
