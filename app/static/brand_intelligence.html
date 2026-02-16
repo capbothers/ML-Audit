@@ -1118,13 +1118,41 @@
             if (tab === 'executive') loadExecutive();
         }
 
-        function changePeriod(days) {
+        function getSelectedCompareBrands() {
+            return Array.from(document.querySelectorAll('#compare-brands-list input:checked')).map(function(i) { return i.value; });
+        }
+
+        function restoreCompareBrandsSelection(selectedBrands) {
+            if (!selectedBrands || !selectedBrands.length) return;
+            var selectedSet = new Set(selectedBrands);
+            document.querySelectorAll('#compare-brands-list input[type="checkbox"]').forEach(function(cb) {
+                cb.checked = selectedSet.has(cb.value);
+            });
+        }
+
+        async function changePeriod(days) {
             periodDays = parseInt(days);
             execLoaded = false;
-            loadDashboard();
-            // If Executive tab is active, reload it immediately
             var activeTab = document.querySelector('.tab-btn.active');
-            if (activeTab && activeTab.dataset.tab === 'executive') loadExecutive();
+            var activeTabName = activeTab ? activeTab.dataset.tab : 'overview';
+            var selectedCompareBrands = activeTabName === 'compare' ? getSelectedCompareBrands() : [];
+
+            await loadDashboard();
+
+            if (activeTabName === 'detail' && currentBrand) {
+                await openBrandDetail(currentBrand);
+                return;
+            }
+
+            if (activeTabName === 'compare') {
+                restoreCompareBrandsSelection(selectedCompareBrands);
+                if (selectedCompareBrands.length >= 2 && selectedCompareBrands.length <= 5) {
+                    await runComparison();
+                }
+                return;
+            }
+
+            if (activeTabName === 'executive') loadExecutive();
         }
 
         // ── Load dashboard ───────────────────────────────────────
