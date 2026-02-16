@@ -60,6 +60,7 @@ schedule==1.2.0
 beautifulsoup4==4.12.3
 selenium==4.16.0
 advertools==0.16.1
+feedparser==6.0.12
 
 # Anomaly Detection
 pyod==1.1.3
