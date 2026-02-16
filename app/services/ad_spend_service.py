@@ -1360,10 +1360,15 @@ class AdSpendService:
                 week_buckets[wk].append(row)
 
             sorted_weeks = sorted(week_buckets.keys())
+
+            # Drop the latest week if it's partial (< 7 days of data)
+            if sorted_weeks and len(week_buckets[sorted_weeks[-1]]) < 7:
+                sorted_weeks = sorted_weeks[:-1]
+
             if len(sorted_weeks) < 2:
                 continue
 
-            # Latest complete week vs previous week
+            # Compare latest two complete weeks
             prev_week_rows = week_buckets[sorted_weeks[-2]]
             curr_week_rows = week_buckets[sorted_weeks[-1]]
 
@@ -1472,10 +1477,12 @@ class AdSpendService:
         }
         for a in results:
             a['strategy_type'] = strat_map.get(a['campaign_id'])
+            is_unknown = a.get('strategy_type') == 'unknown'
+            # Unknown campaigns can still be material if weekly spend is high (>$200)
             a['is_material'] = (
                 a['sentiment'] != 'positive'
                 and a['impact_score'] >= 5
-                and a.get('strategy_type') != 'unknown'
+                and (not is_unknown or a['weekly_spend'] >= 200)
             )
 
         # Sort: material negative first (by impact), then non-material, then positive

@@ -11,6 +11,7 @@ from app.models.base import get_db
 from app.models.google_ads_data import GoogleAdsCampaign
 from app.services.ad_spend_service import AdSpendService
 from app.services.ad_spend_processor import AdSpendProcessor
+from app.services.campaign_strategy import format_why_now, STRATEGY_THRESHOLDS
 from app.services.llm_service import LLMService
 from app.api.data_quality import get_stale_data_warning
 from app.utils.logger import log
@@ -404,7 +405,7 @@ async def get_campaign_trends(
     """
     try:
         period_end = _get_ads_period_end(db)
-        period_start = period_end - timedelta(days=days)
+        period_start = period_end - timedelta(days=days - 1)
 
         query = db.query(
             func.strftime('%Y-W%W', GoogleAdsCampaign.date).label('week'),
@@ -490,11 +491,11 @@ async def get_impression_share_analysis(
     """
     try:
         period_end = _get_ads_period_end(db)
-        period_start = period_end - timedelta(days=days)
+        period_start = period_end - timedelta(days=days - 1)
 
         # Also get prior period for comparison
-        prior_end = period_start
-        prior_start = prior_end - timedelta(days=days)
+        prior_end = period_start - timedelta(days=1)
+        prior_start = prior_end - timedelta(days=days - 1)
 
         def _get_is_data(start, end):
             rows = db.query(
@@ -603,7 +604,8 @@ async def get_enhanced_dashboard(
         })
 
         # Cross-reference strategy vs diminishing returns — auto-downgrade action
-        # Gates: (1) overspend is material (>$50/day or >20% above optimal)
+        # Gates: (1) overspend is material (>$50/day AND current spend >= $50/day,
+        #             OR >20% above optimal AND current spend >= $50/day)
         #         (2) DR curve confidence is high (≥21 active days, ≥5 days per bucket)
         dr_overspend = {dr['campaign_id']: dr for dr in diminishing if dr.get('overspend_per_day', 0) > 0}
         for c in campaigns:
@@ -614,8 +616,10 @@ async def get_enhanced_dashboard(
             if dr and strat['action'] in ('scale', 'scale_aggressively'):
                 overspend = dr.get('overspend_per_day', 0)
                 optimal = dr.get('optimal_daily_spend', 0)
+                current = dr.get('current_daily_spend', 0)
                 pct_over = (overspend / optimal) if optimal > 0 else 0
-                is_material = overspend > 50 or pct_over > 0.20
+                # Spend floor: don't override low-dollar campaigns where pct swings are noise
+                is_material = current >= 50 and (overspend > 50 or pct_over > 0.20)
                 dr_conf = dr.get('dr_confidence', 'low')
                 if is_material and dr_conf == 'high':
                     strat['original_action'] = strat['action']
@@ -625,13 +629,6 @@ async def get_enhanced_dashboard(
                         f"suggests overspending by ${overspend:.0f}/day ({pct_over:.0%} above optimal) "
                         f"\u2014 downgraded from "
                         f"{strat['original_action'].replace('_', ' ')} to investigate."
-                    )
-                    # Regenerate why_now to match final action (not pre-override)
-                    roas = c.get('true_metrics', {}).get('roas') or 0
-                    strat['why_now'] = (
-                        f"ROAS {roas:.1f}x looks strong but diminishing returns "
-                        f"analysis shows overspend of ${overspend:.0f}/day. "
-                        f"Verify spend efficiency before scaling."
                     )
                 elif is_material:
                     strat['conflict_note'] = (
@@ -644,6 +641,27 @@ async def get_enhanced_dashboard(
                         f"Minor diminishing returns detected (${overspend:.0f}/day over optimal) "
                         f"\u2014 monitoring, no action override."
                     )
+
+        # Final pass: regenerate why_now from *final* action after all overrides
+        for c in campaigns:
+            strat = c.get('strategy')
+            if not strat or not strat.get('original_action'):
+                continue  # no override happened — why_now is already correct
+            roas = c.get('true_metrics', {}).get('roas') or 0
+            stype = strat.get('type', 'unknown')
+            if strat['action'] == 'investigate' and strat.get('conflict_note'):
+                # DR-specific why_now: explain the DR finding, not generic investigate text
+                overspend_str = strat['conflict_note'].split('$')[1].split('/')[0] if '$' in strat.get('conflict_note', '') else '?'
+                strat['why_now'] = (
+                    f"ROAS {roas:.1f}x looks strong but DR analysis shows "
+                    f"${overspend_str}/day overspend. Verify efficiency before scaling."
+                )
+            else:
+                strat['why_now'] = format_why_now(
+                    strat['action'], roas, stype,
+                    STRATEGY_THRESHOLDS.get(stype),
+                    strat.get('decision_score'),
+                )
 
         # Summary
         total_spend = sum(c.get('spend', 0) for c in campaigns)

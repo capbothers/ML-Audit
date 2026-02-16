@@ -75,7 +75,7 @@ class AdSpendProcessor:
                 "duration_seconds": round((datetime.utcnow() - start_time).total_seconds(), 2),
             }
         period_end = max_date
-        period_start = period_end - timedelta(days=days)
+        period_start = period_end - timedelta(days=days - 1)
 
         # Step 1: Aggregate
         aggregated = self._aggregate_campaigns(period_start, period_end)

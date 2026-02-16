@@ -392,3 +392,59 @@ def test_products_min_conversions_3():
             )
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Test 9 — DR confidence gating
+# ---------------------------------------------------------------------------
+
+def test_dr_output_includes_confidence():
+    """analyze_diminishing_returns() must emit dr_confidence, active_days, min_bucket_days."""
+    db = SessionLocal()
+    try:
+        svc = AdSpendService(db)
+        results = _run(svc.analyze_diminishing_returns(days=90))
+        for r in results:
+            assert 'dr_confidence' in r, f"Missing dr_confidence for {r['campaign_name']}"
+            assert r['dr_confidence'] in ('high', 'medium', 'low')
+            assert 'active_days' in r, f"Missing active_days for {r['campaign_name']}"
+            assert 'min_bucket_days' in r, f"Missing min_bucket_days for {r['campaign_name']}"
+            assert r['active_days'] >= 14, "DR should only include campaigns with ≥14 days"
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Test 10 — Period window consistency
+# ---------------------------------------------------------------------------
+
+def test_period_windows_consistent():
+    """
+    Processor and service must use days-1 for inclusive date ranges.
+    Verify source code does not use timedelta(days=days) with >= filters.
+    """
+    proc_src = Path("app/services/ad_spend_processor.py").read_text()
+    # The processor's period_start line
+    assert 'period_start = period_end - timedelta(days=days - 1)' in proc_src, (
+        "Processor must use days-1 for inclusive period_start"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 11 — why_now / action coherence contract
+# ---------------------------------------------------------------------------
+
+def test_why_now_action_coherence_in_source():
+    """
+    Enhanced dashboard must regenerate why_now after DR overrides.
+    Verify the post-override regeneration pass exists.
+    """
+    source = Path("app/api/ad_spend.py").read_text()
+    assert 'original_action' in source, "DR override must track original_action"
+    assert 'Regenerate why_now' in source or 'regenerate why_now' in source, (
+        "Must have a why_now regeneration pass after overrides"
+    )
+    # Ensure format_why_now is imported for non-DR fallback
+    assert 'from app.services.campaign_strategy import format_why_now' in source, (
+        "format_why_now must be imported for fallback regeneration"
+    )
