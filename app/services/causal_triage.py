@@ -33,6 +33,7 @@ class CausalTriageService:
         period_end: date,
         google_conversions: int = 0,
         actual_conversions: int = 0,
+        campaign_name: str = '',
     ) -> Dict:
         """
         Classify root cause for a campaign's underperformance.
@@ -48,7 +49,7 @@ class CausalTriageService:
         """
         causes = []
 
-        demand = self._score_demand(period_start, period_end)
+        demand = self._score_demand(period_start, period_end, campaign_name)
         causes.append(demand)
 
         auction = self._score_auction_pressure(campaign_id, period_start, period_end)
@@ -90,22 +91,72 @@ class CausalTriageService:
     # Demand: Search Console query volume trends
     # ------------------------------------------------------------------
 
-    def _score_demand(self, start: date, end: date) -> Dict:
-        """Detect demand decline via Search Console click/impression trends."""
+    @staticmethod
+    def _extract_brand_keywords(campaign_name: str) -> List[str]:
+        """Extract brand keywords from campaign name for SC query matching.
+
+        'PM-AU Billi' → ['billi']
+        'PM-SYD Rheem' → ['rheem']
+        'PM-AU Zip Taps' → ['zip taps', 'zip']
+        """
+        if not campaign_name:
+            return []
+        # Strip common prefixes: PM-AU, PM-SYD, PMAX, AI Max, Search, etc.
+        import re
+        name = re.sub(r'^(PM-\w+|PMAX|AI Max|Search)\s+', '', campaign_name, flags=re.IGNORECASE).strip()
+        # Drop filler words
+        name = re.sub(r'\b(Campaign|Non|Sydney|Storage|All|Hardware)\b', '', name, flags=re.IGNORECASE).strip()
+        name = re.sub(r'\s+', ' ', name).strip()
+        if not name or len(name) < 3:
+            return []
+        keywords = [name.lower()]
+        # Also add the first word as a standalone keyword (brand)
+        first = name.split()[0].lower()
+        if first != name.lower() and len(first) >= 3:
+            keywords.append(first)
+        return keywords
+
+    def _score_demand(self, start: date, end: date, campaign_name: str = '') -> Dict:
+        """Detect demand decline via Search Console click/impression trends.
+
+        When a campaign name is provided, filters SC queries to brand-relevant
+        keywords. Falls back to site-wide with dampened score if no match.
+        """
         mid = start + (end - start) // 2
+        brand_keywords = self._extract_brand_keywords(campaign_name)
 
         def _period_totals(s, e):
-            row = self.db.query(
+            q = self.db.query(
                 func.sum(SearchConsoleQuery.clicks).label('clicks'),
                 func.sum(SearchConsoleQuery.impressions).label('impr'),
             ).filter(
                 SearchConsoleQuery.date >= s,
                 SearchConsoleQuery.date <= e,
-            ).first()
+            )
+            # Filter by brand keywords if available
+            if brand_keywords:
+                from sqlalchemy import or_
+                q = q.filter(or_(
+                    *[SearchConsoleQuery.query.ilike(f'%{kw}%') for kw in brand_keywords]
+                ))
+            row = q.first()
             return (row.clicks or 0, row.impr or 0)
 
         prev_clicks, prev_impr = _period_totals(start, mid - timedelta(days=1))
         curr_clicks, curr_impr = _period_totals(mid, end)
+
+        # If brand-filtered query returned no data, fall back to site-wide
+        # but dampen score by 60% since it's not campaign-specific
+        is_brand_specific = bool(brand_keywords) and prev_clicks > 0
+        dampening = 1.0 if is_brand_specific else 0.4
+
+        if prev_clicks == 0 and brand_keywords:
+            # No SC data for this brand — try site-wide with heavy dampening
+            brand_keywords.clear()  # Clear to trigger unfiltered query
+            prev_clicks, prev_impr = _period_totals(start, mid - timedelta(days=1))
+            curr_clicks, curr_impr = _period_totals(mid, end)
+            dampening = 0.3  # Site-wide is weakly relevant
+            is_brand_specific = False
 
         if prev_clicks == 0:
             return {'cause': 'demand', 'score': 0, 'evidence': 'No prior SC data'}
@@ -115,14 +166,15 @@ class CausalTriageService:
 
         score = 0
         evidence_parts = []
+        scope = 'brand' if is_brand_specific else 'site-wide'
 
         # Clicks declining is a strong demand signal
         if click_change < -0.15:
-            score = min(1.0, abs(click_change))
-            evidence_parts.append(f"SC clicks {click_change:+.0%}")
+            score = min(1.0, abs(click_change)) * dampening
+            evidence_parts.append(f"SC clicks {click_change:+.0%} ({scope})")
         if impr_change < -0.10:
-            score = max(score, min(0.8, abs(impr_change)))
-            evidence_parts.append(f"SC impressions {impr_change:+.0%}")
+            score = max(score, min(0.8, abs(impr_change)) * dampening)
+            evidence_parts.append(f"SC impressions {impr_change:+.0%} ({scope})")
 
         evidence = '; '.join(evidence_parts) if evidence_parts else 'Demand stable'
         return {'cause': 'demand', 'score': round(score, 2), 'evidence': evidence}

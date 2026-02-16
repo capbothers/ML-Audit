@@ -363,6 +363,8 @@ class AdSpendProcessor:
                 decision['action'] = 'investigate'
 
             # ── Attribution confidence (Capability 2) ──
+            # Tier based on Shopify ground-truth match when available,
+            # else fall back to Google conversion volume as a proxy.
             if shopify is not None and google_conversions > 0:
                 conv_ratio = actual_conversions / google_conversions
                 if conv_ratio >= 0.5:
@@ -372,11 +374,17 @@ class AdSpendProcessor:
                 else:
                     attr_confidence = 'low'
                 attr_gap_pct = round((1 - conv_ratio) * 100, 1)
-            elif shopify is None:
-                attr_confidence = 'low'
+            elif shopify is None and google_conversions >= 10:
+                # No Shopify verification but sufficient Google volume —
+                # Google attribution is unverified, not unreliable.
+                attr_confidence = 'medium'
+                attr_gap_pct = None
+            elif shopify is None and google_conversions >= 3:
+                attr_confidence = 'medium'
                 attr_gap_pct = None
             else:
-                attr_confidence = 'medium'
+                # No Shopify AND very low Google volume — truly low confidence
+                attr_confidence = 'low'
                 attr_gap_pct = None
 
             # Attribution gate: low confidence cannot trigger hard cut
@@ -398,6 +406,7 @@ class AdSpendProcessor:
                     triage = triage_svc.diagnose(
                         agg["campaign_id"], period_start, period_end,
                         google_conversions, actual_conversions,
+                        campaign_name=agg["campaign_name"],
                     )
                     primary_cause = triage['primary_cause']
                     cause_confidence = triage['confidence']

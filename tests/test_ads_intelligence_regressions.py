@@ -546,7 +546,7 @@ def test_lp_friction_overrides_reduce():
 
     arbitrator = DecisionArbitrator()
     campaign = {
-        'true_metrics': {'roas': 1.8},
+        'true_metrics': {'true_roas': 1.8},
     }
     evidence = {
         'strategy': {
@@ -587,7 +587,7 @@ def test_arbitrator_profitability_protection():
 
     arbitrator = DecisionArbitrator()
     campaign = {
-        'true_metrics': {'roas': 5.0},
+        'true_metrics': {'true_roas': 5.0},
     }
     evidence = {
         'strategy': {
@@ -622,7 +622,7 @@ def test_arbitrator_high_conf_dr_downgrades_scale():
     arbitrator = DecisionArbitrator()
     # Use medium confidence so profitability protection doesn't override the DR finding
     campaign = {
-        'true_metrics': {'roas': 3.5},
+        'true_metrics': {'true_roas': 3.5},
     }
     evidence = {
         'strategy': {
@@ -662,7 +662,7 @@ def test_arbitrator_why_now_matches_final_action():
 
     arbitrator = DecisionArbitrator()
     # Use medium confidence to prevent profitability protection from overriding DR
-    campaign = {'true_metrics': {'roas': 4.0}}
+    campaign = {'true_metrics': {'true_roas': 4.0}}
     evidence = {
         'strategy': {
             'action': 'scale',

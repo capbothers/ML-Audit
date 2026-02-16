@@ -55,7 +55,7 @@ class DecisionArbitrator:
         action = strat.get('action', 'investigate')
         strat_confidence = strat.get('confidence', 'low')
         stype = strat.get('type', 'unknown')
-        roas = campaign.get('true_metrics', {}).get('roas')
+        roas = campaign.get('true_metrics', {}).get('true_roas')
         score = strat.get('decision_score')
 
         overrides: List[Dict] = []
@@ -127,12 +127,17 @@ class DecisionArbitrator:
             pct_over = (overspend / optimal) if optimal > 0 else 0
             is_material = current >= 50 and (overspend > 50 or pct_over > 0.20)
 
+            # Human-readable DR description: use % when reasonable, abs dollars otherwise
+            if pct_over <= 2.0:
+                dr_desc = f"${overspend:.0f}/day overspend ({pct_over:.0%} above optimal ${optimal:.0f}/day)"
+            else:
+                dr_desc = f"${overspend:.0f}/day overspend (optimal ~${optimal:.0f}/day, current ${current:.0f}/day)"
+
             if is_material and dr_conf == 'high':
                 overrides.append({
                     'from_action': action, 'to_action': 'investigate',
                     'reason': (
-                        f"DR (high conf, {dr.get('active_days', '?')}d) shows "
-                        f"${overspend:.0f}/day overspend ({pct_over:.0%} above optimal)"
+                        f"DR (high conf, {dr.get('active_days', '?')}d) shows {dr_desc}"
                     ),
                     'module': 'diminishing_returns',
                 })
