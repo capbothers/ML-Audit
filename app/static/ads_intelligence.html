@@ -490,9 +490,10 @@
             const s = d.summary || {};
             const campaigns = d.campaigns || [];
             const flProfit = campaigns.reduce((sum, c) => sum + (c.true_metrics?.fully_loaded_profit || 0), 0);
-            const avgRoas = campaigns.length
-                ? campaigns.reduce((sum, c) => sum + (c.true_metrics?.true_roas || 0), 0) / campaigns.filter(c => c.true_metrics?.true_roas != null).length
-                : null;
+            // Weighted portfolio ROAS: sum(revenue - COGS) / sum(spend)
+            const totalGrossProfit = campaigns.reduce((sum, c) => sum + (c.true_metrics?.profit || 0) + (c.spend || 0), 0);
+            const totalSpend = campaigns.reduce((sum, c) => sum + (c.spend || 0), 0);
+            const avgRoas = totalSpend > 0 ? totalGrossProfit / totalSpend : null;
 
             document.getElementById('kpi-grid').innerHTML = `
                 <div class="kpi-card">
@@ -513,7 +514,7 @@
                 <div class="kpi-card">
                     <div class="kpi-label">Avg True ROAS</div>
                     <div class="kpi-value">${avgRoas != null && !isNaN(avgRoas) ? fmtRoas(avgRoas) : '--'}</div>
-                    <div class="kpi-sub">Profit / Ad Spend</div>
+                    <div class="kpi-sub">Weighted (Rev-COGS) / Spend</div>
                 </div>
                 <div class="kpi-card">
                     <div class="kpi-label">Profitable</div>
@@ -708,7 +709,7 @@
                 const healthBg = hs ? healthColor(hs.health_score) : '#9ca3af';
                 const healthLabel = hs ? hs.health_score + (hs.grade ? ' ' + hs.grade : '') : '--';
 
-                const convRate = dm?.metrics?.conv_rate;
+                const convRate = dm?.metrics?.conv_rate != null ? dm.metrics.conv_rate * 100 : null;
                 const cpa = dm?.metrics?.cpa;
 
                 const beAbove = be?.above_break_even;
@@ -1025,8 +1026,8 @@
             }
 
             // If we have trends data with IS info, render it
-            const campaignsWithIS = trendsData.filter(t => t.impression_share != null || t.search_impression_share != null);
-            if (!campaignsWithIS.length) {
+            const weeksWithIS = trendsData.filter(t => t.avg_impression_share > 0);
+            if (!weeksWithIS.length) {
                 el.innerHTML = '<div class="section-empty">No impression share data in trend response</div>';
                 return;
             }
@@ -1037,14 +1038,14 @@
                 '<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:12px;height:12px;background:var(--red);opacity:0.7;border-radius:2px"></span> Rank Lost</span>' +
                 '</div>';
 
-            campaignsWithIS.forEach(c => {
-                const is = c.impression_share || c.search_impression_share || 0;
-                const bl = c.budget_lost_is || c.search_budget_lost_is || 0;
-                const rl = c.rank_lost_is || c.search_rank_lost_is || 0;
+            weeksWithIS.forEach(c => {
+                const is = c.avg_impression_share || 0;
+                const bl = c.avg_budget_lost_is || 0;
+                const rl = c.avg_rank_lost_is || 0;
 
                 html += `<div class="is-bar-container">
                     <div class="is-bar-label">
-                        <span>${c.campaign_name || c.name || 'Campaign'}</span>
+                        <span>${c.week_start || c.week || 'Week'}</span>
                         <span>${fmtPct(is)} IS</span>
                     </div>
                     <div class="is-bar-track">
@@ -1140,8 +1141,13 @@
             }
 
             const profitable = products
-                .filter(p => p.indicators?.is_profitable)
-                .sort((a, b) => (b.roas?.profit_roas || 0) - (a.roas?.profit_roas || 0))
+                .filter(p => p.indicators?.is_profitable && (p.ad_spend?.total_spend || 0) >= 50)
+                .sort((a, b) => {
+                    // Rank by spend * ROAS to prioritize actionable scale candidates
+                    const aScore = (a.ad_spend?.total_spend || 0) * (a.roas?.profit_roas || 0);
+                    const bScore = (b.ad_spend?.total_spend || 0) * (b.roas?.profit_roas || 0);
+                    return bScore - aScore;
+                })
                 .slice(0, 10);
 
             const losing = products
@@ -1195,8 +1201,9 @@
             }
 
             // Meta tags
-            const trendColor = forecast.trend_direction === 'up' ? 'var(--green)' : forecast.trend_direction === 'down' ? 'var(--red)' : 'var(--amber)';
-            const trendIcon = forecast.trend_direction === 'up' ? '&#9650;' : forecast.trend_direction === 'down' ? '&#9660;' : '&#9654;';
+            const td = forecast.trend_direction;
+            const trendColor = (td === 'up' || td === 'growing') ? 'var(--green)' : (td === 'down' || td === 'declining') ? 'var(--red)' : 'var(--amber)';
+            const trendIcon = (td === 'up' || td === 'growing') ? '&#9650;' : (td === 'down' || td === 'declining') ? '&#9660;' : '&#9654;';
             const confColor = forecast.confidence === 'high' ? '#dcfce7' : forecast.confidence === 'low' ? '#fee2e2' : '#fef3c7';
             const confText = forecast.confidence === 'high' ? '#166534' : forecast.confidence === 'low' ? '#991b1b' : '#92400e';
 
@@ -1325,7 +1332,8 @@
                     renderTypeComparison(d.type_comparison);
                     renderDiminishingReturns(d.diminishing_returns);
                     renderCompetitorPressure(d.competitor_pressure);
-                    renderImpressionShare(d.campaigns);
+                    // Impression share data comes from trends, not campaigns
+                    renderImpressionShare(null);
                     renderWasteAndActions(d.waste, d.reallocations, d.quick_wins);
                     renderProducts(d.products);
                     renderForecast(d.forecast);
@@ -1334,7 +1342,9 @@
                 }
 
                 if (trendsRes.success) {
-                    renderTrendCharts(trendsRes.data?.trends || trendsRes.data);
+                    const trends = trendsRes.data?.trends || trendsRes.data;
+                    renderTrendCharts(trends);
+                    renderImpressionShare(trends);
                 }
             } catch (err) {
                 console.error('Dashboard load error:', err);

@@ -59,7 +59,9 @@ class AdSpendProcessor:
         logger.info(f"AdSpendProcessor: starting for last {days} days")
         start_time = datetime.utcnow()
 
-        period_end = date.today()
+        # Anchor to latest ads data row, not calendar today
+        max_date = self.db.query(func.max(GoogleAdsCampaign.date)).scalar()
+        period_end = max_date or date.today()
         period_start = period_end - timedelta(days=days)
 
         # Step 1: Aggregate
@@ -497,34 +499,37 @@ class AdSpendProcessor:
                 and total_spend >= self.ZERO_CONV_MIN_SPEND
                 and convs >= 1
             ):
-                conv_value = float(row["google_conversion_value"])
-                monthly_loss = (total_spend - conv_value) / days * 30 if days > 0 else 0
+                # Use actual_revenue (Shopify-attributed) to match true_roas
+                actual_rev = float(row.get("actual_revenue") or row["google_conversion_value"])
+                monthly_loss = (total_spend - actual_rev) / days * 30 if days > 0 else 0
+                if monthly_loss <= 0:
+                    continue  # Revenue exceeds spend — not truly wasting
                 self.db.add(AdWaste(
                     waste_type="budget_fragmentation",
                     waste_description=(
-                        f"Campaign '{name}' has ROAS of {roas:.2f}x — spending more than it earns. "
-                        f"Spent ${total_spend:,.2f}, earned ${conv_value:,.2f}."
+                        f"Campaign '{name}' has true ROAS of {roas:.2f}x — "
+                        f"spending ${total_spend:,.2f} to generate ${actual_rev:,.2f} revenue."
                     ),
                     campaign_id=cid,
                     campaign_name=name,
-                    monthly_waste_spend=Decimal(str(round(max(0, monthly_loss), 2))),
+                    monthly_waste_spend=Decimal(str(round(monthly_loss, 2))),
                     actual_conversion_rate=(
                         convs / row["total_clicks"] if row["total_clicks"] > 0 else 0.0
                     ),
                     severity="high" if roas < 0.5 else "medium",
-                    monthly_impact=Decimal(str(round(max(0, monthly_loss), 2))),
+                    monthly_impact=Decimal(str(round(monthly_loss, 2))),
                     recommended_action=(
                         f"Reduce budget for '{name}' or restructure targeting. "
-                        f"Current ROAS {roas:.2f}x (need {self.PROFITABLE_ROAS}x to be profitable)."
+                        f"Current true ROAS {roas:.2f}x (need {self.PROFITABLE_ROAS}x to be profitable)."
                     ),
-                    expected_savings=Decimal(str(round(max(0, monthly_loss * 0.7), 2))),
+                    expected_savings=Decimal(str(round(monthly_loss * 0.7, 2))),
                     implementation_difficulty="medium",
                     status="active",
                     period_days=days,
                     evidence={
                         "total_spend": round(total_spend, 2),
-                        "conversion_value": round(conv_value, 2),
-                        "roas": round(roas, 2),
+                        "actual_revenue": round(actual_rev, 2),
+                        "true_roas": round(roas, 2),
                         "conversions": convs,
                         "period_days": days,
                     },

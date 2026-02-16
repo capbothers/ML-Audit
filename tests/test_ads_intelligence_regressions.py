@@ -215,3 +215,78 @@ def test_type_comparison_ctr_is_decimal():
             )
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Test 3 — Processor date anchoring
+# ---------------------------------------------------------------------------
+
+def test_processor_anchors_to_data_not_calendar():
+    """
+    AdSpendProcessor.process() must query max(GoogleAdsCampaign.date) to anchor
+    period_end, not rely solely on date.today().
+    """
+    source = Path("app/services/ad_spend_processor.py").read_text()
+    start = source.find('def process(')
+    assert start != -1
+    next_def = source.find('\n    def ', start + 1)
+    body = source[start:next_def] if next_def != -1 else source[start:]
+
+    assert 'GoogleAdsCampaign.date' in body or 'max(' in body, (
+        "Processor must query max(GoogleAdsCampaign.date) to anchor "
+        "period_end to actual data boundary"
+    )
+    # date.today() is acceptable only as a fallback (or pattern)
+    assert 'period_end = date.today()' not in body, (
+        "period_end must not be unconditionally set to date.today()"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Test 4 — Conversion rate scaling contract
+# ---------------------------------------------------------------------------
+
+def test_deep_metrics_conv_rate_is_decimal():
+    """
+    deep_metrics conv_rate is 0-1 decimal.
+    Frontend must multiply by 100 before display.
+    """
+    db = SessionLocal()
+    try:
+        svc = AdSpendService(db)
+        metrics = _run(svc.get_campaign_deep_metrics(days=30))
+        if not metrics:
+            return
+
+        for m in metrics:
+            cr = m['metrics']['conv_rate']
+            assert 0 <= cr <= 1, (
+                f"Deep metrics conv_rate should be 0-1 decimal, "
+                f"got {cr} for campaign {m.get('campaign_name', '?')}"
+            )
+
+        # Frontend must multiply by 100
+        html = Path("app/static/ads_intelligence.html").read_text()
+        assert 'conv_rate * 100' in html or 'conv_rate *100' in html, (
+            "Frontend must multiply conv_rate by 100 (it's a decimal)"
+        )
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Test 5 — Forecast trend semantics
+# ---------------------------------------------------------------------------
+
+def test_forecast_trend_values_handled_in_html():
+    """
+    Backend emits growing/declining/stable.
+    Frontend must map these correctly (not just up/down).
+    """
+    html = Path("app/static/ads_intelligence.html").read_text()
+    assert "'growing'" in html or '"growing"' in html, (
+        "Frontend must handle 'growing' trend direction from backend"
+    )
+    assert "'declining'" in html or '"declining"' in html, (
+        "Frontend must handle 'declining' trend direction from backend"
+    )
