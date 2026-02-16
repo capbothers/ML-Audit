@@ -1879,7 +1879,7 @@ class BrandIntelligenceService:
                         f"{brand} ads underperforming — ${spend:,.0f} spend at only "
                         f"{roas:.1f}x ROAS. Review keyword targeting and negative keywords."
                     ),
-                    "expected_impact": f"Improving ROAS from {roas:.1f}x to 3x saves ${spend * (1 - roas / 3):,.0f} in wasted spend",
+                    "expected_impact": f"Improving ROAS from {roas:.1f}x to 3x could save ${spend * (1 - roas / 3):,.0f} in ad spend",
                     "sort_weight": spend,
                 })
             # Wasted products
@@ -1893,9 +1893,9 @@ class BrandIntelligenceService:
                         "category": "ads",
                         "action": (
                             f"${total_wasted:,.0f} ad spend on {len(wasted)} {brand} products "
-                            f"with zero conversions: {names}"
+                            f"with no attributed conversions — review targeting: {names}"
                         ),
-                        "expected_impact": f"Pause or rework these campaigns to save ${total_wasted:,.0f}",
+                        "expected_impact": f"Reallocating spend from low-converting products could save up to ${total_wasted:,.0f}",
                         "sort_weight": total_wasted,
                     })
 
@@ -3196,6 +3196,7 @@ class BrandIntelligenceService:
                         GoogleAdsProductPerformance.product_item_id,
                         GoogleAdsProductPerformance.product_title,
                         func.sum(GoogleAdsProductPerformance.clicks).label("clicks"),
+                        func.sum(GoogleAdsProductPerformance.cost_micros).label("cost_micros"),
                         func.sum(GoogleAdsProductPerformance.conversions).label("conv"),
                         func.sum(GoogleAdsProductPerformance.conversions_value).label("conv_val"),
                     )
@@ -3208,27 +3209,27 @@ class BrandIntelligenceService:
                         GoogleAdsProductPerformance.product_item_id,
                         GoogleAdsProductPerformance.product_title,
                     )
-                    .order_by(func.sum(GoogleAdsProductPerformance.clicks).desc())
+                    .order_by(func.sum(GoogleAdsProductPerformance.cost_micros).desc())
                     .limit(10)
                     .all()
                 )
 
                 for pr in brand_prod_rows:
                     clicks = int(pr.clicks or 0)
+                    spend = int(pr.cost_micros or 0) / 1_000_000
                     conv = float(pr.conv or 0)
                     conv_val = float(pr.conv_val or 0)
+                    roas = round(conv_val / spend, 2) if spend > 0 else None
                     entry = {
                         "product_id": pr.product_item_id,
                         "title": pr.product_title or "Unknown",
-                        # Product-level spend is not reliable/available for this view.
-                        "spend": None,
+                        "spend": round(spend, 2),
                         "clicks": clicks,
                         "conversions": round(conv, 1),
-                        "roas": None,
+                        "roas": roas,
                     }
                     product_perf.append(entry)
-                    # "Wasted spend" should only be shown when spend is known and meaningful.
-                    if entry.get("spend") is not None and entry["spend"] > 50 and conv == 0:
+                    if spend > 50 and conv == 0:
                         wasted.append(entry)
                     # Separate non-monetary signal: high click volume but zero conversions.
                     if clicks > 50 and conv == 0:

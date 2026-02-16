@@ -63,10 +63,11 @@ class BrandDiagnosisEngine:
 
     # ── public entry point ─────────────────────────────────────
 
-    def diagnose(self, brand: str, period_days: int = 30) -> Dict:
-        now = datetime.utcnow()
-        cur_end = now
-        cur_start = now - timedelta(days=period_days)
+    def diagnose(self, brand: str, period_days: int = 30,
+                 cur_end: datetime = None) -> Dict:
+        if cur_end is None:
+            cur_end = datetime.utcnow()
+        cur_start = cur_end - timedelta(days=period_days)
         yoy_end = cur_end - timedelta(days=365)
         yoy_start = cur_start - timedelta(days=365)
 
@@ -170,11 +171,32 @@ class BrandDiagnosisEngine:
         mechanical_explained = volume_effect + price_effect + product_mix_effect
         residual = delta - mechanical_explained
 
-        # Allocate residual to soft signals proportionally by evidence strength
-        ads_signal = self._ads_signal_strength(ads_diag)
-        demand_signal = self._demand_signal_strength(demand_diag)
-        conversion_signal = self._conversion_signal_strength(funnel_diag)
-        fulfilment_signal = self._fulfilment_signal_strength(fulfilment_diag)
+        # Allocate residual to soft signals proportionally by evidence strength.
+        # Use uncapped scores so different-magnitude signals don't collapse to
+        # the same allocation.  Also zero-out signals whose direction contradicts
+        # the residual (e.g. conversion improved but residual is negative).
+        ads_signal_raw = self._ads_signal_strength(ads_diag, cap=False)
+        demand_signal_raw = self._demand_signal_strength(demand_diag, cap=False)
+        conversion_signal_raw = self._conversion_signal_strength(funnel_diag, cap=False)
+        fulfilment_signal_raw = self._fulfilment_signal_strength(fulfilment_diag, cap=False)
+
+        # Directional gating: if the residual is negative, only signals whose
+        # underlying change is also negative should absorb it (and vice-versa).
+        # Use `or 0` because diag dicts may store None as an explicit value.
+        _ag = lambda d, k: (d or {}).get(k) or 0
+        ads_dir = -1 if _ag(ads_diag, "roas_change_pct") < 0 or _ag(ads_diag, "spend_change_pct") < -10 else 1
+        demand_dir = 1 if _ag(demand_diag, "clicks_yoy_pct") >= 0 else -1
+        conv_v2c = _ag(funnel_diag, "view_to_cart_change_pp")
+        conv_c2p = _ag(funnel_diag, "cart_to_purchase_change_pp")
+        conversion_dir = 1 if (conv_v2c + conv_c2p) >= 0 else -1
+        fulfilment_dir = -1 if (_ag(fulfilment_diag, "refund_rate_change_pp") > 0 or _ag(fulfilment_diag, "cancellation_rate_change_pp") > 0) else 1
+
+        residual_dir = -1 if residual < 0 else 1
+        # Zero out signals that point in the opposite direction of the residual
+        ads_signal = ads_signal_raw if ads_dir == residual_dir else 0.0
+        demand_signal = demand_signal_raw if demand_dir == residual_dir else 0.0
+        conversion_signal = conversion_signal_raw if conversion_dir == residual_dir else 0.0
+        fulfilment_signal = fulfilment_signal_raw if fulfilment_dir == residual_dir else 0.0
 
         total_signal = ads_signal + demand_signal + conversion_signal + fulfilment_signal
 
@@ -226,25 +248,25 @@ class BrandDiagnosisEngine:
                 "dollars": round(ads_alloc, 2),
                 "pct_of_change": _contrib_pct(ads_alloc),
                 "direction": "positive" if ads_alloc >= 0 else "negative",
-                "confidence": "high" if ads_signal > 0.6 else ("medium" if ads_signal > 0.2 else "low"),
+                "confidence": "high" if min(ads_signal_raw, 1) > 0.6 else ("medium" if min(ads_signal_raw, 1) > 0.2 else "low"),
             },
             "demand": {
                 "dollars": round(demand_alloc, 2),
                 "pct_of_change": _contrib_pct(demand_alloc),
                 "direction": "positive" if demand_alloc >= 0 else "negative",
-                "confidence": "high" if demand_signal > 0.6 else ("medium" if demand_signal > 0.2 else "low"),
+                "confidence": "high" if min(demand_signal_raw, 1) > 0.6 else ("medium" if min(demand_signal_raw, 1) > 0.2 else "low"),
             },
             "conversion": {
                 "dollars": round(conversion_alloc, 2),
                 "pct_of_change": _contrib_pct(conversion_alloc),
                 "direction": "positive" if conversion_alloc >= 0 else "negative",
-                "confidence": "high" if conversion_signal > 0.6 else ("medium" if conversion_signal > 0.2 else "low"),
+                "confidence": "high" if min(conversion_signal_raw, 1) > 0.6 else ("medium" if min(conversion_signal_raw, 1) > 0.2 else "low"),
             },
             "fulfilment_friction": {
                 "dollars": round(fulfilment_alloc, 2),
                 "pct_of_change": _contrib_pct(fulfilment_alloc),
                 "direction": "positive" if fulfilment_alloc >= 0 else "negative",
-                "confidence": "high" if fulfilment_signal > 0.6 else ("medium" if fulfilment_signal > 0.2 else "low"),
+                "confidence": "high" if min(fulfilment_signal_raw, 1) > 0.6 else ("medium" if min(fulfilment_signal_raw, 1) > 0.2 else "low"),
             },
         }
 
@@ -273,7 +295,7 @@ class BrandDiagnosisEngine:
     # Each returns 0.0-1.0 indicating how much evidence the signal
     # provides for explaining residual revenue change.
 
-    def _ads_signal_strength(self, diag) -> float:
+    def _ads_signal_strength(self, diag, cap=True) -> float:
         if not diag:
             return 0.0
         spend_chg = abs(diag.get("spend_change_pct") or 0)
@@ -281,24 +303,28 @@ class BrandDiagnosisEngine:
         has_data = diag.get("cur_spend", 0) > 0 or diag.get("prev_spend", 0) > 0
         if not has_data:
             return 0.0
-        score = min(1.0, (spend_chg / 50) * 0.4 + (roas_chg / 50) * 0.4)
-        # Boost if impression share data shows constraint
+        score = (spend_chg / 50) * 0.4 + (roas_chg / 50) * 0.4
         budget_lost = diag.get("cur_budget_lost") or 0
         rank_lost = diag.get("cur_rank_lost") or 0
         if budget_lost > 10 or rank_lost > 10:
-            score = min(1.0, score + 0.2)
+            score += 0.2
+        if cap:
+            score = min(1.0, score)
         return round(score, 3)
 
-    def _demand_signal_strength(self, diag) -> float:
+    def _demand_signal_strength(self, diag, cap=True) -> float:
         if not diag:
             return 0.0
         clicks_chg = abs(diag.get("clicks_yoy_pct") or 0)
         has_data = (diag.get("cur_clicks", 0) + diag.get("prev_clicks", 0)) > 0
         if not has_data:
             return 0.0
-        return round(min(1.0, clicks_chg / 40), 3)
+        score = clicks_chg / 40
+        if cap:
+            score = min(1.0, score)
+        return round(score, 3)
 
-    def _conversion_signal_strength(self, diag) -> float:
+    def _conversion_signal_strength(self, diag, cap=True) -> float:
         if not diag:
             return 0.0
         v2c_chg = abs(diag.get("view_to_cart_change_pp") or 0)
@@ -306,14 +332,20 @@ class BrandDiagnosisEngine:
         has_data = diag.get("cur_views", 0) > 100
         if not has_data:
             return 0.0
-        return round(min(1.0, (v2c_chg / 5) * 0.5 + (c2p_chg / 3) * 0.5), 3)
+        score = (v2c_chg / 5) * 0.5 + (c2p_chg / 3) * 0.5
+        if cap:
+            score = min(1.0, score)
+        return round(score, 3)
 
-    def _fulfilment_signal_strength(self, diag) -> float:
+    def _fulfilment_signal_strength(self, diag, cap=True) -> float:
         if not diag:
             return 0.0
         refund_chg = abs(diag.get("refund_rate_change_pp") or 0)
         cancel_chg = abs(diag.get("cancellation_rate_change_pp") or 0)
-        return round(min(1.0, (refund_chg / 5) * 0.6 + (cancel_chg / 3) * 0.4), 3)
+        score = (refund_chg / 5) * 0.6 + (cancel_chg / 3) * 0.4
+        if cap:
+            score = min(1.0, score)
+        return round(score, 3)
 
     # ── product mix variance detection ─────────────────────────
 
@@ -1087,9 +1119,15 @@ class BrandDiagnosisEngine:
         """Compute week-over-week trends for revenue, ads, and search."""
         import re as _re
 
+        # Exclude the current (likely partial) week — data may not be fully
+        # synced for the most recent days.  Show only completed Mon-to-Mon
+        # buckets by ending one week before the current Monday.
+        days_since_monday = cur_end.weekday()  # Monday=0
+        current_monday = cur_end - timedelta(days=days_since_monday)
+        last_complete_end = current_monday - timedelta(days=7)
         weeks = []
         for i in range(num_weeks):
-            week_end = cur_end - timedelta(weeks=i)
+            week_end = last_complete_end - timedelta(weeks=i)
             week_start = week_end - timedelta(days=7)
             weeks.append((week_start, week_end))
         weeks.reverse()  # oldest first
@@ -1226,6 +1264,9 @@ class BrandDiagnosisEngine:
     def _classify_trend(self, values) -> str:
         """Classify a series of weekly values into a trend direction."""
         if len(values) < 4:
+            return "insufficient_data"
+        # All zeros or nulls → no meaningful trend
+        if not any(v for v in values if v):
             return "insufficient_data"
 
         changes = []

@@ -1642,11 +1642,14 @@
                         }
                     }
 
-                    // Search clicks sparkline
+                    // Search clicks sparkline — skip if avg weekly clicks < 20 (noise)
                     if (wt.search && wt.search.length) {
                         var srchVals = wt.search.map(function(w) { return w.clicks || 0; });
-                        var srchTrend = (wt.trends || {}).search_clicks || '';
-                        html += renderSparkCard('Search', srchVals, srchTrend, function(v) { return v.toFixed(0); });
+                        var srchTotal = srchVals.reduce(function(a, b) { return a + b; }, 0);
+                        if (srchTotal / srchVals.length >= 20) {
+                            var srchTrend = (wt.trends || {}).search_clicks || '';
+                            html += renderSparkCard('Search', srchVals, srchTrend, function(v) { return v.toFixed(0); });
+                        }
                     }
 
                     html += '</div></div>';
@@ -1983,7 +1986,7 @@
             }
 
             if (d.wasted_spend_products && d.wasted_spend_products.length) {
-                html += '<div style="margin-top:8px;font-size:11px;color:var(--red);font-weight:600">Wasted Spend (spend > $50, 0 conversions):</div>';
+                html += '<div style="margin-top:8px;font-size:11px;color:var(--red);font-weight:600">Low-Converting Products (spend > $50, no attributed conversions):</div>';
                 html += '<table class="product-table"><thead><tr><th>Product</th><th class="num">Spend</th><th class="num">Clicks</th></tr></thead><tbody>';
                 for (var w2 = 0; w2 < d.wasted_spend_products.length; w2++) {
                     var wp = d.wasted_spend_products[w2];

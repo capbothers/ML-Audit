@@ -52,10 +52,13 @@ async def get_brand_detail(
         service = BrandIntelligenceService(db)
         data = service.get_brand_detail(brand_name=brand, period_days=days)
 
-        # Attach ML-ready diagnosis in parallel to existing WHY analysis
+        # Attach ML-ready diagnosis — use the same anchored period end
+        # as get_brand_detail() so all panels describe the same window.
         try:
+            from datetime import datetime as _dt
+            anchored_end = _dt.fromisoformat(data["current_end"])
             engine = BrandDiagnosisEngine(db)
-            data["diagnosis"] = engine.diagnose(brand, period_days=days)
+            data["diagnosis"] = engine.diagnose(brand, period_days=days, cur_end=anchored_end)
         except Exception as diag_err:
             log.error(f"Diagnosis engine failed for {brand}: {diag_err}")
             data["diagnosis"] = None

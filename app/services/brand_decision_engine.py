@@ -19,15 +19,22 @@ class BrandDecisionEngine:
         self.intel = BrandIntelligenceService(db)
         self.diagnosis = BrandDiagnosisEngine(db)
 
-    def decide(self, brand: str, period_days: int = 30) -> Dict:
-        now = datetime.utcnow()
-        cur_start = now - timedelta(days=period_days)
-        cur_end = now
+    def decide(self, brand: str, period_days: int = 30,
+               cur_end: datetime = None) -> Dict:
+        # Anchor to the same period end that BrandIntelligenceService uses
+        # (latest Shopify order date) so all panels describe the same window.
+        if cur_end is None:
+            from app.models.shopify import ShopifyOrderItem
+            from sqlalchemy import func as _func
+            cur_end = self.db.query(_func.max(ShopifyOrderItem.order_date)).scalar()
+            if cur_end is None:
+                cur_end = datetime.utcnow()
+        cur_start = cur_end - timedelta(days=period_days)
         period_label = f"{cur_start.strftime('%Y-%m-%d')} to {cur_end.strftime('%Y-%m-%d')}"
 
         detail = self.intel.get_brand_detail(brand_name=brand, period_days=period_days)
         try:
-            diag = self.diagnosis.diagnose(brand, period_days=period_days)
+            diag = self.diagnosis.diagnose(brand, period_days=period_days, cur_end=cur_end)
         except Exception as e:
             log.error(f"Decision engine diagnosis failed for {brand}: {e}")
             diag = None
