@@ -39,6 +39,34 @@ class AdSpendService:
         self.min_product_margin = 0.30  # 30% minimum margin after ads
         self.min_profit_roas = 1.5  # Minimum profit ROAS
 
+    def _get_ads_data_end_date(self) -> date:
+        """Use latest Google Ads row date as analysis boundary to avoid trailing empty days."""
+        max_date = self.db.query(func.max(GoogleAdsCampaign.date)).scalar()
+        return max_date or datetime.utcnow().date()
+
+    def _get_campaigns_for_period(self, days: int) -> List[CampaignPerformance]:
+        """
+        Return active campaign snapshots for the requested period, with fallback
+        to latest available period to avoid empty responses.
+        """
+        campaigns = self.db.query(CampaignPerformance).filter(
+            CampaignPerformance.is_active == True,
+            CampaignPerformance.period_days == days
+        ).all()
+        if campaigns:
+            return campaigns
+
+        latest_period = self.db.query(func.max(CampaignPerformance.period_days)).filter(
+            CampaignPerformance.is_active == True
+        ).scalar()
+        if not latest_period:
+            return []
+
+        return self.db.query(CampaignPerformance).filter(
+            CampaignPerformance.is_active == True,
+            CampaignPerformance.period_days == latest_period
+        ).all()
+
     async def analyze_all_campaigns(self, days: int = 30) -> Dict:
         """
         Complete ad spend analysis
@@ -104,26 +132,8 @@ class AdSpendService:
         log.info("Getting campaign performance")
 
         # Try exact period match first, then fall back to any active campaigns
-        campaigns = self.db.query(CampaignPerformance).filter(
-            CampaignPerformance.is_active == True,
-            CampaignPerformance.period_days == days
-        ).order_by(
-            desc(CampaignPerformance.true_profit)
-        ).all()
-
-        if not campaigns:
-            # Fall back to most recent period available
-            from sqlalchemy import func
-            latest_period = self.db.query(func.max(CampaignPerformance.period_days)).filter(
-                CampaignPerformance.is_active == True
-            ).scalar()
-            if latest_period:
-                campaigns = self.db.query(CampaignPerformance).filter(
-                    CampaignPerformance.is_active == True,
-                    CampaignPerformance.period_days == latest_period
-                ).order_by(
-                    desc(CampaignPerformance.true_profit)
-                ).all()
+        campaigns = self._get_campaigns_for_period(days)
+        campaigns = sorted(campaigns, key=lambda c: c.true_profit or 0, reverse=True)
 
         results = []
 
@@ -621,13 +631,12 @@ class AdSpendService:
         """
         log.info(f"Calculating deep metrics for last {days} days")
 
-        cutoff_current = datetime.utcnow() - timedelta(days=days)
-        cutoff_prior = datetime.utcnow() - timedelta(days=days * 2)
+        end_date = self._get_ads_data_end_date()
+        cutoff_current = end_date - timedelta(days=days - 1)
+        cutoff_prior = end_date - timedelta(days=(days * 2) - 1)
 
         # Get active campaigns from campaign_performance
-        campaigns = self.db.query(CampaignPerformance).filter(
-            CampaignPerformance.is_active == True
-        ).all()
+        campaigns = self._get_campaigns_for_period(days)
 
         if not campaigns:
             return []
@@ -640,14 +649,14 @@ class AdSpendService:
             # Current period daily rows
             current_rows = self.db.query(GoogleAdsCampaign).filter(
                 GoogleAdsCampaign.campaign_id == cid,
-                GoogleAdsCampaign.date >= cutoff_current.date()
+                GoogleAdsCampaign.date >= cutoff_current
             ).all()
 
             # Prior period daily rows
             prior_rows = self.db.query(GoogleAdsCampaign).filter(
                 GoogleAdsCampaign.campaign_id == cid,
-                GoogleAdsCampaign.date >= cutoff_prior.date(),
-                GoogleAdsCampaign.date < cutoff_current.date()
+                GoogleAdsCampaign.date >= cutoff_prior,
+                GoogleAdsCampaign.date < cutoff_current
             ).all()
 
             def _aggregate(rows):
@@ -727,9 +736,7 @@ class AdSpendService:
         """
         log.info(f"Calculating health scores for last {days} days")
 
-        campaigns = self.db.query(CampaignPerformance).filter(
-            CampaignPerformance.is_active == True
-        ).all()
+        campaigns = self._get_campaigns_for_period(days)
 
         if not campaigns:
             return []
@@ -750,7 +757,8 @@ class AdSpendService:
             count_below = sum(1 for v in sorted_list if v < value)
             return count_below / len(sorted_list)
 
-        cutoff = datetime.utcnow() - timedelta(days=14)
+        end_date = self._get_ads_data_end_date()
+        cutoff = end_date - timedelta(days=13)
 
         results = []
 
@@ -768,7 +776,7 @@ class AdSpendService:
             # CPC trend score (0-15): based on last 2 weeks of daily data
             recent_rows = self.db.query(GoogleAdsCampaign).filter(
                 GoogleAdsCampaign.campaign_id == cid,
-                GoogleAdsCampaign.date >= cutoff.date()
+                GoogleAdsCampaign.date >= cutoff
             ).order_by(GoogleAdsCampaign.date).all()
 
             cpc_trend_score = 10  # default stable
@@ -797,12 +805,12 @@ class AdSpendService:
                         cpc_trend_score = 10  # stable
 
             # Impression share score (0-20)
-            is_cutoff = datetime.utcnow() - timedelta(days=days)
+            is_cutoff = end_date - timedelta(days=days - 1)
             is_rows = self.db.query(
                 func.avg(GoogleAdsCampaign.search_impression_share)
             ).filter(
                 GoogleAdsCampaign.campaign_id == cid,
-                GoogleAdsCampaign.date >= is_cutoff.date(),
+                GoogleAdsCampaign.date >= is_cutoff,
                 GoogleAdsCampaign.search_impression_share.isnot(None)
             ).scalar()
 
@@ -866,9 +874,7 @@ class AdSpendService:
         """
         log.info(f"Calculating concentration risk for last {days} days")
 
-        campaigns = self.db.query(CampaignPerformance).filter(
-            CampaignPerformance.is_active == True
-        ).all()
+        campaigns = self._get_campaigns_for_period(days)
 
         if not campaigns:
             return {
@@ -936,9 +942,7 @@ class AdSpendService:
 
         overhead_per_order = FinanceService(self.db).get_latest_overhead_per_order()
 
-        campaigns = self.db.query(CampaignPerformance).filter(
-            CampaignPerformance.is_active == True
-        ).all()
+        campaigns = self._get_campaigns_for_period(days)
 
         if not campaigns:
             return []
@@ -993,14 +997,15 @@ class AdSpendService:
         """
         log.info(f"Analyzing diminishing returns for last {days} days")
 
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        end_date = self._get_ads_data_end_date()
+        cutoff = end_date - timedelta(days=days - 1)
 
         # Get distinct campaign IDs that have data
         campaign_ids = self.db.query(
             GoogleAdsCampaign.campaign_id,
             GoogleAdsCampaign.campaign_name
         ).filter(
-            GoogleAdsCampaign.date >= cutoff.date()
+            GoogleAdsCampaign.date >= cutoff
         ).group_by(
             GoogleAdsCampaign.campaign_id,
             GoogleAdsCampaign.campaign_name
@@ -1011,7 +1016,7 @@ class AdSpendService:
         for cid, cname in campaign_ids:
             rows = self.db.query(GoogleAdsCampaign).filter(
                 GoogleAdsCampaign.campaign_id == cid,
-                GoogleAdsCampaign.date >= cutoff.date()
+                GoogleAdsCampaign.date >= cutoff
             ).all()
 
             if len(rows) < 14:
@@ -1101,10 +1106,11 @@ class AdSpendService:
         """
         log.info(f"Calculating competitor pressure for last {days} days")
 
-        now = datetime.utcnow()
-        current_start = (now - timedelta(days=30)).date()
-        prior_start = (now - timedelta(days=60)).date()
+        end_date = self._get_ads_data_end_date()
+        window_days = max(14, days // 2)
+        current_start = end_date - timedelta(days=window_days - 1)
         prior_end = current_start
+        prior_start = prior_end - timedelta(days=window_days)
 
         # Get campaigns with search_rank_lost_impression_share data
         campaign_ids = self.db.query(
@@ -1212,9 +1218,7 @@ class AdSpendService:
         """
         log.info(f"Comparing campaign types for last {days} days")
 
-        campaigns = self.db.query(CampaignPerformance).filter(
-            CampaignPerformance.is_active == True
-        ).all()
+        campaigns = self._get_campaigns_for_period(days)
 
         if not campaigns:
             return {'types': [], 'best_type': None, 'recommendation': 'No campaign data available.'}
@@ -1285,13 +1289,14 @@ class AdSpendService:
         """
         log.info(f"Detecting anomalies for last {days} days")
 
-        cutoff = datetime.utcnow() - timedelta(days=21)  # 3 weeks
+        end_date = self._get_ads_data_end_date()
+        cutoff = end_date - timedelta(days=days - 1)
 
         campaign_ids = self.db.query(
             GoogleAdsCampaign.campaign_id,
             GoogleAdsCampaign.campaign_name
         ).filter(
-            GoogleAdsCampaign.date >= cutoff.date()
+            GoogleAdsCampaign.date >= cutoff
         ).group_by(
             GoogleAdsCampaign.campaign_id,
             GoogleAdsCampaign.campaign_name
@@ -1302,7 +1307,7 @@ class AdSpendService:
         for cid, cname in campaign_ids:
             rows = self.db.query(GoogleAdsCampaign).filter(
                 GoogleAdsCampaign.campaign_id == cid,
-                GoogleAdsCampaign.date >= cutoff.date()
+                GoogleAdsCampaign.date >= cutoff
             ).order_by(GoogleAdsCampaign.date).all()
 
             if not rows:
@@ -1408,10 +1413,11 @@ class AdSpendService:
         """
         log.info(f"Forecasting performance from last {days} days")
 
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        end_date = self._get_ads_data_end_date()
+        cutoff = end_date - timedelta(days=days - 1)
 
         rows = self.db.query(GoogleAdsCampaign).filter(
-            GoogleAdsCampaign.date >= cutoff.date()
+            GoogleAdsCampaign.date >= cutoff
         ).order_by(GoogleAdsCampaign.date).all()
 
         if not rows:
@@ -1543,9 +1549,7 @@ class AdSpendService:
         """
         log.info(f"Calculating Google vs reality for last {days} days")
 
-        campaigns = self.db.query(CampaignPerformance).filter(
-            CampaignPerformance.is_active == True
-        ).all()
+        campaigns = self._get_campaigns_for_period(days)
 
         if not campaigns:
             return {

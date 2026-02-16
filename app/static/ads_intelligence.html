@@ -425,11 +425,18 @@
             if (abs >= 1000) return (n < 0 ? '-' : '') + '$' + (abs / 1000).toFixed(1) + 'k';
             return '$' + Math.round(n).toLocaleString();
         }
+        function parseMoney(v) {
+            if (v == null) return null;
+            if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+            const cleaned = String(v).replace(/[^0-9.-]/g, '');
+            const parsed = parseFloat(cleaned);
+            return Number.isFinite(parsed) ? parsed : null;
+        }
         function trendArrow(trend) {
             if (trend == null) return '<span class="flat">--</span>';
             if (typeof trend === 'string') {
-                if (trend === 'up' || trend === 'increasing') return '<span class="up">&#9650;</span>';
-                if (trend === 'down' || trend === 'decreasing') return '<span class="down">&#9660;</span>';
+                if (trend === 'up' || trend === 'increasing' || trend === 'rising' || trend === 'growing') return '<span class="up">&#9650;</span>';
+                if (trend === 'down' || trend === 'decreasing' || trend === 'falling' || trend === 'declining') return '<span class="down">&#9660;</span>';
                 return '<span class="flat">&#9654;</span>';
             }
             if (trend > 0.02) return '<span class="up">&#9650; +' + (trend * 100).toFixed(1) + '%</span>';
@@ -719,7 +726,7 @@
                     </div>
                     <div class="scorecard-metrics">
                         <div class="scorecard-metric"><div class="scorecard-metric-label">CPA</div><div class="scorecard-metric-value">${cpa != null ? fmt(cpa) : (perf.avg_cpc ? fmt(perf.avg_cpc) : '--')}</div></div>
-                        <div class="scorecard-metric"><div class="scorecard-metric-label">CTR</div><div class="scorecard-metric-value">${perf.ctr != null ? fmtPct(perf.ctr * 100) : (dm?.metrics?.ctr != null ? fmtPct(dm.metrics.ctr) : '--')}</div></div>
+                        <div class="scorecard-metric"><div class="scorecard-metric-label">CTR</div><div class="scorecard-metric-value">${perf.ctr != null ? fmtPct(perf.ctr) : (dm?.metrics?.ctr != null ? fmtPct(dm.metrics.ctr * 100) : '--')}</div></div>
                         <div class="scorecard-metric"><div class="scorecard-metric-label">Conv Rate</div><div class="scorecard-metric-value">${convRate != null ? fmtPct(convRate) : '--'}</div></div>
                     </div>
                     ${flProfit != null ? `
@@ -812,7 +819,11 @@
             const kpiEl = document.getElementById('concentration-kpis');
             if (!conc) { kpiEl.innerHTML = '<div class="section-empty">No concentration data</div>'; return; }
 
-            const riskClass = conc.risk_level === 'high' ? 'risk-high' : conc.risk_level === 'moderate' ? 'risk-moderate' : 'risk-low';
+            const riskClass = (conc.risk_level === 'critical' || conc.risk_level === 'high')
+                ? 'risk-high'
+                : (conc.risk_level === 'medium' || conc.risk_level === 'moderate')
+                    ? 'risk-moderate'
+                    : 'risk-low';
             kpiEl.innerHTML = `
                 <div class="concentration-kpi">
                     <div class="label">HHI Score</div>
@@ -896,7 +907,7 @@
                 html += `<td class="${winners.total_profit === i ? 'winner' : ''}" style="color:${(t.total_profit || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtMoney(t.total_profit)}</td>`;
                 html += `<td class="${winners.avg_roas === i ? 'winner' : ''}">${fmtRoas(t.avg_roas)}</td>`;
                 html += `<td class="${winners.avg_cpc === i ? 'winner' : ''}">${t.avg_cpc != null ? '$' + t.avg_cpc.toFixed(2) : '--'}</td>`;
-                html += `<td class="${winners.avg_ctr === i ? 'winner' : ''}">${fmtPct(t.avg_ctr)}</td>`;
+                html += `<td class="${winners.avg_ctr === i ? 'winner' : ''}">${fmtPct((t.avg_ctr || 0) * 100)}</td>`;
                 html += `<td class="${winners.total_conversions === i ? 'winner' : ''}">${t.total_conversions != null ? Math.round(t.total_conversions).toLocaleString() : '--'}</td>`;
                 html += '</tr>';
             });
@@ -1107,7 +1118,7 @@
                         <div class="qw-desc">${qw.description || ''}</div>
                         <div class="qw-action">${qw.action || ''}</div>
                         <div class="qw-meta">
-                            <span class="qw-savings">${qw.savings ? fmtMoney(typeof qw.savings === 'number' ? qw.savings : parseFloat(qw.savings)) || qw.savings : ''}</span>
+                            <span class="qw-savings">${qw.savings ? (parseMoney(qw.savings) != null ? fmtMoney(parseMoney(qw.savings)) : qw.savings) : ''}</span>
                             <span class="qw-effort">${qw.effort || ''}</span>
                         </div>
                     </div>`;

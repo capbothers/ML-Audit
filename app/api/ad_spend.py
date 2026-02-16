@@ -21,6 +21,12 @@ from datetime import date, timedelta
 router = APIRouter(prefix="/ads", tags=["ads"])
 
 
+def _get_ads_period_end(db: Session) -> date:
+    """Anchor ad analysis windows to latest ingested Google Ads date."""
+    latest = db.query(func.max(GoogleAdsCampaign.date)).scalar()
+    return latest or date.today()
+
+
 @router.post("/process")
 def process_ad_spend_data(
     days: int = Query(30, description="Number of trailing days to process"),
@@ -397,7 +403,7 @@ async def get_campaign_trends(
     and impression share data grouped by week.
     """
     try:
-        period_end = date.today()
+        period_end = _get_ads_period_end(db)
         period_start = period_end - timedelta(days=days)
 
         query = db.query(
@@ -483,7 +489,7 @@ async def get_impression_share_analysis(
     with month-over-month comparison and flags for declining share.
     """
     try:
-        period_end = date.today()
+        period_end = _get_ads_period_end(db)
         period_start = period_end - timedelta(days=days)
 
         # Also get prior period for comparison
