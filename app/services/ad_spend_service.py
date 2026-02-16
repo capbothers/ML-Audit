@@ -1433,6 +1433,8 @@ class AdSpendService:
 
             weekly_spend = curr['spend']
             for anomaly in anomalies_found:
+                # Impact score: magnitude * spend (higher = more material)
+                impact = abs(anomaly['change_pct']) * weekly_spend / 100
                 results.append({
                     'campaign_id': cid,
                     'campaign_name': cname,
@@ -1444,13 +1446,36 @@ class AdSpendService:
                     'interpretation': anomaly['interpretation'],
                     'sentiment': anomaly['sentiment'],
                     'weekly_spend': round(weekly_spend, 2),
+                    'impact_score': round(impact, 2),
                 })
 
-        # Sort: negative anomalies from high-spend campaigns first, positive last
-        _sent_rank = {'negative': 0, 'neutral': 1, 'positive': 2}
-        results.sort(key=lambda a: (_sent_rank.get(a['sentiment'], 1), -(a.get('weekly_spend') or 0)))
+        # Look up strategy types to deprioritize unknown/zombie campaigns
+        from app.models.ad_spend import CampaignPerformance as CP
+        strat_map = {
+            r.campaign_id: r.strategy_type
+            for r in self.db.query(CP.campaign_id, CP.strategy_type).filter(
+                CP.strategy_type.isnot(None)
+            ).all()
+        }
+        for a in results:
+            a['strategy_type'] = strat_map.get(a['campaign_id'])
+            a['is_material'] = (
+                a['sentiment'] != 'positive'
+                and a['impact_score'] >= 5
+                and a.get('strategy_type') != 'unknown'
+            )
 
-        log.info(f"Detected {len(results)} anomalies")
+        # Sort: material negative first (by impact), then non-material, then positive
+        def _sort_key(a):
+            if a['is_material']:
+                return (0, -a['impact_score'])
+            elif a['sentiment'] != 'positive':
+                return (1, -a['impact_score'])
+            else:
+                return (2, -a['impact_score'])
+        results.sort(key=_sort_key)
+
+        log.info(f"Detected {len(results)} anomalies ({sum(1 for a in results if a['is_material'])} material)")
         return results
 
     async def forecast_performance(self, days: int = 90) -> Dict:

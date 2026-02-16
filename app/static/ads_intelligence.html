@@ -500,23 +500,47 @@
             const el = document.getElementById('alert-banner');
             if (!anomalies?.length) { el.innerHTML = ''; return; }
 
-            // Backend sorts: negative high-spend first, positive last
-            const negative = anomalies.filter(a => a.sentiment !== 'positive');
-            const allPositive = negative.length === 0;
+            // Backend sorts: material negative first, then non-material, then positive
+            const material = anomalies.filter(a => a.is_material);
+            const totalImpact = material.reduce((s, a) => s + (a.impact_score || 0), 0);
 
-            let cls, icon;
-            if (allPositive) { cls = 'severity-positive'; icon = '\u2713'; }
-            else if (negative.some(a => a.severity === 'critical')) { cls = 'severity-high'; icon = '\u26A0'; }
-            else { cls = 'severity-medium'; icon = '\u26A0'; }
+            // No material anomalies? Show green or muted banner
+            if (!material.length) {
+                const allPositive = anomalies.every(a => a.sentiment === 'positive');
+                if (allPositive) {
+                    const lead = anomalies[0];
+                    el.innerHTML = `
+                        <div class="alert-banner severity-positive" id="alert-banner-inner">
+                            <span>\u2713 <strong>${anomalies.length} positive change${anomalies.length === 1 ? '' : 's'}:</strong> ${lead.campaign_name ? lead.campaign_name + ': ' : ''}${lead.interpretation}</span>
+                            <button class="dismiss-btn" onclick="document.getElementById('alert-banner-inner').remove()">\u2715</button>
+                        </div>`;
+                } else {
+                    el.innerHTML = '';  // No material anomalies, no positive — hide banner
+                }
+                return;
+            }
 
-            // Headline: show campaign name for context
-            const lead = negative.length > 0 ? negative[0] : anomalies[0];
-            const headline = (lead.campaign_name ? lead.campaign_name + ': ' : '') + lead.interpretation;
-            const extra = anomalies.length - 1;
+            const cls = material.some(a => a.severity === 'critical') ? 'severity-high' : 'severity-medium';
+
+            // Show top 1-3 material anomalies
+            const top = material.slice(0, 3);
+            const headlines = top.map(a => (a.campaign_name ? a.campaign_name + ': ' : '') + a.interpretation);
+            const remaining = anomalies.length - top.length;
+
+            const detailId = 'anomaly-detail-list';
+            const showAllBtn = remaining > 0 ? ` <button style="background:none;border:none;text-decoration:underline;cursor:pointer;color:inherit;font-size:12px" onclick="document.getElementById('${detailId}').style.display=document.getElementById('${detailId}').style.display==='none'?'block':'none'">(${remaining} more)</button>` : '';
+
+            // Build hidden detail list for remaining anomalies
+            const detailItems = anomalies.slice(top.length).map(a => `<li style="margin:2px 0">${a.campaign_name}: ${a.interpretation}${a.sentiment === 'positive' ? ' \u2713' : ''}</li>`).join('');
+            const detailList = remaining > 0 ? `<ul id="${detailId}" style="display:none;margin:6px 0 0 24px;padding:0;font-size:12px;list-style:disc">${detailItems}</ul>` : '';
 
             el.innerHTML = `
                 <div class="alert-banner ${cls}" id="alert-banner-inner">
-                    <span>${icon} <strong>${anomalies.length} anomal${anomalies.length === 1 ? 'y' : 'ies'} detected:</strong> ${headline}${extra > 0 ? ' (and ' + extra + ' more)' : ''}</span>
+                    <div style="flex:1">
+                        <div>\u26A0 <strong>${material.length} material anomal${material.length === 1 ? 'y' : 'ies'}</strong> | Est. weekly impact: ${fmt(totalImpact)}${showAllBtn}</div>
+                        <div style="margin-top:4px;font-size:12px">${headlines.join(' &bull; ')}</div>
+                        ${detailList}
+                    </div>
                     <button class="dismiss-btn" onclick="document.getElementById('alert-banner-inner').remove()">\u2715</button>
                 </div>
             `;

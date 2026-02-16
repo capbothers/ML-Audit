@@ -603,6 +603,7 @@ async def get_enhanced_dashboard(
         })
 
         # Cross-reference strategy vs diminishing returns — auto-downgrade action
+        # Only override when overspend is material: >$50/day or >20% above optimal
         dr_overspend = {dr['campaign_id']: dr for dr in diminishing if dr.get('overspend_per_day', 0) > 0}
         for c in campaigns:
             strat = c.get('strategy')
@@ -610,13 +611,24 @@ async def get_enhanced_dashboard(
                 continue
             dr = dr_overspend.get(c['campaign_id'])
             if dr and strat['action'] in ('scale', 'scale_aggressively'):
-                strat['original_action'] = strat['action']
-                strat['action'] = 'investigate'
-                strat['conflict_note'] = (
-                    f"Diminishing returns suggests overspending by "
-                    f"${dr['overspend_per_day']:.0f}/day \u2014 downgraded from "
-                    f"{strat['original_action'].replace('_', ' ')} to investigate."
-                )
+                overspend = dr.get('overspend_per_day', 0)
+                optimal = dr.get('optimal_daily_spend', 0)
+                pct_over = (overspend / optimal) if optimal > 0 else 0
+                is_material = overspend > 50 or pct_over > 0.20
+                if is_material:
+                    strat['original_action'] = strat['action']
+                    strat['action'] = 'investigate'
+                    strat['conflict_note'] = (
+                        f"Diminishing returns suggests overspending by "
+                        f"${overspend:.0f}/day ({pct_over:.0%} above optimal) "
+                        f"\u2014 downgraded from "
+                        f"{strat['original_action'].replace('_', ' ')} to investigate."
+                    )
+                else:
+                    strat['conflict_note'] = (
+                        f"Minor diminishing returns detected (${overspend:.0f}/day over optimal) "
+                        f"\u2014 monitoring, no action override."
+                    )
 
         # Summary
         total_spend = sum(c.get('spend', 0) for c in campaigns)
