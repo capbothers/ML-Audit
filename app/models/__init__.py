@@ -199,3 +199,8 @@ from app.models.shippit import ShippitOrder
 
 from app.models.site_health import SiteHealthEvent
 from app.models.user import User, UserSession
+
+from app.models.competitor_blog import (
+    CompetitorSite,
+    CompetitorArticle
+)

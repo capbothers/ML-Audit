@@ -213,8 +213,8 @@ class BrandDecisionEngine:
             evidence = self._build_evidence(r, detail_diag)
             action = r.get("action") or ""
 
-            # Enrich "lost products" action with top SKUs
-            if cat == "assortment" and "lost" in action.lower() and lost_sku_lines:
+            # Enrich "lost products" action with top SKUs (skip if already present)
+            if cat == "assortment" and "lost" in action.lower() and lost_sku_lines and "Top lost:" not in action:
                 action += " Top lost: " + ", ".join(lost_sku_lines) + "."
 
             actions.append({
@@ -337,11 +337,7 @@ class BrandDecisionEngine:
         if v2c is not None and v2c < 3:
             deps.append(f"Resolve conversion friction ({v2c:.1f}% add-to-cart) before scaling traffic")
 
-        stock_model = (diag or {}).get("stock_model") or {}
-        if stock_model.get("gate_passed"):
-            oos_ct = stock_model.get("oos_count", 0)
-            total_skus = stock_model.get("total_skus", 0)
-            deps.append(f"Address {oos_ct} of {total_skus} out-of-stock SKU(s) before advertising pushes")
+        # Note: OOS dependency removed — business rule is "we sell when out of stock"
 
         return {
             "strategy": strategy,
@@ -544,9 +540,9 @@ class BrandDecisionEngine:
 
         search_trend = trends.get("search_clicks", "")
         if search_trend in ("accelerating_decline", "declining"):
-            parts.append("Branded search demand weakening")
+            parts.append("Branded search clicks softening in recent weeks (may differ from YoY trend)")
         elif search_trend in ("recovering", "accelerating_growth"):
-            parts.append("Branded search demand strengthening")
+            parts.append("Branded search clicks strengthening in recent weeks")
 
         return ". ".join(parts)
 

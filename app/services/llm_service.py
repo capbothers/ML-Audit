@@ -17,6 +17,30 @@ from app.utils.logger import log
 
 settings = get_settings()
 
+# Key brands Cass Brothers stocks — used in all blog generation prompts
+# to ensure the LLM promotes the right brands
+CASS_BROTHERS_KEY_BRANDS = [
+    "Phoenix Tapware", "Nero Tapware", "Caroma", "Fienza", "Parisi",
+    "Villeroy & Boch", "Oliveri", "Franke", "Hansgrohe", "Zip",
+    "Argent", "Timberline", "Avenir", "Puretec", "Thermogroup",
+    "Cassa Design", "Greens", "Gareth Ashton", "Brodware",
+    "Turner Hastings", "Studio Bagno", "Duravit", "Kaldewei",
+    "Abey", "Pietra Bianca", "Rifco", "Velux", "Gessi", "Verotti",
+]
+
+
+def _blog_context_preamble() -> str:
+    """Shared preamble for all blog-related LLM prompts: current year + brand list."""
+    year = datetime.now().year
+    brands = ", ".join(CASS_BROTHERS_KEY_BRANDS[:20])
+    return (
+        f"IMPORTANT: The current year is {year}. All references to years, trends, "
+        f"or time-sensitive content MUST use {year} (not 2024 or 2025).\n\n"
+        f"KEY BRANDS WE STOCK: {brands}.\n"
+        f"When mentioning products or brands, reference these brands by name where relevant. "
+        f"Prioritise featuring these brands in product recommendations and examples.\n"
+    )
+
 
 class LLMService:
     """
@@ -2514,7 +2538,10 @@ Prioritize by revenue impact. A 404 causing $2,000/month loss should be fixed be
                         context += f" — /products/{p['handle']}"
                     context += "\n"
 
-            prompt = f"""You are an expert SEO content writer for an Australian e-commerce site that sells bathroom, kitchen and plumbing products.
+            preamble = _blog_context_preamble()
+            prompt = f"""You are an expert SEO content writer for Cass Brothers, an Australian e-commerce site that sells bathroom, kitchen and plumbing products.
+
+{preamble}
 
 {context}
 
@@ -2522,7 +2549,7 @@ Write a COMPLETE blog post (1200-1800 words) optimized for the target query.
 
 Return your response in this EXACT format:
 
-TITLE: [SEO-optimized title, 55-60 chars, include target keyword]
+TITLE: [SEO-optimized title, 55-60 chars, include target keyword. Use {datetime.now().year} if referencing year/trends]
 
 META_DESCRIPTION: [Compelling meta description, 150-155 chars, include target keyword]
 
@@ -2547,6 +2574,7 @@ CONTENT:
 Naturally integrate the target keyword 3-5 times.
 Include a FAQ section with 3-4 common questions.
 Reference relevant products with links where natural.
+Mention specific brands we stock by name (e.g. Phoenix Tapware, Caroma, Fienza).
 Write for Australian audience (favour, colour, etc.).
 Include specific, helpful information — not generic filler.
 End with a clear call-to-action.]
@@ -2559,7 +2587,8 @@ Requirements:
 5. Include FAQ schema-ready questions
 6. Australian English spelling
 7. Actionable, helpful content that answers searcher intent
-8. End with CTA linking to relevant product category"""
+8. Feature specific brands from our range (not generic "brand X")
+9. End with CTA linking to relevant product category"""
 
             response = self.client.messages.create(
                 model=settings.llm_model,
@@ -2663,6 +2692,213 @@ Requirements:
 
         return result
 
+    def suggest_competitor_ideas(
+        self,
+        competitor_title: str,
+        competitor_content: str,
+        competitor_site: str,
+        competitor_url: str,
+        product_context: List[Dict],
+        num_ideas: int = 4,
+    ) -> Optional[List[Dict]]:
+        """
+        Analyse a competitor blog post and suggest original content ideas
+        inspired by it — each with a different angle.
+
+        Returns list of dicts with: title, angle, rationale, target_keywords, difficulty
+        """
+        if not self.enabled:
+            return None
+
+        try:
+            comp_text = competitor_content[:3000] if competitor_content else ""
+
+            products_str = ""
+            if product_context:
+                products_str = "\nOUR PRODUCT RANGE INCLUDES:\n"
+                for p in product_context[:10]:
+                    products_str += f"- {p['title']} ({p.get('vendor', '')})\n"
+
+            preamble = _blog_context_preamble()
+            prompt = f"""You are a content strategist for Cass Brothers, an Australian e-commerce site selling bathroom, kitchen and plumbing products.
+
+{preamble}
+
+A competitor ({competitor_site}) published this blog post:
+TITLE: {competitor_title}
+URL: {competitor_url}
+
+CONTENT SUMMARY:
+{comp_text}
+{products_str}
+
+Based on this competitor article, suggest {num_ideas} DIFFERENT original blog post ideas that Cass Brothers could write. Each idea should:
+1. Be inspired by the same broad topic but take a UNIQUE angle the competitor DIDN'T cover
+2. Be relevant to our product range (bathroom, kitchen, plumbing)
+3. Target different keywords to avoid direct competition
+4. Provide genuine value for Australian homeowners
+5. Mention or feature specific brands we stock (from the list above) where natural
+
+For each idea, return this EXACT JSON format (return a JSON array):
+
+```json
+[
+  {{
+    "title": "Suggested blog title (55-60 chars, use current year if referencing trends/year)",
+    "angle": "One sentence explaining the unique angle",
+    "rationale": "Why this would work well for Cass Brothers (2-3 sentences). What gap does it fill? Which of our brands could we feature?",
+    "target_keywords": ["keyword1", "keyword2", "keyword3"],
+    "content_type": "guide|listicle|comparison|how-to|trend",
+    "difficulty": "easy|medium|hard",
+    "estimated_words": 1200
+  }}
+]
+```
+
+Make the ideas genuinely DIFFERENT from each other — vary the angle, format, and target audience.
+Return ONLY the JSON array, no other text."""
+
+            response = self.client.messages.create(
+                model=settings.llm_model,
+                max_tokens=2000,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            raw = response.content[0].text.strip()
+
+            # Parse JSON from response
+            json_match = re.search(r'\[[\s\S]*\]', raw)
+            if json_match:
+                ideas = json.loads(json_match.group())
+            else:
+                ideas = json.loads(raw)
+
+            # Attach source info to each idea
+            for idea in ideas:
+                idea["source_article"] = {
+                    "title": competitor_title,
+                    "site": competitor_site,
+                    "url": competitor_url,
+                }
+
+            log.info(
+                f"Generated {len(ideas)} content ideas from competitor article: {competitor_title}"
+            )
+            return ideas
+
+        except Exception as e:
+            log.error(f"Error suggesting competitor ideas: {str(e)}")
+            return None
+
+    def generate_from_idea(
+        self,
+        idea_title: str,
+        idea_angle: str,
+        idea_keywords: List[str],
+        competitor_title: str,
+        competitor_url: str,
+        competitor_site: str,
+        product_context: List[Dict],
+        site_url: str,
+    ) -> Optional[Dict]:
+        """
+        Generate a full blog post from a chosen idea (step 2 of competitor spin flow).
+
+        Returns dict with: title, meta_description, slug, content_html, outline,
+        target_keywords, internal_links, word_count
+        """
+        if not self.enabled:
+            return None
+
+        try:
+            context = f'CHOSEN TOPIC: "{idea_title}"\n'
+            context += f"ANGLE: {idea_angle}\n"
+            context += f"TARGET KEYWORDS: {', '.join(idea_keywords)}\n"
+            context += f"INSPIRED BY: {competitor_site} — {competitor_title}\n"
+            context += f"(Competitor URL: {competitor_url})\n"
+            context += f"SITE URL: {site_url}\n"
+
+            if product_context:
+                context += "\nRELEVANT PRODUCTS TO REFERENCE:\n"
+                for p in product_context[:8]:
+                    context += f"- {p['title']} ({p.get('vendor', '')})"
+                    if p.get("handle"):
+                        context += f" — /products/{p['handle']}"
+                    context += "\n"
+
+            preamble = _blog_context_preamble()
+            prompt = f"""You are an expert SEO content writer for Cass Brothers, an Australian e-commerce site that sells bathroom, kitchen and plumbing products.
+
+{preamble}
+
+{context}
+
+Write a COMPLETE blog post (1200-1800 words) taking the specified angle.
+This is NOT a rewrite of the competitor — it's an ORIGINAL piece inspired by the same broad topic.
+
+Return your response in this EXACT format:
+
+TITLE: [SEO-optimized title, 55-60 chars, include target keyword. Use {datetime.now().year} if referencing year/trends]
+
+META_DESCRIPTION: [Compelling meta description, 150-155 chars, include target keyword]
+
+SLUG: [url-friendly-slug]
+
+TARGET_KEYWORDS: [comma-separated list of 5-8 keywords to target]
+
+OUTLINE:
+H2: [First section heading]
+  H3: [Subsection if needed]
+H2: [Second section heading]
+H2: [Third section heading]
+  H3: [Subsection]
+H2: [FAQ or Conclusion]
+
+INTERNAL_LINKS:
+- "anchor text" -> /products/handle (reason: relevant product)
+- "anchor text" -> /collections/category (reason: category page)
+
+CONTENT:
+[Full blog post in HTML format with <h2>, <h3>, <p>, <ul>, <ol>, <strong> tags.
+Naturally integrate the target keywords 3-5 times.
+Include a FAQ section with 3-4 common questions.
+Reference relevant products with links where natural.
+Mention specific brands we stock by name (e.g. Phoenix Tapware, Caroma, Fienza).
+Write for Australian audience (favour, colour, etc.).
+Include specific, helpful information — not generic filler.
+End with a clear call-to-action.]
+
+Requirements:
+1. Title must include the primary keyword naturally
+2. Use H2/H3 hierarchy for clear structure
+3. Include internal links to relevant product pages
+4. Write naturally — avoid keyword stuffing
+5. Include FAQ schema-ready questions
+6. Australian English spelling
+7. Actionable, helpful content that answers searcher intent
+8. Feature specific brands from our range (not generic "brand X")
+9. End with CTA linking to relevant product category"""
+
+            response = self.client.messages.create(
+                model=settings.llm_model,
+                max_tokens=4000,
+                messages=[{"role": "user", "content": prompt}],
+            )
+
+            raw = response.content[0].text
+            parsed = self._parse_blog_response(raw)
+            parsed["generation_tokens"] = (
+                response.usage.output_tokens if hasattr(response, "usage") else None
+            )
+            parsed["llm_model"] = settings.llm_model
+
+            log.info(f"Generated blog from idea: {idea_title}")
+            return parsed
+
+        except Exception as e:
+            log.error(f"Error generating from idea: {str(e)}")
+            return None
+
     def suggest_blog_topics(
         self,
         underperformers: List[Dict],
@@ -2687,7 +2923,10 @@ Requirements:
                 if u.get("page"):
                     context += f'   Page: {u["page"]}\n'
 
-            prompt = f"""You are an SEO content strategist for an Australian e-commerce site selling bathroom, kitchen and plumbing products.
+            preamble = _blog_context_preamble()
+            prompt = f"""You are an SEO content strategist for Cass Brothers, an Australian e-commerce site selling bathroom, kitchen and plumbing products.
+
+{preamble}
 
 {context}
 
@@ -2697,14 +2936,15 @@ For each, return in this EXACT format:
 
 QUERY: "exact query"
 RATIONALE: Why blog content helps this query rank better
-ANGLE: Specific blog topic/title angle
+ANGLE: Specific blog topic/title angle (use {datetime.now().year} if referencing trends/year)
 PRIORITY: high or medium
 ---
 
 Only recommend blog posts where long-form content would actually help rank better.
 Skip queries where a simple title/meta fix is sufficient.
 Focus on queries where content depth, FAQs, buying guides, or how-to content would close the click gap.
-Consider the searcher's intent — informational queries benefit most from blog content."""
+Consider the searcher's intent — informational queries benefit most from blog content.
+Where possible, suggest angles that feature specific brands we stock."""
 
             response = self.client.messages.create(
                 model=settings.llm_model,

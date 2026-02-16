@@ -630,6 +630,94 @@ async def generate_blog_draft(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class GenerateFromIdeaRequest(BaseModel):
+    """Request body for generating a blog post from a chosen competitor idea."""
+    idea_title: str
+    idea_angle: str
+    idea_keywords: List[str] = []
+
+
+@router.get("/blog-drafts/competitor-ideas/{article_id}")
+def get_competitor_ideas(
+    article_id: int,
+    num_ideas: int = Query(4, ge=2, le=6),
+    db=Depends(get_db),
+):
+    """
+    Analyse a competitor article and suggest original content ideas.
+
+    Step 1: Returns a list of blog post ideas inspired by the competitor article,
+    each with a unique angle. The user picks one, then calls the generate endpoint.
+    """
+    service = BlogDraftService(db)
+
+    if not service.llm_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="LLM service not available. Configure ANTHROPIC_API_KEY in .env",
+        )
+
+    try:
+        ideas = service.get_ideas_from_competitor(
+            article_id=article_id, num_ideas=num_ideas
+        )
+
+        if ideas is None:
+            raise HTTPException(
+                status_code=500, detail="Failed to generate ideas"
+            )
+
+        return {"success": True, "data": {"ideas": ideas, "article_id": article_id}}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Error getting competitor ideas: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/blog-drafts/competitor-ideas/{article_id}/generate")
+async def generate_from_competitor_idea(
+    article_id: int,
+    request: GenerateFromIdeaRequest,
+    db=Depends(get_db),
+):
+    """
+    Generate a full blog post from a chosen competitor-inspired idea.
+
+    Step 2: Takes the chosen idea (title, angle, keywords) and generates a
+    complete blog draft saved with opportunity_type='competitor_spin'.
+    """
+    service = BlogDraftService(db)
+
+    if not service.llm_service.is_available():
+        raise HTTPException(
+            status_code=503,
+            detail="LLM service not available. Configure ANTHROPIC_API_KEY in .env",
+        )
+
+    try:
+        draft = await service.generate_from_competitor_idea(
+            article_id=article_id,
+            idea_title=request.idea_title,
+            idea_angle=request.idea_angle,
+            idea_keywords=request.idea_keywords,
+        )
+
+        if not draft:
+            raise HTTPException(
+                status_code=500, detail="Failed to generate blog draft from idea"
+            )
+
+        return {"success": True, "data": draft}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Error generating from competitor idea: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/blog-drafts")
 async def list_blog_drafts(
     status: Optional[str] = Query(

@@ -601,7 +601,7 @@
 
         .product-table th {
             text-align: left;
-            padding: 8px 10px;
+            padding: 8px 12px;
             font-size: 11px;
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -612,17 +612,29 @@
         .product-table th.num { text-align: right; }
 
         .product-table td {
-            padding: 10px 10px;
+            padding: 10px 12px;
             border-bottom: 1px solid var(--line);
+            vertical-align: top;
         }
 
         .product-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
         .product-title-cell {
-            max-width: 300px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+            max-width: 400px;
+            word-break: break-word;
+            white-space: normal;
+            line-height: 1.35;
+        }
+
+        /* Product tables grid — 2 columns max so tables stay readable */
+        .product-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 1100px) {
+            .product-grid { grid-template-columns: 1fr; }
         }
 
         /* Brand detail header */
@@ -1355,9 +1367,29 @@
                     var icon = dir === 'positive' ? '+' : dir === 'negative' ? '-' : '~';
                     var impactCls = d.impact_dollars >= 0 ? 'positive' : 'negative';
                     var confBadge = d.confidence ? '<span class="conf-badge conf-' + d.confidence + '">' + d.confidence + '</span>' : '';
+                    var driverDetail = '';
+                    if (d.driver === 'lost_products' && d.sku_breakdown) {
+                        var sb = d.sku_breakdown;
+                        var parts = [];
+                        if (sb.permanent_delist) parts.push(sb.permanent_delist + ' permanent delist');
+                        if (sb.supplier_discontinued) parts.push(sb.supplier_discontinued + ' supplier discontinued');
+                        if (sb.relaunch_candidate) parts.push(sb.relaunch_candidate + ' relaunch candidate');
+                        if (sb.active) parts.push(sb.active + ' active (no recent sales)');
+                        driverDetail = '<div style="font-size:11px;color:var(--ink-soft);margin-top:4px">'
+                            + (parts.length ? parts.join(' &middot; ') : '')
+                            + (d.recoverable_dollars != null ? (parts.length ? ' &middot; ' : '') + 'Recoverable: ' + fmt$(d.recoverable_dollars) : '')
+                            + '</div>';
+                    }
+                    if (d.driver === 'new_products' && d.cannibalization_risk) {
+                        var cr = d.cannibalization_risk;
+                        driverDetail = '<div style="font-size:11px;color:var(--amber);margin-top:4px">'
+                            + 'Cannibalization risk: ~' + cr.pct.toFixed(0) + '% may overlap existing SKUs'
+                            + (cr.dollars ? ' (~' + fmt$(cr.dollars) + ')' : '')
+                            + '</div>';
+                    }
                     html += '<div class="driver-item ' + dir + '">'
                         + '<div class="driver-icon">' + icon + '</div>'
-                        + '<div class="driver-text">' + escHtml(d.explanation) + confBadge + '</div>'
+                        + '<div class="driver-text">' + escHtml(d.explanation) + confBadge + driverDetail + '</div>'
                         + '<div class="driver-impact ' + impactCls + '">' + (d.impact_dollars >= 0 ? '+' : '') + fmt$(d.impact_dollars) + '</div>'
                         + '</div>';
                 }
@@ -1391,9 +1423,9 @@
             // Diagnostic panels
             var diag = data.diagnostics || {};
             html += '<div class="diag-grid">';
-            html += renderPricingDiag(diag.pricing, data.summary);
+            html += renderPricingDiag(diag.pricing, data.summary, diag.price_elasticity);
             html += renderAdsDiag(diag.ads, data.decision);
-            html += renderDemandDiag(diag.demand);
+            html += renderDemandDiag(diag.demand, diag.demand_quality);
             html += renderConversionDiag(diag.conversion);
             html += '</div>';
 
@@ -1403,7 +1435,7 @@
             }
 
             // Product sections
-            html += '<div class="section-grid">';
+            html += '<div class="product-grid">';
 
             html += '<div class="card"><div class="card-title">Top Products</div>';
             if (data.top_products.length) {
@@ -1421,7 +1453,12 @@
             }
             html += '</div>';
 
-            html += '<div class="card"><div class="card-title">New Products (not sold last year)</div>';
+            html += '<div class="card"><div class="card-title">New Products (not sold last year)';
+            if (data.cannibalization && data.cannibalization.cannibalization_detected) {
+                html += ' <span class="conf-badge conf-low" style="font-size:9px">'
+                    + data.cannibalization.estimated_cannibalized_pct.toFixed(0) + '% may cannibalize existing</span>';
+            }
+            html += '</div>';
             if (data.new_products.length) {
                 html += productTable(data.new_products, false);
             } else {
@@ -1431,13 +1468,18 @@
 
             html += '<div class="card"><div class="card-title">Lost Products (sold last year, not now)</div>';
             if (data.lost_products.length) {
-                html += productTable(data.lost_products, false);
+                html += productTable(data.lost_products, false, true);
             } else {
                 html += '<p class="loading-text">No lost products</p>';
             }
             html += '</div>';
 
             html += '</div>';
+
+            // Feature 2: Contribution Margin Waterfall
+            if (data.summary && data.summary.contribution_waterfall) {
+                html += renderContributionWaterfall(data.summary.contribution_waterfall);
+            }
 
             // Next Actions — only show BIS version when Decision Engine is NOT available
             // (Decision Engine HOW section provides superior actions with trend-awareness)
@@ -1459,12 +1501,35 @@
                     }
                     var impactDollars = r.expected_impact_dollars ? '<span class="na-impact-dollars">' + fmt$(r.expected_impact_dollars) + '</span> — ' : '';
                     var metricBadge = r.impacted_metric ? '<span class="metric-badge ' + r.impacted_metric + '">' + r.impacted_metric.replace('_', ' ') + '</span>' : '';
+                    var confBadge = r.confidence ? '<span class="conf-badge conf-' + r.confidence + '" style="font-size:9px;margin-left:4px">' + r.confidence + '</span>' : '';
+                    var feasBadge = '';
+                    if (r.operational_feasibility && r.operational_feasibility !== 'unknown') {
+                        var feasC = {stock_ok:'var(--green)',low_stock:'var(--amber)',oos:'var(--red)'};
+                        var feasL = {stock_ok:'In Stock',low_stock:'Low Stock',oos:'Out of Stock'};
+                        feasBadge = '<span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:9px;font-weight:600;background:' + (feasC[r.operational_feasibility]||'') + ';color:#fff;margin-left:4px">' + (feasL[r.operational_feasibility]||'') + '</span>';
+                    }
+                    var srcChips = '';
+                    if (r.relies_on && r.data_freshness) {
+                        srcChips = '<div style="margin-top:3px;display:flex;flex-wrap:wrap;gap:3px">';
+                        for (var si = 0; si < r.relies_on.length; si++) {
+                            var src = r.relies_on[si];
+                            var fresh = r.data_freshness[src];
+                            var chipSt = fresh ? '' : 'border-color:var(--red);color:var(--red)';
+                            srcChips += '<span class="evidence-chip" style="' + chipSt + '">' + src.replace(/_/g,' ');
+                            if (fresh) srcChips += ': ' + fresh.substring(0,10);
+                            else srcChips += ': missing';
+                            srcChips += '</span>';
+                        }
+                        srcChips += '</div>';
+                    }
                     html += '<div class="rec-item">'
                         + '<span class="rec-priority ' + r.priority + '">' + r.priority + '</span>'
+                        + confBadge + feasBadge
                         + metricBadge
                         + '<div class="rec-body">'
                         + '<div class="rec-action">' + escHtml(r.action) + '</div>'
                         + '<div class="rec-impact">' + impactDollars + escHtml(r.expected_impact) + '</div>'
+                        + srcChips
                         + '</div></div>';
                 }
                 html += '</div></div>';
@@ -1563,11 +1628,18 @@
                     var revTrend = (wt.trends || {}).revenue || '';
                     html += renderSparkCard('Revenue', revVals, revTrend, function(v) { return fmt$(v); });
 
-                    // ROAS sparkline
+                    // ROAS sparkline — skip weeks with no ad spend (null → carry forward last value)
                     if (wt.ads && wt.ads.length) {
-                        var roasVals = wt.ads.map(function(w) { return w.roas != null ? w.roas : 0; });
-                        var roasTrend = (wt.trends || {}).ads_roas || '';
-                        html += renderSparkCard('ROAS', roasVals, roasTrend, function(v) { return v.toFixed(1) + 'x'; });
+                        var roasVals = []; var lastRoas = null;
+                        for (var ri = 0; ri < wt.ads.length; ri++) {
+                            var rv = wt.ads[ri].roas;
+                            if (rv != null) { lastRoas = rv; roasVals.push(rv); }
+                            else if (lastRoas != null) { roasVals.push(lastRoas); }
+                        }
+                        if (roasVals.length) {
+                            var roasTrend = (wt.trends || {}).ads_roas || '';
+                            html += renderSparkCard('ROAS', roasVals, roasTrend, function(v) { return v.toFixed(1) + 'x'; });
+                        }
                     }
 
                     // Search clicks sparkline
@@ -1618,6 +1690,12 @@
                         html += '<span class="rec-priority ' + a.priority + '">' + a.priority + '</span>';
                     }
                     html += '<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;color:#fff;background:' + catColor + '">' + escHtml(a.category || '') + '</span>';
+                    if (a.confidence) html += '<span class="conf-badge conf-' + a.confidence + '" style="font-size:9px">' + a.confidence + '</span>';
+                    if (a.operational_feasibility && a.operational_feasibility !== 'unknown') {
+                        var _fc = {stock_ok:'var(--green)',low_stock:'var(--amber)',oos:'var(--red)'};
+                        var _fl = {stock_ok:'In Stock',low_stock:'Low Stock',oos:'Out of Stock'};
+                        html += '<span style="padding:2px 6px;border-radius:4px;font-size:9px;font-weight:600;background:' + (_fc[a.operational_feasibility]||'') + ';color:#fff">' + (_fl[a.operational_feasibility]||'') + '</span>';
+                    }
                     html += '<div style="flex:1">'
                         + '<div style="font-weight:600;font-size:13px">' + escHtml(a.action || '') + '</div>'
                         + '<div style="font-size:12px;color:var(--slate)">' + escHtml(a.expected_impact || '');
@@ -1790,7 +1868,7 @@
 
         // ── Diagnostic panel renderers ───────────────────────────
 
-        function renderPricingDiag(d, summary) {
+        function renderPricingDiag(d, summary, pe) {
             if (!d) return '';
             var badgeCls = d.losing_money > 0 ? 'background:var(--red-bg);color:var(--red)' : 'background:var(--green-bg);color:var(--green)';
             var badgeTxt = d.losing_money > 0 ? d.losing_money + ' at loss' : 'Healthy';
@@ -1839,6 +1917,24 @@
                         + '<td class="num" style="color:' + (ws.margin_pct < 0 ? 'var(--red)' : 'inherit') + '">' + ws.margin_pct.toFixed(1) + '%</td>'
                         + '<td class="num">' + fmt$(ws.current_price) + '</td>'
                         + '<td class="num">' + fmt$(ws.lowest_competitor) + '</td></tr>';
+                }
+                html += '</tbody></table></div>';
+            }
+
+            // Feature 6: Price change events
+            if (pe && pe.events && pe.events.length) {
+                html += '<div style="margin-top:12px;padding-top:8px;border-top:1px solid var(--line)">';
+                html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate);margin-bottom:6px">Price Change Impact (last 180d)</div>';
+                if (pe.avg_price_sensitivity != null) {
+                    html += '<div class="diag-stat-row"><span class="diag-stat-label">Avg Price Sensitivity</span><span class="diag-stat-value">' + pe.avg_price_sensitivity + 'x</span></div>';
+                }
+                html += '<table class="product-table" style="margin-top:6px"><thead><tr><th>SKU</th><th class="num">Price Chg</th><th class="num">Sales Impact</th></tr></thead><tbody>';
+                for (var pei = 0; pei < Math.min(pe.events.length, 5); pei++) {
+                    var ev = pe.events[pei];
+                    var lc = ev.lift_pct != null && ev.lift_pct > 0 ? 'var(--green)' : 'var(--red)';
+                    html += '<tr><td class="product-title-cell" title="' + escHtml(ev.title || '') + '">' + escHtml(ev.sku) + '</td>'
+                        + '<td class="num">' + fmtPct(ev.change_pct) + '</td>'
+                        + '<td class="num" style="color:' + lc + '">' + (ev.lift_pct != null ? fmtPct(ev.lift_pct) : '--') + '</td></tr>';
                 }
                 html += '</tbody></table></div>';
             }
@@ -1898,13 +1994,24 @@
                 html += '</tbody></table>';
             }
 
+            if (d.zero_conversion_high_click_products && d.zero_conversion_high_click_products.length) {
+                html += '<div style="margin-top:8px;font-size:11px;color:var(--amber);font-weight:600">High Clicks, Zero Conversions (spend not attributable at product level):</div>';
+                html += '<table class="product-table"><thead><tr><th>Product</th><th class="num">Clicks</th></tr></thead><tbody>';
+                for (var z = 0; z < d.zero_conversion_high_click_products.length; z++) {
+                    var zp = d.zero_conversion_high_click_products[z];
+                    html += '<tr><td class="product-title-cell" title="' + escHtml(zp.title) + '">' + escHtml(zp.title) + '</td>'
+                        + '<td class="num">' + fmtNum(zp.clicks) + '</td></tr>';
+                }
+                html += '</tbody></table>';
+            }
+
             if (d.product_performance && d.product_performance.length) {
                 html += '<div style="margin-top:8px"><table class="product-table"><thead><tr><th>Product</th><th class="num">Spend</th><th class="num">ROAS</th></tr></thead><tbody>';
                 for (var p2 = 0; p2 < d.product_performance.length; p2++) {
                     var pp = d.product_performance[p2];
                     html += '<tr><td class="product-title-cell" title="' + escHtml(pp.title) + '">' + escHtml(pp.title) + '</td>'
-                        + '<td class="num">' + fmt$(pp.spend) + '</td>'
-                        + '<td class="num">' + pp.roas + 'x</td></tr>';
+                        + '<td class="num">' + fmtAdsSpend(pp.spend) + '</td>'
+                        + '<td class="num">' + fmtRoas(pp.roas) + '</td></tr>';
                 }
                 html += '</tbody></table></div>';
             }
@@ -1913,7 +2020,7 @@
             return html;
         }
 
-        function renderDemandDiag(d) {
+        function renderDemandDiag(d, dq) {
             if (!d) return '';
             var trend = d.clicks_yoy_pct;
             var badgeCls = trend != null && trend > 0 ? 'background:var(--green-bg);color:var(--green)' : 'background:var(--red-bg);color:var(--red)';
@@ -1944,6 +2051,34 @@
                         + '<td class="num">' + tq.avg_position + '</td></tr>';
                 }
                 html += '</tbody></table></div>';
+            }
+
+            // Feature 3: Demand quality split
+            if (dq) {
+                html += '<div style="margin-top:12px;padding-top:8px;border-top:1px solid var(--line)">';
+                html += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate);margin-bottom:6px">Demand Quality</div>';
+                var bPct = dq.branded_pct || 0;
+                html += '<div style="display:flex;height:18px;border-radius:4px;overflow:hidden;margin-bottom:6px">'
+                    + '<div style="width:' + bPct + '%;background:var(--cass-gold)" title="Branded: ' + bPct + '%"></div>'
+                    + '<div style="width:' + (100-bPct).toFixed(1) + '%;background:var(--cass-teal)" title="Non-branded: ' + (100-bPct).toFixed(1) + '%"></div></div>';
+                html += '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--slate);margin-bottom:6px">'
+                    + '<span style="color:var(--cass-gold)">Branded ' + bPct + '%</span>'
+                    + '<span style="color:var(--cass-teal)">Non-branded ' + (100-bPct).toFixed(1) + '%</span></div>';
+                html += '<div class="diag-stat-row"><span class="diag-stat-label">Branded Clicks</span><span class="diag-stat-value">' + fmtNum(dq.branded.clicks) + '</span></div>';
+                html += '<div class="diag-stat-row"><span class="diag-stat-label">Non-Branded Clicks</span><span class="diag-stat-value">' + fmtNum(dq.non_branded.clicks) + '</span></div>';
+                if (dq.non_branded.clicks_yoy_pct != null) {
+                    var acqColor = dq.acquisition_signal === 'growing' ? 'var(--green)' : dq.acquisition_signal === 'declining' ? 'var(--red)' : 'var(--amber)';
+                    html += '<div class="diag-stat-row"><span class="diag-stat-label">Acquisition Trend</span>'
+                        + '<span class="diag-stat-value" style="color:' + acqColor + '">' + dq.acquisition_signal + ' (' + fmtPct(dq.non_branded.clicks_yoy_pct) + ')</span></div>';
+                }
+                if (dq.top_non_branded && dq.top_non_branded.length) {
+                    html += '<table class="product-table" style="margin-top:6px"><thead><tr><th>Non-branded Query</th><th class="num">Clicks</th></tr></thead><tbody>';
+                    for (var nb = 0; nb < dq.top_non_branded.length; nb++) {
+                        html += '<tr><td>' + escHtml(dq.top_non_branded[nb].query) + '</td><td class="num">' + dq.top_non_branded[nb].clicks + '</td></tr>';
+                    }
+                    html += '</tbody></table>';
+                }
+                html += '</div>';
             }
 
             html += '</div></div>';
@@ -1992,24 +2127,75 @@
             return '<div class="detail-metric"><div class="detail-metric-label">' + label + '</div><div class="detail-metric-value">' + value + '</div></div>';
         }
 
-        function productTable(products, showYoY) {
+        function renderContributionWaterfall(wf) {
+            if (!wf) return '';
+            var steps = [
+                {label:'Gross Revenue', value:wf.gross_revenue, type:'total'},
+                {label:'Discounts', value:-wf.less_discounts, type:'neg'},
+                {label:'Refunds', value:-wf.less_refunds, type:'neg'},
+                {label:'Net Revenue', value:wf.net_revenue, type:'sub'},
+                {label:'COGS', value:-wf.less_cogs, type:'neg'},
+                {label:'Gross Margin', value:wf.gross_margin, type:'sub'},
+                {label:'Ad Spend', value:-wf.less_ads, type:'neg'},
+                {label:'Shipping Cost', value:-wf.less_shipping_cost, type:'neg'},
+                {label:'Shipping Revenue', value:wf.plus_shipping_revenue, type:'pos'},
+                {label:'Overhead', value:-wf.less_overhead, type:'neg'},
+                {label:'Contribution Margin', value:wf.contribution_margin, type:'total'},
+            ];
+            var html = '<div class="card"><div class="card-title">Contribution Margin Waterfall</div>';
+            html += '<div style="display:grid;gap:2px">';
+            for (var i = 0; i < steps.length; i++) {
+                var s = steps[i];
+                var isSub = s.type === 'sub' || s.type === 'total';
+                var color = s.value >= 0 ? 'var(--green)' : 'var(--red)';
+                var weight = isSub ? '700' : '400';
+                var border = isSub ? 'border-top:1px solid var(--line);padding-top:4px;margin-top:2px' : '';
+                html += '<div class="diag-stat-row" style="' + border + '">'
+                    + '<span class="diag-stat-label" style="font-weight:' + weight + '">' + s.label + '</span>'
+                    + '<span class="diag-stat-value" style="font-weight:' + weight + ';color:' + color + '">' + fmt$(s.value) + '</span></div>';
+            }
+            if (wf.contribution_margin_pct != null) {
+                var cmColor = wf.contribution_margin_pct >= 0 ? 'var(--green)' : 'var(--red)';
+                html += '<div class="diag-stat-row" style="border-top:2px solid var(--cass-gold);padding-top:6px;margin-top:4px">'
+                    + '<span class="diag-stat-label" style="font-weight:700">Contribution Margin %</span>'
+                    + '<span class="diag-stat-value" style="font-weight:700;color:' + cmColor + '">' + wf.contribution_margin_pct + '%</span></div>';
+            }
+            if (wf.cost_coverage_pct < 100) {
+                html += '<div style="font-size:11px;color:var(--amber);margin-top:6px">COGS coverage: '
+                    + wf.cost_coverage_pct + '% — margin may be understated</div>';
+            }
+            html += '</div></div>';
+            return html;
+        }
+
+        function productTable(products, showYoY, showStatus) {
+            var statusLabels = {permanent_delist:'Permanent',supplier_discontinued:'Supplier',relaunch_candidate:'Relaunch',active:'Active',unknown:'Unknown'};
+            var statusColors = {permanent_delist:'var(--slate)',supplier_discontinued:'var(--amber)',relaunch_candidate:'var(--green)',active:'var(--cass-teal)',unknown:'var(--slate)'};
             var html = '<table class="product-table"><thead><tr>'
                 + '<th>Product</th><th>SKU</th>'
                 + '<th class="num">Revenue</th>'
                 + '<th class="num">Units</th>'
                 + '<th class="num">Margin %</th>';
             if (showYoY) html += '<th class="num">YoY %</th>';
+            if (showStatus) html += '<th>Status</th>';
             html += '</tr></thead><tbody>';
 
             for (var i = 0; i < products.length; i++) {
                 var p = products[i];
                 html += '<tr>'
                     + '<td class="product-title-cell" title="' + escHtml(p.title) + '">' + escHtml(p.title) + '</td>'
-                    + '<td>' + escHtml(p.sku) + '</td>'
+                    + '<td style="font-size:12px;color:var(--slate);white-space:nowrap">' + escHtml(p.sku) + '</td>'
                     + '<td class="num">' + fmt$(p.revenue) + '</td>'
                     + '<td class="num">' + fmtNum(p.units) + '</td>'
                     + '<td class="num">' + p.gross_margin_pct + '%</td>';
                 if (showYoY) html += '<td class="num"><span class="' + yoyClass(p.yoy_pct) + '">' + fmtPct(p.yoy_pct) + '</span></td>';
+                if (showStatus && p.sku_status) {
+                    var sc = statusColors[p.sku_status] || 'var(--slate)';
+                    var sl = statusLabels[p.sku_status] || p.sku_status;
+                    html += '<td><span style="display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600;background:' + sc + ';color:#fff">' + sl + '</span></td>';
+                } else if (showStatus) {
+                    html += '<td></td>';
+                }
                 html += '</tr>';
             }
 

@@ -19,7 +19,7 @@ from app.models.base import get_db
 from app.services.pricing_intelligence_service import PricingIntelligenceService, COMPETITOR_COLUMNS
 from app.models.competitive_pricing import CompetitivePricing
 from app.models.product_cost import ProductCost
-from app.models.shopify import ShopifyOrder, ShopifyOrderItem
+from app.models.shopify import ShopifyOrderItem
 from app.utils.logger import log
 from app.utils.cache import get_cached, set_cached, _MISS
 
@@ -28,6 +28,16 @@ router = APIRouter(prefix="/pricing", tags=["pricing"])
 
 def _parse_date(value: str) -> date:
     return datetime.strptime(value, "%Y-%m-%d").date()
+
+
+def _latest_pricing_date(db: Session) -> date | None:
+    """Cached latest pricing date — changes at most once per day."""
+    cached = get_cached("pricing_latest_date")
+    if cached is not _MISS:
+        return cached
+    val = db.query(func.max(CompetitivePricing.pricing_date)).scalar()
+    set_cached("pricing_latest_date", val, 300)
+    return val
 
 
 def _competitor_prices(cp: CompetitivePricing):
@@ -155,7 +165,7 @@ def _analyze_snapshot(rows: list, vendor_filter: str = None) -> dict:
 async def get_brands(db: Session = Depends(get_db)):
     """List all brands with SKU counts from the latest pricing snapshot."""
     try:
-        latest_date = db.query(func.max(CompetitivePricing.pricing_date)).scalar()
+        latest_date = _latest_pricing_date(db)
         if not latest_date:
             return {"success": True, "data": []}
         rows = (
@@ -185,7 +195,7 @@ async def get_overview(db: Session = Depends(get_db)):
         return cached
 
     try:
-        latest_date = db.query(func.max(CompetitivePricing.pricing_date)).scalar()
+        latest_date = _latest_pricing_date(db)
         if not latest_date:
             return {"success": True, "data": {"snapshot_date": None, "total_skus": 0}}
 
@@ -300,7 +310,7 @@ async def get_brand_report(
         return cached
 
     try:
-        latest_date = db.query(func.max(CompetitivePricing.pricing_date)).scalar()
+        latest_date = _latest_pricing_date(db)
         if not latest_date:
             return {"success": True, "data": {"brand": brand, "error": "No pricing data"}}
 
@@ -641,15 +651,38 @@ async def search_skus(
 ):
     """
     Search SKU/title/vendor in competitive pricing data.
+    Fast-path: tries exact SKU match first (index hit), then falls back to
+    LIKE search scoped to the latest snapshot only.
     """
     try:
-        q = f"%{query.strip().lower()}%"
+        query_clean = query.strip()
+
+        # Fast-path: exact SKU match (uses variant_sku index)
+        exact = (
+            db.query(CompetitivePricing.variant_sku, CompetitivePricing.title, CompetitivePricing.vendor)
+            .filter(func.lower(CompetitivePricing.variant_sku) == query_clean.lower())
+            .order_by(CompetitivePricing.pricing_date.desc())
+            .first()
+        )
+        if exact:
+            return {
+                "success": True,
+                "data": [{"sku": exact[0], "title": exact[1] or "", "vendor": exact[2] or ""}],
+            }
+
+        # Slow-path: LIKE search, but only on the latest snapshot (not all history)
+        latest_date = _latest_pricing_date(db)
+        if not latest_date:
+            return {"success": True, "data": []}
+
+        q = f"%{query_clean.lower()}%"
         rows = (
             db.query(CompetitivePricing.variant_sku, CompetitivePricing.title, CompetitivePricing.vendor)
             .filter(
+                CompetitivePricing.pricing_date == latest_date,
                 func.lower(CompetitivePricing.variant_sku).like(q)
                 | func.lower(CompetitivePricing.title).like(q)
-                | func.lower(CompetitivePricing.vendor).like(q)
+                | func.lower(CompetitivePricing.vendor).like(q),
             )
             .order_by(CompetitivePricing.variant_sku)
             .distinct()
@@ -678,6 +711,7 @@ async def get_sku_pricing(
 ):
     """
     SKU pricing intelligence: current snapshot + history.
+    Cached for 60s per SKU+days combination.
     """
     try:
         sku_norm = sku.strip()
@@ -687,6 +721,11 @@ async def get_sku_pricing(
         else:
             end_dt = date.today()
             start_dt = end_dt - timedelta(days=days)
+
+        cache_key = f"pricing_sku|{sku_norm.lower()}|{start_dt}|{end_dt}"
+        cached = get_cached(cache_key)
+        if cached is not _MISS:
+            return cached
 
         latest = (
             db.query(CompetitivePricing)
@@ -719,22 +758,20 @@ async def get_sku_pricing(
             .all()
         )
 
-        # Fetch daily sales for this SKU in the same window
+        # Daily sales — query ShopifyOrderItem directly (has order_date + financial_status)
         sales_rows = (
             db.query(
-                func.date(ShopifyOrder.created_at).label("day"),
+                func.date(ShopifyOrderItem.order_date).label("day"),
                 func.sum(ShopifyOrderItem.quantity).label("units"),
                 func.sum(ShopifyOrderItem.quantity * ShopifyOrderItem.price).label("revenue"),
             )
-            .join(ShopifyOrder, ShopifyOrderItem.shopify_order_id == ShopifyOrder.shopify_order_id)
             .filter(
                 func.lower(ShopifyOrderItem.sku) == sku_norm.lower(),
-                func.date(ShopifyOrder.created_at) >= start_dt,
-                func.date(ShopifyOrder.created_at) <= end_dt,
-                ShopifyOrder.financial_status.in_(["paid", "partially_refunded"]),
-                ShopifyOrder.cancelled_at.is_(None),
+                func.date(ShopifyOrderItem.order_date) >= start_dt,
+                func.date(ShopifyOrderItem.order_date) <= end_dt,
+                ShopifyOrderItem.financial_status.in_(["paid", "partially_refunded"]),
             )
-            .group_by(func.date(ShopifyOrder.created_at))
+            .group_by(func.date(ShopifyOrderItem.order_date))
             .all()
         )
         sales_by_date = {
@@ -764,7 +801,7 @@ async def get_sku_pricing(
                 "day_revenue": day_sales["revenue"],
             })
 
-        return {
+        result = {
             "success": True,
             "data": {
                 "sku": sku_norm,
@@ -817,6 +854,8 @@ async def get_sku_pricing(
                 "history": history,
             },
         }
+        set_cached(cache_key, result, 60)
+        return result
     except Exception as e:
         log.error(f"Error in /pricing/sku: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

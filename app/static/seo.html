@@ -408,6 +408,7 @@
             <a class="nav-item" href="/merchant-center-intel"><span></span> Merchant Center</a>
             <a class="nav-item" href="/strategic-intelligence"><span></span> Intelligence Brief</a>
             <a class="nav-item" href="/site-intelligence"><span></span> Site Intelligence</a>
+            <a class="nav-item" href="/brand-intelligence"><span></span> Brand Intelligence</a>
             <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
                 <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
             </div>
@@ -434,6 +435,7 @@
                 <button class="tab-btn" onclick="switchTab('pages')">Page Intelligence</button>
                 <button class="tab-btn" onclick="switchTab('actions')">Action Plan</button>
                 <button class="tab-btn" onclick="switchTab('blog')">Blog Drafts</button>
+                <button class="tab-btn" onclick="switchTab('competitor')">Competitor Content</button>
             </div>
 
             <!-- ================================================================
@@ -896,6 +898,112 @@
                     </div>
                 </div>
             </div>
+
+            <!-- ================================================================
+                 TAB 6: COMPETITOR CONTENT
+                 ================================================================ -->
+            <div class="tab-content" id="tab-competitor">
+
+                <!-- KPI Row -->
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div class="kpi-label">Sites Monitored</div>
+                        <div class="kpi-value" id="comp-sites">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Total Articles</div>
+                        <div class="kpi-value" id="comp-articles">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Recent (30 days)</div>
+                        <div class="kpi-value" id="comp-recent">--</div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-label">Flagged</div>
+                        <div class="kpi-value" id="comp-flagged">--</div>
+                    </div>
+                </div>
+
+                <!-- Sync Controls -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Competitor &amp; Supplier Blog Monitor</h3>
+                        <button class="pill-ctrl" onclick="syncCompetitorBlogs()" id="comp-sync-btn">Sync Now</button>
+                    </div>
+                    <p class="muted" style="font-size:13px;margin-bottom:12px;">Tracks blog posts from competitors and suppliers. Auto-syncs daily at 7:30am AEST.</p>
+                    <div id="comp-sync-status"></div>
+
+                    <!-- Site Status Cards -->
+                    <div id="comp-site-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:12px;"></div>
+                </div>
+
+                <!-- Search & Filter -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Articles</h3>
+                        <div class="card-badge" id="comp-articles-badge">--</div>
+                    </div>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;">
+                        <input type="text" id="comp-search" placeholder="Search articles..."
+                            style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px;"
+                            onkeydown="if(event.key==='Enter')loadCompetitorArticles()">
+                        <select id="comp-domain-filter" onchange="loadCompetitorArticles()"
+                            style="padding:8px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px;">
+                            <option value="">All Sites</option>
+                        </select>
+                        <select id="comp-type-filter" onchange="loadCompetitorArticles()"
+                            style="padding:8px 12px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px;">
+                            <option value="">All Types</option>
+                            <option value="competitor">Competitors</option>
+                            <option value="supplier">Suppliers</option>
+                        </select>
+                        <label style="display:flex;align-items:center;gap:4px;font-size:13px;color:var(--slate);cursor:pointer;">
+                            <input type="checkbox" id="comp-flagged-only" onchange="loadCompetitorArticles()"> Flagged only
+                        </label>
+                        <button class="pill-ctrl" onclick="loadCompetitorArticles()">Search</button>
+                    </div>
+
+                    <!-- Articles Table -->
+                    <div class="scroll-x">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Site</th>
+                                    <th>Title</th>
+                                    <th class="num">Words</th>
+                                    <th>Published</th>
+                                    <th>Flag</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="comp-articles-table"><tr><td colspan="6" style="text-align:center;color:var(--slate)">Click a tab to load...</td></tr></tbody>
+                        </table>
+                    </div>
+                    <!-- Pagination -->
+                    <div id="comp-pagination" style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px;color:var(--slate);"></div>
+                </div>
+
+                <!-- Flagged / Inspiration -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Flagged for Inspiration</h3>
+                    </div>
+                    <div class="scroll-x">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Site</th>
+                                    <th>Title</th>
+                                    <th>Reason</th>
+                                    <th>Notes</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="comp-flagged-table"><tr><td colspan="5" style="text-align:center;color:var(--slate)">No flagged articles yet</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </section>
     </div>
 
@@ -926,13 +1034,15 @@
     function switchTab(tab) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-        const tabMap = {performance:'tab-performance', queries:'tab-queries', pages:'tab-pages', actions:'tab-actions', blog:'tab-blog'};
+        const tabMap = {performance:'tab-performance', queries:'tab-queries', pages:'tab-pages', actions:'tab-actions', blog:'tab-blog', competitor:'tab-competitor'};
         document.getElementById(tabMap[tab]).classList.add('active');
         event.target.classList.add('active');
         // Lazy load action plan tab
         if (tab === 'actions' && underperfData.length === 0) loadUnderperformers();
         // Lazy load blog drafts tab
         if (tab === 'blog') loadBlogDrafts();
+        // Lazy load competitor content tab
+        if (tab === 'competitor') loadCompetitorDashboard();
     }
 
     /* ============================================================
@@ -1722,7 +1832,7 @@
                 <td class="num">${d.id}</td>
                 <td class="clickable" onclick="viewBlogDraft(${d.id})" style="cursor:pointer;color:var(--cass-teal);">${d.title || '--'}</td>
                 <td class="muted">${d.source_query || '--'}</td>
-                <td><span class="badge info">${d.opportunity_type || '--'}</span></td>
+                <td><span class="badge ${d.opportunity_type === 'competitor_spin' ? 'success' : 'info'}">${d.opportunity_type === 'competitor_spin' ? 'Competitor Spin' : (d.opportunity_type || '--')}</span></td>
                 <td class="num">${(d.word_count || 0).toLocaleString()}</td>
                 <td><span class="badge ${statusCls}">${d.status}</span></td>
                 <td class="muted">${genDate}</td>
@@ -1839,11 +1949,21 @@
         // Status + metadata bar
         html += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">';
         html += `<span class="badge ${statusCls}">${d.status}</span>`;
-        html += `<span class="badge info">${d.opportunity_type || '--'}</span>`;
+        html += `<span class="badge ${d.opportunity_type === 'competitor_spin' ? 'success' : 'info'}">${d.opportunity_type === 'competitor_spin' ? 'Competitor Spin' : (d.opportunity_type || '--')}</span>`;
         if (d.word_count) html += `<span class="badge" style="background:var(--line);color:var(--ink-soft);">${d.word_count} words</span>`;
         if (d.estimated_reading_time) html += `<span class="badge" style="background:var(--line);color:var(--ink-soft);">${d.estimated_reading_time}</span>`;
         if (d.llm_model) html += `<span class="badge" style="background:var(--line);color:var(--slate);">${d.llm_model}</span>`;
         html += '</div>';
+
+        // Competitor source link (for spin drafts)
+        if (d.opportunity_type === 'competitor_spin' && d.reviewer_notes) {
+            const urlMatch = d.reviewer_notes.match(/https?:\/\/[^\s]+/);
+            if (urlMatch) {
+                html += `<div style="background:var(--cream);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;">`;
+                html += `<strong>Inspired by:</strong> <a href="${urlMatch[0]}" target="_blank" rel="noopener" style="color:var(--cass-teal);">${urlMatch[0]}</a>`;
+                html += `</div>`;
+            }
+        }
 
         // SEO snapshot
         html += '<div class="modal-stats">';
@@ -1923,6 +2043,345 @@
             }
         } catch (err) {
             console.error('Failed to update status:', err);
+        }
+    }
+
+    /* ============================================================
+       COMPETITOR CONTENT TAB
+       ============================================================ */
+    let competitorLoaded = false;
+    let compArticlePage = 0;
+    const COMP_PAGE_SIZE = 30;
+
+    async function loadCompetitorDashboard() {
+        if (competitorLoaded) return;
+        competitorLoaded = true;
+        try {
+            const resp = await fetch('/competitor-blogs/dashboard');
+            if (resp.status === 401) { competitorLoaded = false; return; }
+            const data = await resp.json();
+            renderCompetitorDashboard(data);
+        } catch (err) {
+            console.error('Failed to load competitor data:', err);
+            competitorLoaded = false;
+        }
+    }
+
+    function renderCompetitorDashboard(data) {
+        // KPIs
+        document.getElementById('comp-sites').textContent = data.total_sites || 0;
+        document.getElementById('comp-articles').textContent = data.total_articles || 0;
+        document.getElementById('comp-recent').textContent = (data.recent_articles || []).length;
+        document.getElementById('comp-flagged').textContent = (data.flagged_articles || []).length;
+
+        // Site cards
+        const cardsEl = document.getElementById('comp-site-cards');
+        const sites = data.sites || [];
+        if (sites.length) {
+            cardsEl.innerHTML = sites.map(s => {
+                const statusColor = s.consecutive_failures > 0 ? 'var(--red)' : 'var(--cass-teal)';
+                const lastScraped = s.last_scraped_at ? new Date(s.last_scraped_at).toLocaleDateString() : 'Never';
+                const typeLabel = s.site_type === 'supplier' ? '<span class="badge info" style="font-size:10px;">Supplier</span>' : '<span class="badge" style="font-size:10px;background:var(--cass-teal);color:#fff;">Competitor</span>';
+                return `<div style="padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--card);">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                        <strong style="font-size:13px;">${s.name}</strong>
+                        ${typeLabel}
+                    </div>
+                    <div style="font-size:12px;color:var(--slate);">
+                        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${statusColor};margin-right:4px;"></span>
+                        ${s.total_articles || 0} articles &middot; Scraped: ${lastScraped}
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // Populate domain filter
+        const domainFilter = document.getElementById('comp-domain-filter');
+        const counts = data.site_article_counts || [];
+        counts.forEach(sc => {
+            const opt = document.createElement('option');
+            opt.value = sc.domain;
+            opt.textContent = `${sc.name} (${sc.total})`;
+            domainFilter.appendChild(opt);
+        });
+
+        // Render recent articles
+        renderCompetitorArticles(data.recent_articles || []);
+        document.getElementById('comp-articles-badge').textContent = `${data.total_articles || 0} total`;
+
+        // Render flagged
+        renderCompetitorFlagged(data.flagged_articles || []);
+    }
+
+    function renderCompetitorArticles(articles) {
+        const tbody = document.getElementById('comp-articles-table');
+        if (!articles.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--slate)">No articles found</td></tr>';
+            return;
+        }
+        tbody.innerHTML = articles.map(a => {
+            const pubDate = a.published_at ? new Date(a.published_at).toLocaleDateString() : '<span class="muted">unknown</span>';
+            const flagIcon = a.is_flagged
+                ? `<button onclick="unflagArticle(${a.id})" title="Unflag" style="background:none;border:none;cursor:pointer;font-size:16px;">&#9733;</button>`
+                : `<button onclick="flagArticle(${a.id})" title="Flag as inspiration" style="background:none;border:none;cursor:pointer;font-size:16px;opacity:0.3;">&#9733;</button>`;
+            const typeClass = a.site_name && a.site_name.toLowerCase().includes('supplier') ? 'info' : '';
+            return `<tr>
+                <td><span class="badge ${typeClass}" style="font-size:11px;">${a.site_name || a.site_domain}</span></td>
+                <td><a href="${a.url}" target="_blank" rel="noopener" style="color:var(--cass-teal);text-decoration:none;font-size:13px;" title="${(a.excerpt||'').replace(/"/g,'&quot;')}">${a.title}</a></td>
+                <td class="num">${a.word_count || '--'}</td>
+                <td style="font-size:12px;">${pubDate}</td>
+                <td style="text-align:center;">${flagIcon}</td>
+                <td><button onclick="getCompetitorIdeas(${a.id}, this)" class="pill-ctrl" style="font-size:11px;padding:4px 12px;background:var(--cass-black);color:#f7f1e8;white-space:nowrap;">Get Ideas</button></td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderCompetitorFlagged(articles) {
+        const tbody = document.getElementById('comp-flagged-table');
+        if (!articles.length) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--slate)">No flagged articles yet. Star articles in the table above to save inspiration.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = articles.map(a => {
+            return `<tr>
+                <td><span class="badge" style="font-size:11px;">${a.site_name || a.site_domain}</span></td>
+                <td><a href="${a.url}" target="_blank" rel="noopener" style="color:var(--cass-teal);text-decoration:none;font-size:13px;">${a.title}</a></td>
+                <td style="font-size:12px;">${a.flag_reason || '--'}</td>
+                <td style="font-size:12px;">${a.inspiration_notes || '--'}</td>
+                <td><button onclick="unflagArticle(${a.id})" class="pill-ctrl" style="font-size:11px;padding:4px 10px;">Remove</button></td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function loadCompetitorArticles() {
+        const search = document.getElementById('comp-search').value.trim();
+        const domain = document.getElementById('comp-domain-filter').value;
+        const siteType = document.getElementById('comp-type-filter').value;
+        const flaggedOnly = document.getElementById('comp-flagged-only').checked;
+
+        let url = `/competitor-blogs/articles?limit=${COMP_PAGE_SIZE}&offset=${compArticlePage * COMP_PAGE_SIZE}`;
+        if (search) url += `&search=${encodeURIComponent(search)}`;
+        if (domain) url += `&domain=${encodeURIComponent(domain)}`;
+        if (siteType) url += `&site_type=${encodeURIComponent(siteType)}`;
+        if (flaggedOnly) url += `&flagged_only=true`;
+
+        try {
+            const resp = await fetch(url);
+            const data = await resp.json();
+            renderCompetitorArticles(data.articles || []);
+            document.getElementById('comp-articles-badge').textContent = `${data.total || 0} results`;
+
+            // Pagination
+            const pag = document.getElementById('comp-pagination');
+            const total = data.total || 0;
+            const pages = Math.ceil(total / COMP_PAGE_SIZE);
+            if (pages > 1) {
+                pag.innerHTML = `
+                    <span>Page ${compArticlePage + 1} of ${pages} (${total} articles)</span>
+                    <div style="display:flex;gap:6px;">
+                        <button class="pill-ctrl" onclick="compPrev()" ${compArticlePage === 0 ? 'disabled' : ''} style="font-size:11px;padding:4px 12px;">&laquo; Prev</button>
+                        <button class="pill-ctrl" onclick="compNext(${pages})" ${compArticlePage >= pages - 1 ? 'disabled' : ''} style="font-size:11px;padding:4px 12px;">Next &raquo;</button>
+                    </div>`;
+            } else {
+                pag.innerHTML = total ? `<span>${total} articles</span>` : '';
+            }
+        } catch (err) {
+            console.error('Failed to search competitor articles:', err);
+        }
+    }
+
+    function compPrev() { if (compArticlePage > 0) { compArticlePage--; loadCompetitorArticles(); } }
+    function compNext(max) { if (compArticlePage < max - 1) { compArticlePage++; loadCompetitorArticles(); } }
+
+    async function flagArticle(id) {
+        const reason = prompt('Flag reason (optional):') || '';
+        try {
+            await fetch(`/competitor-blogs/articles/${id}/flag?reason=${encodeURIComponent(reason)}`, {method: 'POST'});
+            competitorLoaded = false;
+            loadCompetitorDashboard();
+        } catch (err) { console.error('Flag failed:', err); }
+    }
+
+    async function unflagArticle(id) {
+        try {
+            await fetch(`/competitor-blogs/articles/${id}/flag`, {method: 'DELETE'});
+            competitorLoaded = false;
+            loadCompetitorDashboard();
+        } catch (err) { console.error('Unflag failed:', err); }
+    }
+
+    async function getCompetitorIdeas(articleId, btn) {
+        const origText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Thinking...';
+        btn.style.opacity = '0.6';
+
+        try {
+            const resp = await fetch(`/seo/blog-drafts/competitor-ideas/${articleId}`);
+            const json = await resp.json();
+
+            if (resp.ok && json.data && json.data.ideas && json.data.ideas.length) {
+                btn.textContent = origText;
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                showIdeasModal(articleId, json.data.ideas);
+            } else {
+                const errMsg = json.detail || 'Could not generate ideas';
+                btn.textContent = 'Failed';
+                btn.style.background = 'var(--red)';
+                setTimeout(() => { btn.disabled = false; btn.textContent = origText; btn.style.opacity = '1'; btn.style.background = 'var(--cass-black)'; }, 3000);
+                console.error('Ideas generation failed:', errMsg);
+            }
+        } catch (err) {
+            btn.textContent = 'Error';
+            btn.style.background = 'var(--red)';
+            setTimeout(() => { btn.disabled = false; btn.textContent = origText; btn.style.opacity = '1'; btn.style.background = 'var(--cass-black)'; }, 3000);
+            console.error('Ideas fetch error:', err);
+        }
+    }
+
+    function showIdeasModal(articleId, ideas) {
+        // Remove existing modal if any
+        const existing = document.getElementById('ideas-modal');
+        if (existing) existing.remove();
+
+        const modal = document.createElement('div');
+        modal.id = 'ideas-modal';
+        modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
+        modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+
+        const sourceInfo = ideas[0] && ideas[0].source_article;
+        const sourceTitle = sourceInfo ? sourceInfo.title : 'competitor article';
+        const ideasHtml = ideas.map((idea, i) => {
+            const keywords = (idea.target_keywords || []).map(k => `<span style="background:rgba(0,128,128,0.12);color:var(--cass-teal);padding:2px 8px;border-radius:4px;font-size:11px;">${k}</span>`).join(' ');
+            const difficulty = idea.difficulty || 'medium';
+            const diffColor = difficulty === 'easy' ? 'var(--cass-teal)' : difficulty === 'hard' ? 'var(--red)' : 'var(--amber)';
+            return `
+                <div style="border:1px solid #e0d6c8;border-radius:10px;padding:16px;margin-bottom:12px;background:#faf7f2;transition:border-color 0.2s;" onmouseover="this.style.borderColor='var(--cass-teal)'" onmouseout="this.style.borderColor='#e0d6c8'">
+                    <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;">
+                        <div style="flex:1;">
+                            <h4 style="margin:0 0 6px 0;font-size:15px;color:var(--cass-black);">${idea.title}</h4>
+                            <p style="margin:0 0 8px 0;font-size:13px;color:var(--slate);line-height:1.5;">${idea.angle}</p>
+                            <p style="margin:0 0 8px 0;font-size:12px;color:#8a7e72;"><strong>Why:</strong> ${idea.rationale || ''}</p>
+                            <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px;">${keywords}</div>
+                            <div style="display:flex;gap:12px;font-size:11px;color:var(--slate);">
+                                <span>Type: <strong>${idea.content_type || 'blog'}</strong></span>
+                                <span>Difficulty: <strong style="color:${diffColor}">${difficulty}</strong></span>
+                            </div>
+                        </div>
+                        <button onclick="generateFromIdea(${articleId}, ${i}, this)" class="pill-ctrl" style="font-size:12px;padding:8px 20px;background:var(--cass-teal);color:#fff;white-space:nowrap;border:none;cursor:pointer;border-radius:8px;font-weight:600;">Write This</button>
+                    </div>
+                </div>`;
+        }).join('');
+
+        modal.innerHTML = `
+            <div style="background:#fff;border-radius:14px;max-width:700px;width:100%;max-height:85vh;overflow-y:auto;padding:28px;box-shadow:0 8px 40px rgba(0,0,0,0.25);">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                    <h3 style="margin:0;font-size:18px;color:var(--cass-black);">Blog Ideas</h3>
+                    <button onclick="document.getElementById('ideas-modal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--slate);padding:4px 8px;">&times;</button>
+                </div>
+                <p style="margin:0 0 20px 0;font-size:13px;color:var(--slate);">Inspired by: <em>${sourceTitle}</em></p>
+                <div id="ideas-list">${ideasHtml}</div>
+            </div>`;
+
+        // Store ideas data on the modal for later use
+        modal._ideas = ideas;
+        document.body.appendChild(modal);
+    }
+
+    async function generateFromIdea(articleId, ideaIndex, btn) {
+        const modal = document.getElementById('ideas-modal');
+        const idea = modal._ideas[ideaIndex];
+        if (!idea) return;
+
+        btn.disabled = true;
+        btn.textContent = 'Generating...';
+        btn.style.opacity = '0.7';
+
+        try {
+            const resp = await fetch(`/seo/blog-drafts/competitor-ideas/${articleId}/generate`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    idea_title: idea.title,
+                    idea_angle: idea.angle,
+                    idea_keywords: idea.target_keywords || [],
+                }),
+            });
+            const json = await resp.json();
+
+            if (resp.ok && json.success && json.data) {
+                // Close modal
+                modal.remove();
+
+                // Show success notification
+                const notice = document.createElement('div');
+                notice.style.cssText = 'position:fixed;top:20px;right:20px;background:var(--cass-teal);color:#fff;padding:14px 24px;border-radius:10px;font-size:14px;z-index:10001;box-shadow:0 4px 20px rgba(0,0,0,0.2);';
+                notice.innerHTML = `Draft created: <strong>${json.data.title}</strong><br><span style="font-size:12px;opacity:0.8;">${json.data.word_count} words &middot; Check the Blog Drafts tab</span>`;
+                document.body.appendChild(notice);
+                setTimeout(() => notice.remove(), 5000);
+
+                // Reset blog drafts tab so it reloads
+                blogDraftsLoaded = false;
+            } else {
+                const errMsg = json.detail || 'Generation failed';
+                btn.textContent = 'Failed';
+                btn.style.background = 'var(--red)';
+                btn.style.color = '#fff';
+                setTimeout(() => { btn.disabled = false; btn.textContent = 'Write This'; btn.style.opacity = '1'; btn.style.background = 'var(--cass-teal)'; }, 3000);
+                console.error('Generation failed:', errMsg);
+            }
+        } catch (err) {
+            btn.textContent = 'Error';
+            btn.style.background = 'var(--red)';
+            btn.style.color = '#fff';
+            setTimeout(() => { btn.disabled = false; btn.textContent = 'Write This'; btn.style.opacity = '1'; btn.style.background = 'var(--cass-teal)'; }, 3000);
+            console.error('Generation error:', err);
+        }
+    }
+
+    async function syncCompetitorBlogs() {
+        const btn = document.getElementById('comp-sync-btn');
+        const status = document.getElementById('comp-sync-status');
+        btn.disabled = true;
+        btn.textContent = 'Syncing...';
+        status.innerHTML = '<p style="font-size:13px;color:var(--slate);">Scraping competitor blogs in background... This may take up to a minute.</p>';
+
+        try {
+            await fetch('/competitor-blogs/sync?days=90', {method: 'POST'});
+            // Poll for completion by checking if article count changes
+            let attempts = 0;
+            const poll = setInterval(async () => {
+                attempts++;
+                if (attempts > 30) {
+                    clearInterval(poll);
+                    status.innerHTML = '<p style="font-size:13px;color:var(--cass-teal);">Sync still running in background. Refresh the tab in a minute.</p>';
+                    btn.disabled = false;
+                    btn.textContent = 'Sync Now';
+                    return;
+                }
+                try {
+                    const r = await fetch('/competitor-blogs/dashboard');
+                    const d = await r.json();
+                    // If we got updated scraped times, it's done
+                    const anyScraped = (d.sites || []).some(s => {
+                        if (!s.last_scraped_at) return false;
+                        return (new Date() - new Date(s.last_scraped_at)) < 120000; // scraped in last 2 min
+                    });
+                    if (anyScraped && attempts > 3) {
+                        clearInterval(poll);
+                        status.innerHTML = '<p style="font-size:13px;color:var(--cass-teal);">Sync complete!</p>';
+                        btn.disabled = false;
+                        btn.textContent = 'Sync Now';
+                        competitorLoaded = false;
+                        loadCompetitorDashboard();
+                    }
+                } catch(e) {}
+            }, 3000);
+        } catch (err) {
+            status.innerHTML = `<p style="font-size:13px;color:var(--red);">Sync failed: ${err.message}</p>`;
+            btn.disabled = false;
+            btn.textContent = 'Sync Now';
         }
     }
 

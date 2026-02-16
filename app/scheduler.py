@@ -19,6 +19,7 @@ from app.services.data_sync_service import DataSyncService, SyncResult, update_d
 from app.services.ml_intelligence_service import MLIntelligenceService
 from app.services.caprice_import_service import CapriceImportService
 from app.services.google_ads_sheet_import import GoogleAdsSheetImportService
+from app.services.competitor_blog_service import CompetitorBlogService
 from app.models.base import get_db
 from app.config import get_settings
 from app.utils.logger import log
@@ -416,6 +417,27 @@ async def sync_caprice_pricing():
         log.error(f"Caprice pricing import error: {str(e)}")
 
 
+async def sync_competitor_blogs():
+    """Scrape competitor/supplier blogs (daily at 7:30am AEST)"""
+    try:
+        log.info("Starting competitor blog scrape...")
+        service = CompetitorBlogService()
+        result = await service.sync_competitor_blogs(days=30)
+
+        if result.get('success'):
+            log.info(
+                f"Competitor blog scrape completed: "
+                f"{result.get('new_articles', 0)} new, "
+                f"{result.get('updated_articles', 0)} updated from "
+                f"{result.get('sites_scraped', 0)} sites in {result.get('duration', 0):.1f}s"
+            )
+        else:
+            log.error(f"Competitor blog scrape failed: {result.get('error')}")
+
+    except Exception as e:
+        log.error(f"Competitor blog scrape error: {str(e)}")
+
+
 async def sync_shopify_full():
     """Full Shopify sync including products (daily at 1am AEST)"""
     try:
@@ -664,6 +686,17 @@ def setup_scheduler():
             max_instances=1
         )
 
+    # ── Competitor Blogs ─────────────────────────────────
+    # Daily at 7:30am AEST (after main syncs, before work day)
+    scheduler.add_job(
+        sync_competitor_blogs,
+        trigger=CronTrigger(hour=7, minute=30, timezone=SYDNEY_TZ),
+        id='competitor_blogs_sync',
+        name='Competitor Blog Daily Scrape',
+        replace_existing=True,
+        max_instances=1
+    )
+
     log.info("Scheduler configured with all sync jobs (timezone: Australia/Sydney)")
 
 
@@ -704,6 +737,7 @@ def run_sync_now(connector_name: str) -> dict:
         'github': sync_github,
         'caprice': sync_caprice_pricing,
         'shippit': sync_shippit,
+        'competitor_blogs': sync_competitor_blogs,
     }
 
     if connector_name not in sync_functions:

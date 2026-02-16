@@ -103,6 +103,126 @@ class BlogDraftService:
             log.error(f"Error generating blog draft for '{query}': {e}")
             return None
 
+    def get_ideas_from_competitor(
+        self,
+        article_id: int,
+        num_ideas: int = 4,
+    ) -> Optional[List[Dict]]:
+        """
+        Analyse a competitor article and suggest original content ideas.
+
+        Step 1 of the two-step flow: Ideas → Pick → Generate.
+        Returns a list of idea dicts.
+        """
+        from app.models.competitor_blog import CompetitorArticle
+
+        try:
+            article = (
+                self.db.query(CompetitorArticle)
+                .filter(CompetitorArticle.id == article_id)
+                .first()
+            )
+            if not article:
+                log.error(f"Competitor article #{article_id} not found")
+                return None
+
+            topic = article.title or ""
+            products = self._find_relevant_products(topic)
+            if not products and article.excerpt:
+                words = [w for w in article.excerpt.split()[:20] if len(w) > 4]
+                products = self._find_relevant_products(" ".join(words[:6]))
+
+            ideas = self.llm_service.suggest_competitor_ideas(
+                competitor_title=article.title,
+                competitor_content=article.content_text or article.excerpt or "",
+                competitor_site=article.site_name or article.site_domain,
+                competitor_url=article.url,
+                product_context=products,
+                num_ideas=num_ideas,
+            )
+
+            return ideas
+
+        except Exception as e:
+            log.error(f"Error getting ideas from article #{article_id}: {e}")
+            return None
+
+    async def generate_from_competitor_idea(
+        self,
+        article_id: int,
+        idea_title: str,
+        idea_angle: str,
+        idea_keywords: List[str],
+    ) -> Optional[Dict]:
+        """
+        Generate a full blog post from a chosen competitor-inspired idea.
+
+        Step 2 of the two-step flow: Ideas → Pick → Generate.
+        Saves the result as a BlogDraft with opportunity_type='competitor_spin'.
+        """
+        from app.models.competitor_blog import CompetitorArticle
+
+        try:
+            article = (
+                self.db.query(CompetitorArticle)
+                .filter(CompetitorArticle.id == article_id)
+                .first()
+            )
+            if not article:
+                log.error(f"Competitor article #{article_id} not found")
+                return None
+
+            products = self._find_relevant_products(idea_title)
+            if not products:
+                products = self._find_relevant_products(article.title or "")
+
+            result = self.llm_service.generate_from_idea(
+                idea_title=idea_title,
+                idea_angle=idea_angle,
+                idea_keywords=idea_keywords,
+                competitor_title=article.title,
+                competitor_url=article.url,
+                competitor_site=article.site_name or article.site_domain,
+                product_context=products,
+                site_url=settings.gsc_site_url or "",
+            )
+
+            if not result:
+                return None
+
+            draft = BlogDraft(
+                source_query=idea_title,
+                source_page=article.url,
+                opportunity_type="competitor_spin",
+                title=result.get("title", idea_title),
+                meta_description=result.get("meta_description", ""),
+                slug=result.get("slug", ""),
+                content_html=result.get("content_html", ""),
+                outline=result.get("outline"),
+                target_keywords=result.get("target_keywords"),
+                internal_links=result.get("internal_links"),
+                word_count=result.get("word_count", 0),
+                estimated_reading_time=result.get("estimated_reading_time"),
+                llm_model=result.get("llm_model"),
+                generation_tokens=result.get("generation_tokens"),
+                status="draft",
+                reviewer_notes=f"Inspired by: {article.site_name} — {article.url}",
+            )
+            self.db.add(draft)
+            self.db.commit()
+            self.db.refresh(draft)
+
+            log.info(
+                f"Saved competitor idea draft #{draft.id} "
+                f"'{idea_title}' inspired by {article.site_domain}"
+            )
+            return self._draft_to_dict(draft)
+
+        except Exception as e:
+            self.db.rollback()
+            log.error(f"Error generating from competitor idea: {e}")
+            return None
+
     async def suggest_topics(
         self, days: int = 30, limit: int = 5
     ) -> List[Dict]:

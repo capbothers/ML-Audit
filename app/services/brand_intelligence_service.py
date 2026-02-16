@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, case, literal_column, String, and_, or_, extract
 
 from app.models.shopify import ShopifyOrderItem, ShopifyProduct, ShopifyInventory, ShopifyRefundLineItem
-from app.models.google_ads_data import GoogleAdsProductPerformance, GoogleAdsCampaign
+from app.models.google_ads_data import GoogleAdsProductPerformance, GoogleAdsCampaign, GoogleAdsSearchTerm
 from app.models.ga4_data import GA4ProductPerformance
 from app.models.search_console_data import SearchConsoleQuery
 from app.models.competitive_pricing import CompetitivePricing
@@ -24,8 +24,20 @@ from app.models.product_cost import ProductCost
 from app.models.business_expense import MonthlyPL
 from app.models.shippit import ShippitOrder
 from app.models.shopify import ShopifyOrder
+from app.models.ml_intelligence import MLInventorySuggestion
 from app.config import get_settings
 from app.utils.logger import log
+
+# Recommendation → data source dependency map (for Feature 7)
+_REC_DATA_DEPS = {
+    "range": ["shopify_orders"],
+    "root_cause": ["shopify_orders", "search_console", "shopify_inventory"],
+    "ads": ["google_ads"],
+    "pricing": ["competitive_pricing", "product_costs"],
+    "demand": ["search_console"],
+    "conversion": ["ga4"],
+    "margin": ["product_costs", "shopify_orders"],
+}
 
 
 def _dec(v):
@@ -52,7 +64,12 @@ class BrandIntelligenceService:
     # ── public ────────────────────────────────────────────────────
 
     def get_dashboard(self, period_days: int = 30) -> Dict:
-        now = datetime.utcnow()
+        # Use actual latest order-item date as period end so we don't
+        # include empty days that skew YoY comparisons (data may lag utcnow).
+        latest_order_date = self.db.query(
+            func.max(ShopifyOrderItem.order_date)
+        ).scalar()
+        now = latest_order_date if latest_order_date else datetime.utcnow()
         cur_end = now
         cur_start = now - timedelta(days=period_days)
         yoy_end = cur_end - timedelta(days=365)
@@ -159,6 +176,36 @@ class BrandIntelligenceService:
             "brands_at_risk": brands_at_risk,
         }
 
+        # Data-coverage metadata so the UI can show freshness warnings
+        cur_active_days = self._count_active_days(cur_start, cur_end)
+        yoy_active_days = self._count_active_days(yoy_start, yoy_end)
+
+        # Ads freshness
+        ads_latest = None
+        try:
+            ads_latest_dt = self.db.query(func.max(GoogleAdsCampaign.date)).scalar()
+            if ads_latest_dt:
+                ads_latest = str(ads_latest_dt)
+        except Exception:
+            pass
+
+        # YoY baseline warning
+        yoy_warnings = []
+        if yoy_active_days < cur_active_days * 0.5:
+            yoy_warnings.append(
+                f"YoY baseline has only {yoy_active_days} active days vs "
+                f"{cur_active_days} current — growth figures may be overstated"
+            )
+        if ads_latest and cur_end:
+            ads_lag = (cur_end.date() if hasattr(cur_end, 'date') else cur_end) - (
+                datetime.strptime(ads_latest, "%Y-%m-%d").date() if isinstance(ads_latest, str) else ads_latest
+            )
+            if ads_lag.days > 3:
+                yoy_warnings.append(
+                    f"Google Ads data lags by {ads_lag.days} days — "
+                    f"ads spend/ROAS may be understated for recent period"
+                )
+
         return {
             "period_days": period_days,
             "current_start": cur_start.isoformat(),
@@ -166,10 +213,20 @@ class BrandIntelligenceService:
             "kpis": kpis,
             "brands": brands,
             "tier_counts": tier_counts,
+            "data_coverage": {
+                "current_active_days": cur_active_days,
+                "yoy_active_days": yoy_active_days,
+                "shopify_latest": cur_end.isoformat(),
+                "ads_latest": ads_latest,
+                "warnings": yoy_warnings,
+            },
         }
 
     def get_brand_detail(self, brand_name: str, period_days: int = 30) -> Dict:
-        now = datetime.utcnow()
+        latest_order_date = self.db.query(
+            func.max(ShopifyOrderItem.order_date)
+        ).scalar()
+        now = latest_order_date if latest_order_date else datetime.utcnow()
         cur_start = now - timedelta(days=period_days)
         cur_end = now
         yoy_start = cur_start - timedelta(days=365)
@@ -202,6 +259,23 @@ class BrandIntelligenceService:
         lost_products = [p for p in yoy_products if p["product_id"] not in cur_map and p["revenue"] > 0]
         lost_products.sort(key=lambda p: p["revenue"], reverse=True)
 
+        # Feature 1: Classify lost product recoverability
+        lost_pids = [p["product_id"] for p in lost_products]
+        sku_statuses = self._classify_sku_status(lost_pids, brand_name)
+        for p in lost_products:
+            st = sku_statuses.get(p["product_id"], {})
+            p["sku_status"] = st.get("status", "unknown")
+            p["sku_status_reason"] = st.get("reason", "")
+            p["recoverable"] = st.get("recoverable", True)
+
+        # Feature 5: Cannibalization check for new products
+        new_pids = [p["product_id"] for p in new_products]
+        cannibalization = None
+        try:
+            cannibalization = self._detect_cannibalization(brand_name, new_pids, cur_map, yoy_map)
+        except Exception:
+            pass
+
         # Totals for WHY
         cur_totals = self._brand_totals(brand_name, cur_start, cur_end)
         yoy_totals = self._brand_totals(brand_name, yoy_start, yoy_end)
@@ -217,6 +291,24 @@ class BrandIntelligenceService:
         cogs_coverage = cogs_with / len(cur_products) if cur_products else 0
         for d in why.get("drivers", []):
             d["confidence"] = self._compute_driver_confidence(d, shared_count, cogs_coverage)
+
+        # Enrich WHY drivers with SKU status breakdown (Feature 1) and cannibalization (Feature 5)
+        for d in why.get("drivers", []):
+            if d["driver"] == "lost_products" and sku_statuses:
+                recoverable_ids = [pid for pid in lost_pids if sku_statuses.get(pid, {}).get("recoverable", True)]
+                recoverable_rev = sum(yoy_map.get(p, {}).get("revenue", 0) for p in recoverable_ids)
+                total_lost = abs(d["impact_dollars"])
+                d["recoverable_dollars"] = round(recoverable_rev, 2)
+                d["permanent_dollars"] = round(total_lost - recoverable_rev, 2)
+                d["sku_breakdown"] = {
+                    s: sum(1 for pid in lost_pids if sku_statuses.get(pid, {}).get("status") == s)
+                    for s in ("permanent_delist", "supplier_discontinued", "relaunch_candidate", "active")
+                }
+            elif d["driver"] == "new_products" and cannibalization and cannibalization.get("cannibalization_detected"):
+                d["cannibalization_risk"] = {
+                    "pct": cannibalization["estimated_cannibalized_pct"],
+                    "dollars": cannibalization["estimated_cannibalized_dollars"],
+                }
 
         # Diagnostics
         diagnostics = {}
@@ -247,6 +339,20 @@ class BrandIntelligenceService:
             )
         except Exception:
             diagnostics["ads_yoy"] = None
+
+        # Feature 3: Demand quality (branded vs non-branded)
+        try:
+            diagnostics["demand_quality"] = self._get_demand_quality(
+                brand_name, cur_start, cur_end, yoy_start, yoy_end
+            )
+        except Exception:
+            diagnostics["demand_quality"] = None
+
+        # Feature 6: Price elasticity
+        try:
+            diagnostics["price_elasticity"] = self._get_price_change_events(brand_name)
+        except Exception:
+            diagnostics["price_elasticity"] = None
 
         insights = self._synthesize_insights(
             brand_name,
@@ -280,14 +386,49 @@ class BrandIntelligenceService:
         shipping_revenue = self._get_brand_shipping_revenue(brand_name, cur_start, cur_end)
 
         net_margin = None
+        contribution_margin = None
         total_rev_incl_shipping = cur_totals["revenue"] + shipping_revenue
         if total_rev_incl_shipping > 0:
-            net_margin = round(
-                (total_rev_incl_shipping - cur_totals["total_cogs"] - ads_spend
-                 - overhead_alloc - shipping_cost)
-                / total_rev_incl_shipping * 100,
-                1,
+            contribution_margin = round(
+                total_rev_incl_shipping - cur_totals["total_cogs"] - ads_spend
+                - overhead_alloc - shipping_cost, 2
             )
+            net_margin = round(contribution_margin / total_rev_incl_shipping * 100, 1)
+
+        # Feature 2: Contribution margin waterfall
+        gross_margin_abs = round(cur_totals["revenue"] - cur_totals["total_cogs"], 2)
+        waterfall = {
+            "gross_revenue": cur_totals.get("gross_revenue", 0),
+            "less_discounts": cur_totals.get("discounts", 0),
+            "less_refunds": cur_totals.get("refunds", 0),
+            "net_revenue": cur_totals["revenue"],
+            "less_cogs": cur_totals["total_cogs"],
+            "gross_margin": gross_margin_abs,
+            "gross_margin_pct": cur_totals["gross_margin_pct"],
+            "less_ads": round(ads_spend, 2),
+            "less_shipping_cost": round(shipping_cost, 2),
+            "plus_shipping_revenue": round(shipping_revenue, 2),
+            "less_overhead": round(overhead_alloc, 2),
+            "contribution_margin": contribution_margin or 0,
+            "contribution_margin_pct": net_margin,
+            "cost_coverage_pct": cur_totals.get("cost_coverage_pct", 0),
+        }
+
+        # Data coverage (compute before rec enrichment)
+        data_coverage = {
+            "current_active_days": self._count_active_days(cur_start, cur_end),
+            "yoy_active_days": self._count_active_days(yoy_start, yoy_end),
+            "shopify_latest": cur_end.isoformat(),
+            "current_start": cur_start.isoformat(),
+            "current_end": cur_end.isoformat(),
+        }
+
+        # Feature 7: Enrich recs with confidence + data freshness
+        recs = self._enrich_rec_confidence(recs, data_coverage, diagnostics)
+
+        # Feature 4: Operational feasibility on recommendations
+        # Note: operational_feasibility (OOS badges) removed — OOS is not
+        # treated as a constraint for this business.
 
         return {
             "brand": brand_name,
@@ -297,6 +438,7 @@ class BrandIntelligenceService:
             "declining_products": declining[:10],
             "new_products": new_products[:10],
             "lost_products": lost_products[:10],
+            "cannibalization": cannibalization,
             "why_analysis": why,
             "insights": insights,
             "recommendations": recs,
@@ -324,7 +466,9 @@ class BrandIntelligenceService:
                 ),
                 "has_shipping_cost_data": shipping_data["orders_with_cost"] > 0,
                 "net_margin_pct": net_margin,
+                "contribution_waterfall": waterfall,
             },
+            "data_coverage": data_coverage,
         }
 
     def get_brand_comparison(self, brand_names: List[str], period_days: int = 30) -> Dict:
@@ -363,6 +507,136 @@ class BrandIntelligenceService:
             ShopifyOrderItem.vendor != '',
             ShopifyOrderItem.financial_status.in_(['paid', 'partially_refunded', 'refunded']),
         )
+
+    def _count_active_days(self, start, end) -> int:
+        """Count distinct days with at least one order item in the window."""
+        result = self.db.query(
+            func.count(func.distinct(func.date(ShopifyOrderItem.order_date)))
+        ).filter(
+            ShopifyOrderItem.order_date >= start,
+            ShopifyOrderItem.order_date < end,
+            ShopifyOrderItem.financial_status.in_(['paid', 'partially_refunded', 'refunded']),
+        ).scalar()
+        return int(result or 0)
+
+    def _diagnose_no_sale_product_issues(self, brand: str, lost_products: List[Dict]) -> Dict:
+        """
+        Diagnose likely causes for products sold LY but with zero sales this period.
+
+        This intentionally avoids assuming delist/discontinuation as the default cause.
+        """
+        if not lost_products:
+            return {
+                "count": 0,
+                "lost_revenue": 0.0,
+                "recoverable_estimate": 0.0,
+                "causes": {},
+            }
+
+        product_ids = [p["product_id"] for p in lost_products if p.get("product_id") is not None]
+        sku_status = self._classify_sku_status(product_ids, brand) if product_ids else {}
+
+        # Catalog status lookup (to detect taken-down listings)
+        product_meta = {}
+        if product_ids:
+            prod_rows = (
+                self.db.query(
+                    ShopifyProduct.shopify_product_id,
+                    ShopifyProduct.status,
+                    ShopifyProduct.published_at,
+                )
+                .filter(ShopifyProduct.shopify_product_id.in_(product_ids))
+                .all()
+            )
+            for r in prod_rows:
+                if r.shopify_product_id is None:
+                    continue
+                product_meta[int(r.shopify_product_id)] = {
+                    "status": (r.status or "").lower(),
+                    "published_at": r.published_at,
+                }
+
+        # Pricing snapshot by SKU (to detect uncompetitive price)
+        skus_upper = {
+            (p.get("sku") or "").strip().upper()
+            for p in lost_products
+            if p.get("sku")
+        }
+        pricing_map = {}
+        latest_pricing_date = self.db.query(func.max(CompetitivePricing.pricing_date)).scalar()
+        if latest_pricing_date and skus_upper:
+            pr_rows = (
+                self.db.query(
+                    CompetitivePricing.variant_sku,
+                    CompetitivePricing.current_price,
+                    CompetitivePricing.lowest_competitor_price,
+                )
+                .filter(
+                    CompetitivePricing.vendor == brand,
+                    CompetitivePricing.pricing_date == latest_pricing_date,
+                    func.upper(CompetitivePricing.variant_sku).in_(list(skus_upper)),
+                )
+                .all()
+            )
+            for r in pr_rows:
+                sku_u = (r.variant_sku or "").strip().upper()
+                pricing_map[sku_u] = {
+                    "current_price": _dec(r.current_price),
+                    "lowest_competitor_price": _dec(r.lowest_competitor_price),
+                }
+
+        causes = {
+            "pricing_pressure": {"label": "Pricing pressure vs competitors", "count": 0, "revenue": 0.0},
+            "listing_not_live": {"label": "Listing not live (draft/archived/unpublished)", "count": 0, "revenue": 0.0},
+            "intentional_or_supplier": {"label": "Likely intentional delist / supplier issue", "count": 0, "revenue": 0.0},
+            "unknown_other": {"label": "Unknown / no recent sales (demand/merchandising/tracking)", "count": 0, "revenue": 0.0},
+        }
+
+        total_lost = 0.0
+        for p in lost_products:
+            rev = float(p.get("revenue") or 0)
+            total_lost += rev
+            pid = p.get("product_id")
+            sku_u = (p.get("sku") or "").strip().upper()
+
+            st = sku_status.get(pid, {}).get("status", "unknown")
+            meta = product_meta.get(pid, {})
+            status = meta.get("status", "")
+            published_at = meta.get("published_at")
+            pr = pricing_map.get(sku_u)
+
+            # Cause precedence (OOS is not treated as a root cause)
+            if status in {"draft", "archived"} or (status == "active" and published_at is None):
+                cause = "listing_not_live"
+            elif st in {"permanent_delist", "supplier_discontinued"}:
+                cause = "intentional_or_supplier"
+            elif pr and pr.get("current_price", 0) > 0 and pr.get("lowest_competitor_price", 0) > 0 and pr["current_price"] > pr["lowest_competitor_price"] * 1.03:
+                cause = "pricing_pressure"
+            else:
+                cause = "unknown_other"
+
+            causes[cause]["count"] += 1
+            causes[cause]["revenue"] += rev
+
+        # Weighted recoverable estimate by cause confidence
+        # (OOS is not treated as a separate cause — merged into unknown_other)
+        recoverable = (
+            causes["pricing_pressure"]["revenue"] * 0.50
+            + causes["unknown_other"]["revenue"] * 0.25
+            + causes["listing_not_live"]["revenue"] * 0.20
+            + causes["intentional_or_supplier"]["revenue"] * 0.05
+        )
+
+        for c in causes.values():
+            c["revenue"] = round(c["revenue"], 2)
+
+        return {
+            "count": len(lost_products),
+            "lost_revenue": round(total_lost, 2),
+            "recoverable_estimate": round(recoverable, 2),
+            "causes": causes,
+            "pricing_snapshot_date": str(latest_pricing_date) if latest_pricing_date else None,
+        }
 
     def _get_brand_term_filters(self, brand: str):
         """Return include/exclude term lists for brand matching."""
@@ -757,6 +1031,8 @@ class BrandIntelligenceService:
 
         return {
             "revenue": round(net_rev, 2),
+            "gross_revenue": round(gross_rev, 2),
+            "discounts": round(discounts, 2),
             "refunds": round(refunds, 2),
             "units": net_units,
             "orders": (r.orders or 0) if r else 0,
@@ -1690,17 +1966,41 @@ class BrandIntelligenceService:
         lost_driver = next((d for d in why.get("drivers", []) if d["driver"] == "lost_products"), None)
         if lost_driver and abs(lost_driver["impact_dollars"]) > 2000:
             lost_rev = abs(lost_driver["impact_dollars"])
-            lost_list = [p for p in cur_products if p["product_id"] not in yoy_map]
-            # Actually, lost products are in yoy_map but not cur_map
+            cur_pids = {p["product_id"] for p in cur_products}
+            lost_ids = set(yoy_map.keys()) - cur_pids
+            lost_count = len(lost_ids)
+            lost_products = [p for pid, p in yoy_map.items() if pid in lost_ids]
+            lost_products.sort(key=lambda p: p.get("revenue", 0), reverse=True)
+
+            causes = self._diagnose_no_sale_product_issues(brand, lost_products)
+            by_cause = causes.get("causes", {})
+            pricing_c = by_cause.get("pricing_pressure", {})
+            listing_c = by_cause.get("listing_not_live", {})
+            intent_c = by_cause.get("intentional_or_supplier", {})
+            unknown_c = by_cause.get("unknown_other", {})
+            recoverable = causes.get("recoverable_estimate", lost_rev * 0.35)
+            top_lost = ", ".join(
+                f"{(p.get('sku') or 'N/A')} (${p.get('revenue', 0):,.0f})"
+                for p in lost_products[:3]
+            )
             recs.append({
                 "priority": "high",
                 "category": "range",
                 "action": (
-                    f"{brand} lost ${lost_rev:,.0f} from discontinued/delisted products. "
-                    f"Check if these were intentional delistings or supplier stock issues."
+                    f"{brand} has ${lost_rev:,.0f} YoY gap from {lost_count} SKU"
+                    f"{'s' if lost_count != 1 else ''} with no sales this period (not necessarily delisted). "
+                    f"Top lost: {top_lost}. "
+                    f"Likely drivers: pricing pressure {pricing_c.get('count', 0)} "
+                    f"(${pricing_c.get('revenue', 0):,.0f}), listing not live {listing_c.get('count', 0)} "
+                    f"(${listing_c.get('revenue', 0):,.0f}), intentional/supplier {intent_c.get('count', 0)} "
+                    f"(${intent_c.get('revenue', 0):,.0f}), unknown/no recent sales {unknown_c.get('count', 0)} "
+                    f"(${unknown_c.get('revenue', 0):,.0f})."
                 ),
-                "expected_impact": f"Relisting could recover up to ${lost_rev:,.0f}",
-                "sort_weight": lost_rev,
+                "expected_impact": (
+                    f"Estimated recoverable upside ~${recoverable:,.0f} after cause-weighting; "
+                    f"validate intentional delists and listing status first"
+                ),
+                "sort_weight": recoverable,
             })
 
         # ── 8. Margin erosion ──
@@ -1724,15 +2024,16 @@ class BrandIntelligenceService:
         new_driver = next((d for d in why.get("drivers", []) if d["driver"] == "new_products"), None)
         if new_driver and new_driver["impact_dollars"] > 2000:
             new_rev = new_driver["impact_dollars"]
+            new_count = len({p["product_id"] for p in cur_products} - set(yoy_map.keys()))
             recs.append({
                 "priority": "low",
                 "category": "range",
                 "action": (
-                    f"New {brand} products contributing ${new_rev:,.0f} — "
-                    f"range expansion is working. Continue onboarding new lines."
+                    f"{new_count} new {brand} product{'s' if new_count != 1 else ''} "
+                    f"generated ${new_rev:,.0f} revenue — range expansion is working."
                 ),
-                "expected_impact": f"${new_rev:,.0f} incremental revenue from new products",
-                "sort_weight": new_rev * 0.5,
+                "expected_impact": "Continue onboarding new lines to maintain momentum",
+                "sort_weight": new_rev,
             })
 
         # ── 10. Demand signals (standalone positive) ──
@@ -1771,6 +2072,528 @@ class BrandIntelligenceService:
             r.pop("sort_weight", None)
         return recs[:8]
 
+
+    # ── Feature 1: SKU Status Classification ──────────────────
+
+    def _classify_sku_status(self, product_ids: List[int], brand: str) -> Dict[int, Dict]:
+        """Batch-classify lost products by recoverability status."""
+        if not product_ids:
+            return {}
+        try:
+            now = datetime.utcnow()
+            pid_list = list(product_ids)
+
+            # 1. Product status lookup
+            prod_rows = (
+                self.db.query(ShopifyProduct.shopify_product_id, ShopifyProduct.status)
+                .filter(ShopifyProduct.shopify_product_id.in_(pid_list))
+                .all()
+            )
+            prod_status = {int(r.shopify_product_id): r.status for r in prod_rows}
+
+            # 2. Last sale date per product
+            sale_rows = (
+                self.db.query(
+                    ShopifyOrderItem.shopify_product_id,
+                    func.max(ShopifyOrderItem.order_date).label("last_sale"),
+                )
+                .filter(ShopifyOrderItem.shopify_product_id.in_(pid_list))
+                .group_by(ShopifyOrderItem.shopify_product_id)
+                .all()
+            )
+            last_sale = {int(r.shopify_product_id): r.last_sale for r in sale_rows}
+
+            # 3. Competitive pricing presence (last 90 days)
+            cutoff_90 = (now - timedelta(days=90)).date()
+            cp_rows = (
+                self.db.query(func.distinct(CompetitivePricing.variant_sku))
+                .filter(
+                    CompetitivePricing.vendor == brand,
+                    CompetitivePricing.pricing_date >= cutoff_90,
+                )
+                .all()
+            )
+            cp_skus = {r[0] for r in cp_rows}
+
+            # 4. SKU → product mapping for competitive pricing check
+            sku_rows = (
+                self.db.query(ShopifyOrderItem.shopify_product_id, ShopifyOrderItem.sku)
+                .filter(ShopifyOrderItem.shopify_product_id.in_(pid_list), ShopifyOrderItem.sku.isnot(None))
+                .distinct().all()
+            )
+            pid_skus = defaultdict(set)
+            for r in sku_rows:
+                pid_skus[int(r.shopify_product_id)].add(r.sku)
+
+            # 5. ProductCost presence
+            all_skus = set()
+            for s in pid_skus.values():
+                all_skus.update(s)
+            cost_rows = (
+                self.db.query(ProductCost.vendor_sku)
+                .filter(ProductCost.vendor_sku.in_(list(all_skus)))
+                .all()
+            ) if all_skus else []
+            cost_skus = {r.vendor_sku for r in cost_rows}
+
+            # 6. Inventory check
+            inv_rows = (
+                self.db.query(ShopifyInventory.shopify_product_id, ShopifyInventory.inventory_quantity)
+                .filter(ShopifyInventory.shopify_product_id.in_(pid_list))
+                .all()
+            )
+            inv_qty = {}
+            for r in inv_rows:
+                pid = int(r.shopify_product_id) if r.shopify_product_id else None
+                if pid:
+                    inv_qty[pid] = max(inv_qty.get(pid, 0), r.inventory_quantity or 0)
+
+            result = {}
+            for pid in pid_list:
+                status = prod_status.get(pid)
+                ls = last_sale.get(pid)
+                has_cp = bool(pid_skus.get(pid, set()) & cp_skus)
+                has_cost = bool(pid_skus.get(pid, set()) & cost_skus)
+                inv = inv_qty.get(pid)
+                days_since_sale = (now - ls).days if ls else 999
+
+                # Note: OOS is not treated as a constraint (we sell when out of stock)
+                if status == "archived" and days_since_sale > 180 and not has_cp:
+                    s, reason, rec = "permanent_delist", "Archived, no sales 180d+, no competitive pricing", False
+                elif status == "archived" and days_since_sale < 365 and not has_cost:
+                    s, reason, rec = "supplier_discontinued", "Archived, had recent sales but no cost record", False
+                elif status == "archived" and has_cp and days_since_sale < 365:
+                    s, reason, rec = "relaunch_candidate", "Archived but still in competitive pricing data", True
+                elif status == "active":
+                    s, reason, rec = "active", "Active product", True
+                else:
+                    s, reason, rec = "unknown", "Insufficient data to classify", True
+
+                result[pid] = {"status": s, "reason": reason, "recoverable": rec}
+            return result
+        except Exception as e:
+            log.debug(f"SKU status classification failed for {brand}: {e}")
+            return {}
+
+    # ── Feature 3: Demand Quality ────────────────────────────
+
+    def _get_demand_quality(self, brand, cur_start, cur_end, yoy_start, yoy_end):
+        """Split search demand into branded vs non-branded using Google Ads search terms."""
+        try:
+            include_terms, exclude_terms, allowlist_used = self._get_brand_term_filters(brand)
+            brand_norm = (brand or "").strip().lower()
+            if not brand_norm:
+                return None
+
+            # Get matched campaign names
+            ads_campaign_rows = self._get_ads_campaign_rows(cur_start, cur_end)
+            metrics = self._get_ads_campaign_metrics(brand, ads_campaign_rows)
+            campaign_names = metrics.get("matched_campaigns", set())
+            if not campaign_names:
+                return None
+
+            # Resolve campaign IDs
+            cid_rows = (
+                self.db.query(func.distinct(GoogleAdsCampaign.campaign_id))
+                .filter(GoogleAdsCampaign.campaign_name.in_(list(campaign_names)))
+                .all()
+            )
+            cids = [r[0] for r in cid_rows]
+            if not cids:
+                return None
+
+            brand_pattern = _re.compile(r"\b" + _re.escape(brand_norm) + r"\b", _re.IGNORECASE)
+            include_patterns = [
+                _re.compile(r"\b" + _re.escape(t) + r"\b", _re.IGNORECASE)
+                for t in include_terms if t
+            ] if allowlist_used else []
+
+            def _classify(start, end):
+                start_d = start.date() if hasattr(start, "date") else start
+                end_d = end.date() if hasattr(end, "date") else end
+                rows = (
+                    self.db.query(
+                        GoogleAdsSearchTerm.search_term,
+                        func.sum(GoogleAdsSearchTerm.clicks).label("clicks"),
+                        func.sum(GoogleAdsSearchTerm.impressions).label("impr"),
+                    )
+                    .filter(
+                        GoogleAdsSearchTerm.campaign_id.in_(cids),
+                        GoogleAdsSearchTerm.date >= start_d,
+                        GoogleAdsSearchTerm.date < end_d,
+                    )
+                    .group_by(GoogleAdsSearchTerm.search_term)
+                    .all()
+                )
+                b_clicks, b_impr, nb_clicks, nb_impr = 0, 0, 0, 0
+                nb_terms = []
+                for r in rows:
+                    term = r.search_term or ""
+                    clicks = int(r.clicks or 0)
+                    impr = int(r.impr or 0)
+                    is_branded = bool(brand_pattern.search(term)) or any(p.search(term) for p in include_patterns)
+                    if is_branded:
+                        b_clicks += clicks
+                        b_impr += impr
+                    else:
+                        nb_clicks += clicks
+                        nb_impr += impr
+                        if clicks > 0:
+                            nb_terms.append({"query": r.search_term, "clicks": clicks, "impressions": impr})
+                nb_terms.sort(key=lambda x: x["clicks"], reverse=True)
+                return {"branded": {"clicks": b_clicks, "impressions": b_impr},
+                        "non_branded": {"clicks": nb_clicks, "impressions": nb_impr},
+                        "top_non_branded": nb_terms[:5]}
+
+            cur = _classify(cur_start, cur_end)
+            prev = _classify(yoy_start, yoy_end)
+
+            total = cur["branded"]["clicks"] + cur["non_branded"]["clicks"]
+            if total == 0:
+                return None  # no search term data available
+            branded_pct = round(cur["branded"]["clicks"] / total * 100, 1)
+            nb_yoy = _pct_change(cur["non_branded"]["clicks"], prev["non_branded"]["clicks"])
+            b_yoy = _pct_change(cur["branded"]["clicks"], prev["branded"]["clicks"])
+            acq = "growing" if nb_yoy and nb_yoy > 10 else ("declining" if nb_yoy and nb_yoy < -10 else "flat")
+
+            return {
+                "branded": {**cur["branded"], "clicks_yoy_pct": b_yoy},
+                "non_branded": {**cur["non_branded"], "clicks_yoy_pct": nb_yoy},
+                "branded_pct": branded_pct,
+                "acquisition_signal": acq,
+                "top_non_branded": cur["top_non_branded"],
+            }
+        except Exception as e:
+            log.debug(f"Demand quality skipped for {brand}: {e}")
+            return None
+
+    # ── Feature 4: Operational Feasibility ────────────────────
+
+    def _get_operational_feasibility(self, brand: str, product_ids: List[int]) -> Dict[int, Dict]:
+        """Get stock level and ML reorder data for a set of product IDs."""
+        if not product_ids:
+            return {}
+        try:
+            pid_list = list(product_ids)
+
+            # Inventory quantities
+            inv_rows = (
+                self.db.query(ShopifyInventory.shopify_product_id, ShopifyInventory.inventory_quantity)
+                .filter(ShopifyInventory.shopify_product_id.in_(pid_list))
+                .all()
+            )
+            inv_by_pid = {}
+            for r in inv_rows:
+                pid = int(r.shopify_product_id) if r.shopify_product_id else None
+                if pid:
+                    inv_by_pid[pid] = max(inv_by_pid.get(pid, 0), r.inventory_quantity or 0)
+
+            # SKU → product mapping
+            sku_rows = (
+                self.db.query(ShopifyOrderItem.shopify_product_id, ShopifyOrderItem.sku)
+                .filter(ShopifyOrderItem.shopify_product_id.in_(pid_list), ShopifyOrderItem.sku.isnot(None))
+                .distinct().all()
+            )
+            sku_to_pid = {}
+            for r in sku_rows:
+                sku_to_pid[r.sku] = int(r.shopify_product_id)
+
+            # ML suggestions (latest generation)
+            ml_by_pid = {}
+            if sku_to_pid:
+                latest_gen = self.db.query(func.max(MLInventorySuggestion.generated_at)).scalar()
+                if latest_gen:
+                    ml_rows = (
+                        self.db.query(MLInventorySuggestion)
+                        .filter(
+                            MLInventorySuggestion.sku.in_(list(sku_to_pid.keys())),
+                            MLInventorySuggestion.generated_at == latest_gen,
+                        )
+                        .all()
+                    )
+                    for r in ml_rows:
+                        pid = sku_to_pid.get(r.sku)
+                        if pid:
+                            ml_by_pid[pid] = r
+
+            result = {}
+            for pid in pid_list:
+                qty = inv_by_pid.get(pid)
+                ml = ml_by_pid.get(pid)
+                if qty is None:
+                    feas = "unknown"
+                elif qty == 0:
+                    feas = "oos"
+                elif qty <= 3:
+                    feas = "low_stock"
+                else:
+                    feas = "stock_ok"
+                result[pid] = {
+                    "feasibility": feas,
+                    "inventory_quantity": qty,
+                    "days_of_cover": round(ml.days_of_cover, 1) if ml and ml.days_of_cover else None,
+                    "daily_velocity": round(ml.daily_sales_velocity, 2) if ml and ml.daily_sales_velocity else None,
+                }
+            return result
+        except Exception as e:
+            log.debug(f"Operational feasibility failed for {brand}: {e}")
+            return {}
+
+    # ── Feature 5: Cannibalization Detection ──────────────────
+
+    def _detect_cannibalization(self, brand, new_product_ids, cur_map, yoy_map):
+        """Check if new products cannibalized existing products of the same product_type."""
+        if not new_product_ids:
+            return None
+        try:
+            all_pids = list(set(new_product_ids) | set(cur_map.keys()) | set(yoy_map.keys()))
+            type_rows = (
+                self.db.query(ShopifyProduct.shopify_product_id, ShopifyProduct.product_type)
+                .filter(ShopifyProduct.shopify_product_id.in_(all_pids), ShopifyProduct.product_type.isnot(None))
+                .all()
+            )
+            pid_type = {int(r.shopify_product_id): r.product_type for r in type_rows if r.product_type}
+
+            # Group new product revenue by product_type
+            type_new_rev = defaultdict(float)
+            for pid in new_product_ids:
+                pt = pid_type.get(pid)
+                if pt and pid in cur_map:
+                    type_new_rev[pt] += cur_map[pid]["revenue"]
+
+            if not type_new_rev:
+                return None
+
+            shared_ids = set(cur_map.keys()) & set(yoy_map.keys())
+            categories = []
+            total_cannibalized = 0
+            total_new_rev = 0
+
+            for pt, new_rev in type_new_rev.items():
+                same_type_shared = [pid for pid in shared_ids if pid_type.get(pid) == pt]
+                if not same_type_shared:
+                    categories.append({"product_type": pt, "new_product_revenue": round(new_rev, 2),
+                                       "existing_decline": 0, "net_category_growth": round(new_rev, 2),
+                                       "cannibalization_pct": 0})
+                    total_new_rev += new_rev
+                    continue
+
+                cur_existing = sum(cur_map[p]["revenue"] for p in same_type_shared)
+                yoy_existing = sum(yoy_map[p]["revenue"] for p in same_type_shared)
+                existing_decline = yoy_existing - cur_existing  # positive = decline
+                cannibalized = max(existing_decline, 0)
+                cannibal_pct = round(min(cannibalized / new_rev * 100, 100), 1) if new_rev > 0 else 0
+
+                categories.append({
+                    "product_type": pt, "new_product_revenue": round(new_rev, 2),
+                    "existing_decline": round(existing_decline, 2),
+                    "net_category_growth": round(new_rev - cannibalized, 2),
+                    "cannibalization_pct": cannibal_pct,
+                })
+                total_cannibalized += cannibalized
+                total_new_rev += new_rev
+
+            if not categories:
+                return None
+
+            return {
+                "cannibalization_detected": total_cannibalized > total_new_rev * 0.2,
+                "estimated_cannibalized_pct": round(total_cannibalized / total_new_rev * 100, 1) if total_new_rev > 0 else 0,
+                "estimated_cannibalized_dollars": round(total_cannibalized, 2),
+                "category_analysis": sorted(categories, key=lambda c: c["new_product_revenue"], reverse=True),
+            }
+        except Exception as e:
+            log.debug(f"Cannibalization analysis failed for {brand}: {e}")
+            return None
+
+    # ── Feature 6: Price Elasticity ───────────────────────────
+
+    def _get_price_change_events(self, brand: str, lookback_days: int = 180):
+        """Detect price changes and measure sales impact (pre/post 14-day windows)."""
+        try:
+            since = (datetime.utcnow() - timedelta(days=lookback_days)).date()
+
+            rows = (
+                self.db.query(
+                    CompetitivePricing.variant_sku, CompetitivePricing.title,
+                    CompetitivePricing.pricing_date, CompetitivePricing.current_price,
+                )
+                .filter(
+                    CompetitivePricing.vendor == brand,
+                    CompetitivePricing.pricing_date >= since,
+                    CompetitivePricing.current_price.isnot(None),
+                    CompetitivePricing.current_price > 0,
+                )
+                .order_by(CompetitivePricing.variant_sku, CompetitivePricing.pricing_date)
+                .all()
+            )
+            if not rows:
+                return None
+
+            # Detect changes > 5%
+            events = []
+            by_sku = defaultdict(list)
+            for r in rows:
+                by_sku[r.variant_sku].append(r)
+
+            for sku, sku_rows in by_sku.items():
+                for i in range(1, len(sku_rows)):
+                    prev_p = float(sku_rows[i - 1].current_price)
+                    curr_p = float(sku_rows[i].current_price)
+                    if prev_p <= 0:
+                        continue
+                    chg_pct = (curr_p - prev_p) / prev_p * 100
+                    if abs(chg_pct) > 5:
+                        events.append({
+                            "sku": sku, "title": sku_rows[i].title,
+                            "change_date": sku_rows[i].pricing_date,
+                            "price_before": prev_p, "price_after": curr_p,
+                            "change_pct": round(chg_pct, 1),
+                            "direction": "increase" if chg_pct > 0 else "decrease",
+                        })
+
+            if not events:
+                return None
+
+            # Batch daily sales for affected SKUs
+            all_skus = list({e["sku"] for e in events})
+            earliest = min(e["change_date"] for e in events) - timedelta(days=14)
+            latest = max(e["change_date"] for e in events) + timedelta(days=14)
+
+            sales_rows = (
+                self.db.query(
+                    ShopifyOrderItem.sku,
+                    func.date(ShopifyOrderItem.order_date).label("day"),
+                    func.sum(ShopifyOrderItem.quantity).label("units"),
+                )
+                .filter(
+                    ShopifyOrderItem.sku.in_(all_skus),
+                    ShopifyOrderItem.vendor == brand,
+                    ShopifyOrderItem.order_date >= earliest,
+                    ShopifyOrderItem.order_date <= latest,
+                    ShopifyOrderItem.financial_status.in_(["paid", "partially_refunded"]),
+                )
+                .group_by(ShopifyOrderItem.sku, func.date(ShopifyOrderItem.order_date))
+                .all()
+            )
+
+            daily_sales = defaultdict(lambda: defaultdict(int))
+            for sr in sales_rows:
+                daily_sales[sr.sku][sr.day] = int(sr.units or 0)
+
+            enriched = []
+            for e in events:
+                cd = e["change_date"]
+                sku = e["sku"]
+                before = [daily_sales[sku].get(cd - timedelta(days=d), 0) for d in range(1, 15)]
+                after = [daily_sales[sku].get(cd + timedelta(days=d), 0) for d in range(0, 14)]
+                avg_b = sum(before) / 14
+                avg_a = sum(after) / 14
+                if avg_b < 0.1 and avg_a < 0.1:
+                    continue
+                enriched.append({
+                    **e, "change_date": str(e["change_date"]),
+                    "sales_before_avg": round(avg_b, 2), "sales_after_avg": round(avg_a, 2),
+                    "lift_pct": _pct_change(avg_a, avg_b),
+                })
+
+            enriched.sort(key=lambda x: x["change_date"], reverse=True)
+
+            sensitivities = []
+            for e in enriched:
+                if e["lift_pct"] is not None and abs(e["change_pct"]) > 0:
+                    sensitivities.append(abs(e["lift_pct"]) / abs(e["change_pct"]))
+
+            return {
+                "events": enriched[:10], "event_count": len(enriched),
+                "avg_price_sensitivity": round(sum(sensitivities) / len(sensitivities), 2) if sensitivities else None,
+            }
+        except Exception as e:
+            log.debug(f"Price elasticity skipped for {brand}: {e}")
+            return None
+
+    # ── Feature 7: Per-Recommendation Confidence ──────────────
+
+    def _get_data_freshness(self) -> Dict[str, str]:
+        """Query max dates for each data source (cached on instance)."""
+        if hasattr(self, "_freshness_cache"):
+            return self._freshness_cache
+        f = {}
+        try:
+            v = self.db.query(func.max(GoogleAdsCampaign.date)).scalar()
+            if v:
+                f["google_ads"] = str(v)
+        except Exception:
+            pass
+        try:
+            v = self.db.query(func.max(SearchConsoleQuery.date)).scalar()
+            if v:
+                f["search_console"] = str(v)
+        except Exception:
+            pass
+        try:
+            v = self.db.query(func.max(GA4ProductPerformance.date)).scalar()
+            if v:
+                f["ga4"] = str(v)
+        except Exception:
+            pass
+        try:
+            v = self.db.query(func.max(CompetitivePricing.pricing_date)).scalar()
+            if v:
+                f["competitive_pricing"] = str(v)
+        except Exception:
+            pass
+        self._freshness_cache = f
+        return f
+
+    def _enrich_rec_confidence(self, recs, data_coverage, diagnostics):
+        """Add confidence, data_freshness, and relies_on to each recommendation."""
+        freshness = self._get_data_freshness()
+        # Add shopify/product_costs from data_coverage
+        shopify_latest = data_coverage.get("shopify_latest", "")
+        if shopify_latest:
+            freshness["shopify_orders"] = shopify_latest[:10]
+            freshness["shopify_inventory"] = shopify_latest[:10]
+            freshness["product_costs"] = shopify_latest[:10]
+
+        now = datetime.utcnow().date()
+        stale_days = {
+            "shopify_orders": 1, "google_ads": 2, "search_console": 4,
+            "ga4": 3, "competitive_pricing": 7, "product_costs": 30,
+            "shopify_inventory": 1,
+        }
+
+        for rec in recs:
+            cat = rec.get("category", "")
+            deps = _REC_DATA_DEPS.get(cat, ["shopify_orders"])
+            rec["relies_on"] = deps
+
+            rec_fresh = {}
+            stale = 0
+            missing = 0
+            for src in deps:
+                latest = freshness.get(src)
+                if latest:
+                    rec_fresh[src] = latest
+                    try:
+                        latest_d = datetime.strptime(latest[:10], "%Y-%m-%d").date()
+                        if (now - latest_d).days > stale_days.get(src, 7):
+                            stale += 1
+                    except Exception:
+                        pass
+                else:
+                    missing += 1
+                    rec_fresh[src] = None
+
+            rec["data_freshness"] = rec_fresh
+            if missing > 0:
+                rec["confidence"] = "low"
+            elif stale > 0:
+                rec["confidence"] = "medium"
+            else:
+                rec["confidence"] = "high"
+
+        return recs
 
     # ── Diagnostic methods ─────────────────────────────────────
 
@@ -2354,6 +3177,7 @@ class BrandIntelligenceService:
             # Product-level top performers (only for this brand's products)
             product_perf = []
             wasted = []
+            zero_conv_clicks = []
             brand_pids = (
                 self.db.query(ShopifyProduct.shopify_product_id)
                 .filter(ShopifyProduct.vendor == brand)
@@ -2396,14 +3220,23 @@ class BrandIntelligenceService:
                     entry = {
                         "product_id": pr.product_item_id,
                         "title": pr.product_title or "Unknown",
-                        "spend": 0,  # Not available at product level (inflated)
+                        # Product-level spend is not reliable/available for this view.
+                        "spend": None,
                         "clicks": clicks,
                         "conversions": round(conv, 1),
-                        "roas": 0,
+                        "roas": None,
                     }
                     product_perf.append(entry)
-                    if clicks > 50 and conv == 0:
+                    # "Wasted spend" should only be shown when spend is known and meaningful.
+                    if entry.get("spend") is not None and entry["spend"] > 50 and conv == 0:
                         wasted.append(entry)
+                    # Separate non-monetary signal: high click volume but zero conversions.
+                    if clicks > 50 and conv == 0:
+                        zero_conv_clicks.append({
+                            "product_id": pr.product_item_id,
+                            "title": pr.product_title or "Unknown",
+                            "clicks": clicks,
+                        })
 
             if total_spend == 0 and not product_perf:
                 return None
@@ -2422,6 +3255,7 @@ class BrandIntelligenceService:
                 "rank_lost_share": rank_lost,
                 "product_performance": product_perf[:5],
                 "wasted_spend_products": wasted[:5],
+                "zero_conversion_high_click_products": zero_conv_clicks[:5],
                 "scaling_opportunity": scaling,
             }
         except Exception as e:
