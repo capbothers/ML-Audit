@@ -55,6 +55,11 @@ class StrategicBrief(Base):
     total_issues_identified = Column(Integer, default=0)
     total_quick_wins = Column(Integer, default=0)
 
+    # Degradation state (Req 6: failure-state transparency)
+    is_degraded = Column(Boolean, default=False)
+    stale_modules = Column(JSON, nullable=True)
+    module_freshness = Column(JSON, nullable=True)
+
     # Status
     is_current = Column(Boolean, default=True, index=True)
     generation_time_seconds = Column(Float, nullable=True)
@@ -107,6 +112,27 @@ class BriefRecommendation(Base):
     effort_hours = Column(Float, nullable=True)
     effort_level = Column(String, nullable=True)  # trivial|low|medium|high
     responsible_team = Column(String, nullable=True)  # marketing|dev|ops|content
+
+    # Action-first (Req 1: owner, due date)
+    due_date = Column(Date, nullable=True)
+
+    # Algorithmic ranking (Req 5: impact x confidence x urgency)
+    priority_score = Column(Float, default=0)
+    urgency_weight = Column(Float, default=1.0)
+
+    # Data guardrails (Req 2: data_as_of per recommendation)
+    data_as_of = Column(JSON, nullable=True)
+
+    # Dedup (Req 3: cross-module deduplication)
+    dedup_hash = Column(String(32), nullable=True, index=True)
+    is_cross_functional = Column(Boolean, default=True)
+
+    # Outcome tracking (Req 4: baseline → target → actual)
+    baseline_metric_name = Column(String, nullable=True)
+    baseline_metric_value = Column(Float, nullable=True)
+    target_metric_value = Column(Float, nullable=True)
+    impact_7d = Column(Float, nullable=True)
+    impact_30d = Column(Float, nullable=True)
 
     # Tracking
     status = Column(String, default='new', index=True)  # new|in_progress|completed|deferred

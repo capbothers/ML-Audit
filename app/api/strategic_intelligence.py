@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.models.base import get_db
+from app.models.strategic_intelligence import BriefRecommendation
 from app.services.strategic_intelligence_service import StrategicIntelligenceService
 
 router = APIRouter(prefix="/intelligence", tags=["intelligence"])
@@ -195,6 +196,31 @@ async def update_recommendation_status(
         if 'error' in result:
             raise HTTPException(status_code=404, detail=result['error'])
         return {"success": True, "data": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/recommendations/{rec_id}/outcome")
+async def record_recommendation_outcome(
+    rec_id: int,
+    impact_7d: Optional[float] = Query(None, description="Actual 7-day impact"),
+    impact_30d: Optional[float] = Query(None, description="Actual 30-day impact"),
+    db: Session = Depends(get_db),
+):
+    """Record 7-day or 30-day actual impact for a recommendation."""
+    try:
+        rec = db.query(BriefRecommendation).filter(BriefRecommendation.id == rec_id).first()
+        if not rec:
+            raise HTTPException(status_code=404, detail="Recommendation not found")
+        if impact_7d is not None:
+            rec.impact_7d = impact_7d
+        if impact_30d is not None:
+            rec.impact_30d = impact_30d
+        db.commit()
+        service = StrategicIntelligenceService(db)
+        return {"success": True, "data": service._rec_to_dict(rec)}
     except HTTPException:
         raise
     except Exception as e:

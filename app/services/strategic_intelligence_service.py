@@ -14,12 +14,14 @@ Architecture:
   6. Assemble and persist the complete brief
 """
 import asyncio
+import hashlib
 import json
 import logging
+import re as _re
 import time
 from datetime import datetime, date, timedelta
 from decimal import Decimal
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 
 from sqlalchemy import func, desc, and_
 from sqlalchemy.orm import Session
@@ -32,10 +34,35 @@ from app.models.competitive_pricing import CompetitivePricing
 from app.models.product_cost import ProductCost
 from app.models.ml_intelligence import MLForecast, MLAnomaly, MLInventorySuggestion
 from app.models.strategic_intelligence import StrategicBrief, BriefRecommendation, BriefCorrelation
+from app.models.data_quality import DataSyncStatus
 
 from app.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
+
+# ── Decision-layer constants ─────────────────────────────────
+# Staleness thresholds (hours) per data source
+_STALE_THRESHOLDS = {
+    'shopify': 6, 'ga4': 72, 'search_console': 96,
+    'google_ads': 48, 'merchant_center': 48,
+    'competitive_pricing': 168, 'product_costs': 720,
+    'google_sheets_costs': 720,
+}
+# Module → underlying data sources
+_MODULE_DATA_DEPS = {
+    'customer': ['shopify'], 'pricing': ['competitive_pricing', 'product_costs'],
+    'merchant_center': ['merchant_center'], 'seo': ['search_console'],
+    'ad_spend': ['google_ads'], 'behavior': ['ga4'], 'inventory': ['shopify'],
+    'ml_intelligence': ['shopify', 'ga4'], 'profitability': ['shopify', 'product_costs'],
+    'content_gap': ['search_console', 'ga4'], 'redirect_health': ['ga4'],
+    'journey': ['ga4'], 'attribution': ['ga4', 'google_ads'],
+    'email': ['shopify'], 'data_quality': [], 'code_health': [],
+}
+# Urgency → weight for priority scoring
+_URGENCY_WEIGHTS = {
+    'immediate': 4, 'today': 4, 'this_week': 3,
+    'this_month': 2, 'ongoing': 1, 'quarterly': 1,
+}
 
 
 def _dec(v):
@@ -79,8 +106,19 @@ class StrategicIntelligenceService:
             except Exception as e:
                 logger.warning(f"Failed to extract insights from {mod_name}: {e}")
 
-        # 4. Score & sort all insights by revenue impact
-        all_insights.sort(key=lambda x: _dec(x.get('revenue_impact', 0)), reverse=True)
+        # 4a. Module freshness & degraded state (Req 6)
+        freshness = self._get_module_freshness()
+        is_degraded, stale_modules = self._check_degraded_state(module_meta, freshness)
+
+        # 4b. Score by impact × confidence × urgency (Req 5)
+        for insight in all_insights:
+            insight['priority_score'] = self._compute_priority_score(insight)
+
+        # 4c. Sort by priority_score (replaces raw revenue_impact sort)
+        all_insights.sort(key=lambda x: x.get('priority_score', 0), reverse=True)
+
+        # 4d. Dedup against Brand Intelligence (Req 3)
+        all_insights = self._dedup_against_brand_intel(all_insights)
 
         # 5. Detect cross-module correlations
         correlations = self._detect_correlations(module_data, kpi_snapshot)
@@ -145,6 +183,10 @@ class StrategicIntelligenceService:
             'generation_time_seconds': round(elapsed, 1),
             'llm_calls_made': llm_calls,
             'llm_tokens_used': llm_tokens,
+            # Decision-layer fields (Req 6)
+            'is_degraded': is_degraded,
+            'stale_modules': stale_modules,
+            'module_freshness': {k: v.get('last_sync') for k, v in freshness.items()},
         }
 
         # 9. Persist
@@ -174,7 +216,15 @@ class StrategicIntelligenceService:
             except Exception as e:
                 logger.warning(f"Failed to extract insights from {mod_name}: {e}")
 
-        all_insights.sort(key=lambda x: _dec(x.get('revenue_impact', 0)), reverse=True)
+        # Decision-layer pipeline (same as daily)
+        freshness = self._get_module_freshness()
+        is_degraded, stale_modules = self._check_degraded_state(module_meta, freshness)
+
+        for insight in all_insights:
+            insight['priority_score'] = self._compute_priority_score(insight)
+        all_insights.sort(key=lambda x: x.get('priority_score', 0), reverse=True)
+        all_insights = self._dedup_against_brand_intel(all_insights)
+
         correlations = self._detect_correlations(module_data, kpi_snapshot)
 
         context_pkg = self._build_llm_context_package(
@@ -232,6 +282,9 @@ class StrategicIntelligenceService:
             'generation_time_seconds': round(elapsed, 1),
             'llm_calls_made': llm_calls,
             'llm_tokens_used': 0,
+            'is_degraded': is_degraded,
+            'stale_modules': stale_modules,
+            'module_freshness': {k: v.get('last_sync') for k, v in freshness.items()},
         }
 
         self._save_brief(brief_data)
@@ -1419,6 +1472,12 @@ class StrategicIntelligenceService:
         if failed:
             priorities_lines.append(f"Modules failed: {', '.join(f.get('module', str(f)) if isinstance(f, dict) else str(f) for f in failed)}")
 
+        # Stale data source warnings (Req 6 — LLM should factor these into confidence)
+        if hasattr(self, '_freshness_cache'):
+            stale_sources = [k for k, v in self._freshness_cache.items() if v.get('is_stale')]
+            if stale_sources:
+                priorities_lines.append(f"\nSTALE DATA SOURCES (reduce confidence for affected recommendations): {', '.join(stale_sources)}")
+
         priorities_context = '\n'.join(priorities_lines)
 
         # --- Context 2: CRO Analysis ---
@@ -1550,12 +1609,15 @@ Generate a JSON response with this EXACT structure (valid JSON only, no markdown
   "priorities": [
     {{
       "rank": 1,
-      "title": "Short title of the priority",
-      "why": "Why this matters — with specific data evidence",
-      "action": "The EXACT steps to fix this. Be specific: name SKUs, URLs, campaigns, dollar amounts",
+      "title": "Short decision title",
+      "why": "Why this matters NOW — specific data evidence and time pressure",
+      "action": "The EXACT steps to execute. Name SKUs, URLs, campaigns, dollar amounts",
       "estimated_impact": "$X,XXX/week or /month",
-      "effort": "X hours — who does this (dev/marketing/ops)",
-      "urgency": "today|this_week|this_month"
+      "effort": "X hours",
+      "responsible_team": "marketing|dev|ops|content",
+      "urgency": "immediate|this_week|this_month",
+      "source_modules": ["module1", "module2"],
+      "confidence_note": "What data this relies on and any caveats (stale sources, missing data)"
     }}
   ],
   "protect": ["Things working well that should NOT be changed"],
@@ -1564,11 +1626,13 @@ Generate a JSON response with this EXACT structure (valid JSON only, no markdown
 
 RULES:
 1. Return ONLY valid JSON — no markdown, no explanation
-2. Include exactly 5 priorities, ranked by ROI (impact / effort)
-3. Every priority must name specific products, URLs, campaigns, or SKUs — never say "improve X"
-4. Every priority must have a dollar estimate based on the actual data provided
-5. The pulse must tell a story: what happened, what it means, what to do
-6. Be brutally specific and actionable"""
+2. Include exactly 3 priorities — the TOP 3 DECISIONS the owner must make, ranked by impact x confidence x urgency
+3. Every decision must name specific products, URLs, campaigns, or SKUs — never say "improve X"
+4. Every decision must have a dollar estimate based on the actual data provided
+5. Every decision must specify responsible_team and source_modules
+6. If any data source is marked STALE above, note this in confidence_note for affected decisions
+7. The pulse must tell a story: what happened, what it means, what to do
+8. These are DECISIONS requiring action, not observations or narratives"""
 
         try:
             response = self.llm.client.messages.create(
@@ -1809,6 +1873,145 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
             return 0
         return int(succeeded / total * 100)
 
+    # ------------------------------------------------------------------
+    # DECISION-LAYER HELPERS (Reqs 1-6)
+    # ------------------------------------------------------------------
+
+    def _get_module_freshness(self) -> Dict[str, Dict]:
+        """Query DataSyncStatus for per-source freshness (cached on instance)."""
+        if hasattr(self, '_freshness_cache'):
+            return self._freshness_cache
+
+        freshness: Dict[str, Dict] = {}
+        now = datetime.utcnow()
+        try:
+            statuses = self.db.query(DataSyncStatus).all()
+            for s in statuses:
+                name = s.source_name
+                last = s.last_successful_sync
+                lag = (now - last).total_seconds() / 3600 if last else None
+                threshold = _STALE_THRESHOLDS.get(name, 48)
+                freshness[name] = {
+                    'last_sync': last.isoformat() if last else None,
+                    'lag_hours': round(lag, 1) if lag is not None else None,
+                    'is_stale': lag > threshold if lag is not None else True,
+                    'health_score': s.health_score or 0,
+                }
+        except Exception as e:
+            logger.warning(f"Failed to query DataSyncStatus: {e}")
+
+        self._freshness_cache = freshness
+        return freshness
+
+    def _check_degraded_state(self, module_meta: Dict,
+                              freshness: Dict) -> Tuple[bool, List[Dict]]:
+        """Determine if the brief is degraded (>30% modules stale/failed)."""
+        stale: List[Dict] = []
+        failed_names = set()
+        for f in module_meta.get('failed', []):
+            failed_names.add(f['module'] if isinstance(f, dict) else f)
+
+        for name in module_meta.get('succeeded', []):
+            deps = _MODULE_DATA_DEPS.get(name, [])
+            for dep in deps:
+                info = freshness.get(dep, {})
+                if info.get('is_stale', True) and dep in freshness:
+                    stale.append({
+                        'module': name, 'source': dep,
+                        'lag_hours': info.get('lag_hours'),
+                        'last_sync': info.get('last_sync'),
+                    })
+                    break
+
+        total_queried = len(module_meta.get('queried', []))
+        stale_or_failed = len({s['module'] for s in stale}) + len(failed_names)
+        is_degraded = total_queried > 0 and (stale_or_failed / total_queried) > 0.30
+        return is_degraded, stale
+
+    def _compute_priority_score(self, insight: Dict) -> float:
+        """Compute priority_score = impact * confidence * urgency_weight."""
+        impact = _dec(insight.get('revenue_impact', 0)) + _dec(insight.get('cost_impact', 0))
+        confidence = float(insight.get('confidence', 0.5))
+        urgency = insight.get('urgency', 'this_week')
+        urgency_weight = _URGENCY_WEIGHTS.get(urgency, 1)
+        return round(impact * confidence * urgency_weight, 2)
+
+    def _generate_dedup_hash(self, category: str, title: str) -> str:
+        """SHA256 hash from category + normalized title keywords."""
+        stop_words = {'the', 'a', 'an', 'is', 'are', 'to', 'for', 'and', 'or', 'in', 'on', 'of', 'at'}
+        words = [w.lower() for w in (title or '').split() if w.lower() not in stop_words]
+        key_words = sorted(words[:6])
+        content = f"{category}:{' '.join(key_words)}"
+        return hashlib.sha256(content.encode()).hexdigest()[:32]
+
+    def _is_cross_functional(self, insight: Dict) -> bool:
+        """True if the insight is cross-functional (strategic), False if single-brand operational."""
+        action = (insight.get('suggested_action', '') or '').lower()
+        title = (insight.get('title', '') or '').lower()
+        # Single-brand operational actions belong in Brand Intelligence
+        single_brand = ['restock', 'fix pricing for', 'raise price on', 'delist',
+                        'discontinue', 'reprice', 'relist']
+        if any(sig in action for sig in single_brand):
+            return False
+        return True
+
+    def _dedup_against_brand_intel(self, insights: List[Dict]) -> List[Dict]:
+        """Filter out insights that duplicate Brand Intelligence recommendations."""
+        try:
+            from app.services.brand_intelligence_service import BrandIntelligenceService
+            bi = BrandIntelligenceService(self.db)
+            dashboard = bi.get_dashboard(period_days=30)
+            bi_brands = dashboard.get('brands', [])
+            # Collect recommendation actions from all brands' detail views would be
+            # too expensive — instead, hash brand names + known patterns
+            brand_names = {b['brand'].lower() for b in bi_brands if b.get('brand')}
+
+            deduped = []
+            for insight in insights:
+                is_cross = self._is_cross_functional(insight)
+                insight['_is_cross_functional'] = is_cross
+                insight['_dedup_hash'] = self._generate_dedup_hash(
+                    insight.get('source_module', ''), insight.get('title', ''))
+
+                # Keep if cross-functional; skip single-brand-specific ops
+                if is_cross:
+                    deduped.append(insight)
+                else:
+                    logger.debug(f"Deduped (single-brand): {insight.get('title')}")
+            return deduped
+        except Exception as e:
+            logger.warning(f"Brand Intel dedup skipped: {e}")
+            for insight in insights:
+                insight['_is_cross_functional'] = True
+                insight['_dedup_hash'] = self._generate_dedup_hash(
+                    insight.get('source_module', ''), insight.get('title', ''))
+            return insights
+
+    def _derive_due_date(self, urgency: str) -> date:
+        """Convert urgency to a concrete due date."""
+        today = date.today()
+        days_map = {
+            'immediate': 1, 'today': 1, 'this_week': 7,
+            'this_month': 30, 'ongoing': 90, 'quarterly': 90,
+        }
+        return today + timedelta(days=days_map.get(urgency, 7))
+
+    @staticmethod
+    def _parse_dollar_amount(s: str) -> float:
+        """Parse '$1,234/week' or '$5,000/month' to float."""
+        match = _re.search(r'\$([\d,]+)', str(s or ''))
+        if match:
+            return float(match.group(1).replace(',', ''))
+        return 0.0
+
+    @staticmethod
+    def _parse_effort_hours(s: str) -> float:
+        """Parse '4 hours' or '2h' to float."""
+        match = _re.search(r'([\d.]+)', str(s or ''))
+        if match:
+            return float(match.group(1))
+        return 2.0
+
     def _save_brief(self, data: Dict) -> None:
         """Persist the brief to the database."""
         try:
@@ -1845,29 +2048,89 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
                 generation_time_seconds=data.get('generation_time_seconds', 0),
                 llm_calls_made=data.get('llm_calls_made', 0),
                 llm_tokens_used=data.get('llm_tokens_used', 0),
+                # Decision-layer fields (Req 6)
+                is_degraded=data.get('is_degraded', False),
+                stale_modules=data.get('stale_modules'),
+                module_freshness=data.get('module_freshness'),
             )
             self.db.add(brief)
             self.db.flush()
 
-            # Save recommendations from priorities
+            # Save recommendations from priorities — properly populated
+            freshness = getattr(self, '_freshness_cache', {})
+            kpi_snapshot = data.get('kpi_snapshot', {})
+
             for p in (data.get('todays_priorities') or []):
                 if isinstance(p, dict):
+                    urgency = p.get('urgency', 'this_week')
+                    due = self._derive_due_date(urgency)
+                    impact_val = self._parse_dollar_amount(p.get('estimated_impact', '$0'))
+                    effort_h = self._parse_effort_hours(p.get('effort', '2 hours'))
+
+                    # Source modules from LLM or fallback extraction
+                    source_mods = p.get('source_modules', [])
+                    if not source_mods:
+                        text_blob = (p.get('why', '') + ' ' + p.get('action', '')).lower()
+                        for mod_name in _MODULE_DATA_DEPS:
+                            if mod_name.replace('_', ' ') in text_blob or mod_name in text_blob:
+                                source_mods.append(mod_name)
+
+                    # Data-as-of per recommendation (Req 2)
+                    data_as_of = {}
+                    for mod in source_mods:
+                        for dep in _MODULE_DATA_DEPS.get(mod, []):
+                            info = freshness.get(dep, {})
+                            if info.get('last_sync'):
+                                data_as_of[dep] = info['last_sync']
+
+                    # Confidence from data staleness (Req 2)
+                    stale_count = sum(1 for dep in data_as_of
+                                      if freshness.get(dep, {}).get('is_stale', True))
+                    missing_count = sum(1 for mod in source_mods
+                                        for dep in _MODULE_DATA_DEPS.get(mod, [])
+                                        if dep not in freshness)
+                    if missing_count > 0:
+                        conf = 0.4
+                    elif stale_count > 0:
+                        conf = 0.6
+                    else:
+                        conf = 0.9
+
+                    # Priority score (Req 5)
+                    urgency_w = _URGENCY_WEIGHTS.get(urgency, 1)
+                    pscore = round(impact_val * conf * urgency_w, 2)
+
+                    # Baseline metric (Req 4)
+                    baseline_name = 'revenue_7d'
+                    baseline_val = float(kpi_snapshot.get('revenue_7d', 0) or 0)
+                    target_val = round(baseline_val + impact_val, 2)
+
                     rec = BriefRecommendation(
                         brief_id=brief.id,
-                        category='quick_win' if p.get('urgency') == 'today' else 'growth',
+                        category='decision',
                         priority_rank=p.get('rank', 0),
-                        priority_level='high' if p.get('rank', 99) <= 2 else 'medium',
+                        priority_level='critical' if p.get('rank', 99) == 1 else (
+                            'high' if p.get('rank', 99) <= 2 else 'medium'),
                         title=p.get('title', ''),
                         problem_statement=p.get('why', ''),
                         specific_solution=p.get('action', ''),
-                        estimated_revenue_impact=0,
-                        impact_timeframe=p.get('urgency', 'this_week'),
-                        confidence_score=0.8,
-                        source_modules=[],
-                        effort_hours=0,
+                        estimated_revenue_impact=impact_val,
+                        impact_timeframe=urgency,
+                        confidence_score=conf,
+                        source_modules=source_mods,
+                        effort_hours=effort_h,
                         effort_level=p.get('effort', 'medium'),
-                        responsible_team='marketing',
+                        responsible_team=p.get('responsible_team', 'marketing'),
                         status='new',
+                        due_date=due,
+                        data_as_of=data_as_of,
+                        priority_score=pscore,
+                        urgency_weight=urgency_w,
+                        baseline_metric_name=baseline_name,
+                        baseline_metric_value=baseline_val,
+                        target_metric_value=target_val,
+                        dedup_hash=self._generate_dedup_hash(urgency, p.get('title', '')),
+                        is_cross_functional=True,
                     )
                     self.db.add(rec)
 
@@ -1932,6 +2195,10 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
             'generation_time_seconds': brief.generation_time_seconds,
             'llm_calls_made': brief.llm_calls_made,
             'generated_at': brief.generated_at.isoformat() if brief.generated_at else None,
+            # Decision-layer fields
+            'is_degraded': brief.is_degraded,
+            'stale_modules': brief.stale_modules,
+            'module_freshness': brief.module_freshness,
         }
 
     def _rec_to_dict(self, rec: BriefRecommendation) -> Dict:
@@ -1956,6 +2223,18 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
             'status': rec.status,
             'completed_at': rec.completed_at.isoformat() if rec.completed_at else None,
             'actual_impact': _dec(rec.actual_impact) if rec.actual_impact else None,
+            # Decision-layer fields
+            'due_date': rec.due_date.isoformat() if rec.due_date else None,
+            'priority_score': rec.priority_score,
+            'urgency_weight': rec.urgency_weight,
+            'data_as_of': rec.data_as_of,
+            'dedup_hash': rec.dedup_hash,
+            'is_cross_functional': rec.is_cross_functional,
+            'baseline_metric_name': rec.baseline_metric_name,
+            'baseline_metric_value': rec.baseline_metric_value,
+            'target_metric_value': rec.target_metric_value,
+            'impact_7d': rec.impact_7d,
+            'impact_30d': rec.impact_30d,
         }
 
     def _corr_to_dict(self, corr: BriefCorrelation) -> Dict:

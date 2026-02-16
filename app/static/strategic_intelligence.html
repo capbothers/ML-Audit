@@ -397,6 +397,54 @@ body {
 }
 .dq-modules { font-size: 11px; }
 
+/* ── Decision-Layer Styles ── */
+.degraded-banner {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px;
+    background: var(--amber-bg); border: 1px solid rgba(196,154,74,0.3);
+    border-radius: var(--radius); margin-bottom: 8px;
+    font-size: 13px; color: var(--amber);
+}
+.degraded-banner .badge {
+    background: var(--amber); color: #fff;
+    padding: 3px 10px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.5px; white-space: nowrap;
+}
+.conf-badge {
+    font-size: 10px; padding: 2px 8px; border-radius: 999px; font-weight: 600;
+}
+.conf-high { background: var(--green-bg); color: var(--green); }
+.conf-medium { background: var(--amber-bg); color: var(--amber); }
+.conf-low { background: var(--red-bg); color: var(--red); }
+.source-chips { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+.source-chip {
+    font-size: 10px; padding: 2px 8px; border-radius: 999px;
+    background: rgba(31,111,107,0.08); color: var(--cass-teal); font-weight: 600;
+}
+.decision-meta-bar {
+    display: flex; gap: 14px; align-items: center; margin-top: 8px;
+    padding: 8px 12px; background: rgba(27,27,27,0.02);
+    border-radius: 8px; font-size: 12px; flex-wrap: wrap;
+}
+.decision-meta-bar .owner { font-weight: 600; color: var(--ink); }
+.decision-meta-bar .due { color: var(--amber); font-weight: 600; }
+.decision-meta-bar .st-new { color: var(--cass-teal); font-weight: 600; }
+.decision-meta-bar .st-in_progress { color: var(--amber); font-weight: 600; }
+.decision-meta-bar .st-completed { color: var(--green); font-weight: 600; }
+.outcome-bar {
+    display: flex; gap: 16px; align-items: center;
+    margin-top: 8px; padding: 10px 14px;
+    background: rgba(31,111,107,0.04); border-radius: 8px;
+    font-size: 12px; flex-wrap: wrap;
+}
+.outcome-item { text-align: center; }
+.outcome-label { font-size: 10px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.5px; }
+.outcome-value { font-family: "Space Grotesk"; font-size: 16px; font-weight: 700; }
+.outcome-arrow { color: var(--cass-gold); font-weight: 700; font-size: 16px; }
+.data-as-of { font-size: 10px; color: var(--slate); margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; }
+.meta-urgency-immediate { background: var(--red-bg); color: var(--red); }
+
 /* ── Responsive ── */
 @media (max-width: 1100px) {
     .kpi-grid { grid-template-columns: repeat(3, 1fr); }
@@ -466,6 +514,12 @@ body {
 
         <!-- ═══════════ TAB 1: Today's Brief ═══════════ -->
         <div class="tab-panel active" id="tab-daily">
+            <!-- Degraded Brief Banner (Req 6) -->
+            <div class="degraded-banner" id="dailyDegradedBanner" style="display:none;">
+                <span class="badge">DEGRADED BRIEF</span>
+                <span id="dailyDegradedMsg">Some data sources are stale or missing.</span>
+            </div>
+
             <div class="pulse-banner" id="pulseBanner">
                 <div class="pulse-text" id="pulseText">Generate a daily brief to see your AI-powered intelligence briefing.</div>
                 <div class="status-chip status-stable" id="statusChip">Stable</div>
@@ -482,11 +536,11 @@ body {
 
             <div class="section-card full-width">
                 <div class="section-header">
-                    <h3>Today's Top Priorities</h3>
-                    <div class="section-badge" id="priorityCount">0 priorities</div>
+                    <h3>Top 3 Decisions</h3>
+                    <div class="section-badge" id="priorityCount">0 decisions</div>
                 </div>
                 <div class="priority-list" id="priorityList">
-                    <div style="color:var(--slate);text-align:center;padding:20px;">No priorities yet. Generate a daily brief to get AI-powered recommendations.</div>
+                    <div style="color:var(--slate);text-align:center;padding:20px;">No decisions yet. Generate a daily brief to get AI-powered recommendations.</div>
                 </div>
             </div>
 
@@ -510,6 +564,12 @@ body {
 
         <!-- ═══════════ TAB 2: Weekly Strategy ═══════════ -->
         <div class="tab-panel" id="tab-weekly">
+            <!-- Degraded Brief Banner (Req 6) -->
+            <div class="degraded-banner" id="weeklyDegradedBanner" style="display:none;">
+                <span class="badge">DEGRADED BRIEF</span>
+                <span id="weeklyDegradedMsg">Some data sources are stale or missing.</span>
+            </div>
+
             <div class="pulse-banner" id="weeklyPulse">
                 <div class="pulse-text" id="weeklyPulseText">Generate a weekly brief for your strategic analysis.</div>
                 <div class="status-chip status-stable" id="weeklyStatusChip">Stable</div>
@@ -526,11 +586,11 @@ body {
 
             <div class="section-card full-width">
                 <div class="section-header">
-                    <h3>This Week's Strategic Priorities</h3>
-                    <div class="section-badge" id="weeklyPriorityCount">0 priorities</div>
+                    <h3>Top 3 Decisions</h3>
+                    <div class="section-badge" id="weeklyPriorityCount">0 decisions</div>
                 </div>
                 <div class="priority-list" id="weeklyPriorityList">
-                    <div style="color:var(--slate);text-align:center;padding:20px;">Generate a weekly brief to see strategic priorities.</div>
+                    <div style="color:var(--slate);text-align:center;padding:20px;">Generate a weekly brief to see strategic decisions.</div>
                 </div>
             </div>
 
@@ -680,6 +740,96 @@ function renderMd(md) {
         .replace(/(<p><\/p>)/g, '');
 }
 
+// ── Decision Card Renderer (Req 1+2+4+5) ──
+function renderDecisionCard(p, i) {
+    const rank = p.rank || (i + 1);
+    const confLevel = (p.confidence_score || 0) >= 0.8 ? 'high' : (p.confidence_score || 0) >= 0.5 ? 'medium' : 'low';
+    const confLabel = confLevel.charAt(0).toUpperCase() + confLevel.slice(1);
+    const sources = p.source_modules || [];
+    const dataAsOf = p.data_as_of || {};
+    const status = p.status || 'new';
+    const statusLabel = status === 'in_progress' ? 'In Progress' : status.charAt(0).toUpperCase() + status.slice(1);
+    const recId = p.id || null;
+
+    let outcomeHtml = '';
+    if (p.baseline_metric_value != null || p.target_metric_value != null || p.impact_7d != null || p.impact_30d != null) {
+        outcomeHtml = `<div class="outcome-bar">
+            ${p.baseline_metric_value != null ? `<div class="outcome-item"><div class="outcome-label">Baseline</div><div class="outcome-value">${fmtD(p.baseline_metric_value)}</div></div><div class="outcome-arrow">&#8594;</div>` : ''}
+            ${p.target_metric_value != null ? `<div class="outcome-item"><div class="outcome-label">Target</div><div class="outcome-value" style="color:var(--cass-teal);">${fmtD(p.target_metric_value)}</div></div>` : ''}
+            ${p.impact_7d != null ? `<div class="outcome-arrow">&#8594;</div><div class="outcome-item"><div class="outcome-label">7d Actual</div><div class="outcome-value" style="color:${p.impact_7d >= (p.target_metric_value||0) ? 'var(--green)' : 'var(--amber)'};">${fmtD(p.impact_7d)}</div></div>` : ''}
+            ${p.impact_30d != null ? `<div class="outcome-arrow">&#8594;</div><div class="outcome-item"><div class="outcome-label">30d Actual</div><div class="outcome-value" style="color:${p.impact_30d >= (p.target_metric_value||0) ? 'var(--green)' : 'var(--amber)'};">${fmtD(p.impact_30d)}</div></div>` : ''}
+        </div>`;
+    }
+
+    let asOfHtml = '';
+    const asOfKeys = Object.keys(dataAsOf);
+    if (asOfKeys.length) {
+        asOfHtml = `<div class="data-as-of">${asOfKeys.map(k => `<span>${esc(k)}: ${esc(dataAsOf[k])}</span>`).join('')}</div>`;
+    }
+
+    return `
+        <div class="priority-card">
+            <div class="priority-num">${rank}</div>
+            <div class="priority-body">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <div class="priority-title" style="flex:1;">${esc(p.title)}</div>
+                    <span class="conf-badge conf-${confLevel}">${confLabel} confidence</span>
+                    ${p.priority_score ? `<span class="meta-badge" style="background:rgba(27,27,27,0.06);font-size:10px;" title="Priority score">Score: ${(p.priority_score || 0).toFixed(1)}</span>` : ''}
+                </div>
+                <div class="priority-why">${esc(p.why || p.description || p.confidence_note || '')}</div>
+                <div class="priority-action">${esc(p.action || p.specific_solution || '')}</div>
+
+                <div class="decision-meta-bar">
+                    ${p.responsible_team ? `<span class="owner">${esc(p.responsible_team)}</span>` : ''}
+                    ${p.due_date ? `<span class="due">Due: ${esc(p.due_date)}</span>` : ''}
+                    <span class="st-${status}">${statusLabel}</span>
+                    ${recId ? `<select onchange="updateRecStatus(${recId}, this.value)" style="font-size:11px;border:1px solid var(--line);border-radius:6px;padding:2px 6px;cursor:pointer;">
+                        <option value="new" ${status==='new'?'selected':''}>New</option>
+                        <option value="in_progress" ${status==='in_progress'?'selected':''}>In Progress</option>
+                        <option value="completed" ${status==='completed'?'selected':''}>Completed</option>
+                        <option value="deferred" ${status==='deferred'?'selected':''}>Deferred</option>
+                    </select>` : ''}
+                    <div class="priority-meta" style="margin-top:0;">
+                        ${p.estimated_impact ? `<span class="meta-badge meta-impact">${esc(p.estimated_impact)}</span>` : ''}
+                        ${p.effort ? `<span class="meta-badge meta-effort">${esc(p.effort)}</span>` : ''}
+                        ${p.urgency ? `<span class="meta-badge meta-urgency-${p.urgency}">${esc(p.urgency)}</span>` : ''}
+                    </div>
+                </div>
+
+                ${sources.length ? `<div class="source-chips">${sources.map(s => `<span class="source-chip">${esc(s)}</span>`).join('')}</div>` : ''}
+                ${asOfHtml}
+                ${outcomeHtml}
+            </div>
+        </div>
+    `;
+}
+
+async function updateRecStatus(recId, status) {
+    try {
+        const resp = await fetch(`/intelligence/recommendations/${recId}/status?status=${status}`, { method: 'PUT' });
+        const json = await resp.json();
+        if (!json.success) console.error('Status update failed:', json);
+    } catch (err) {
+        console.error('Status update error:', err);
+    }
+}
+
+function renderDegradedBanner(data, bannerId, msgId) {
+    const banner = document.getElementById(bannerId);
+    const msg = document.getElementById(msgId);
+    if (!banner) return;
+    if (data.is_degraded) {
+        const stale = data.stale_modules || [];
+        const names = stale.map(s => typeof s === 'string' ? s : (s.source || s.module || 'unknown'));
+        msg.textContent = names.length
+            ? `Stale or missing data: ${names.join(', ')}. Confidence in this brief is reduced.`
+            : 'Some data sources are stale or missing. Confidence in this brief is reduced.';
+        banner.style.display = 'flex';
+    } else {
+        banner.style.display = 'none';
+    }
+}
+
 // ── Tab Switching ──
 const tabBtns = document.querySelectorAll('.tab-btn');
 const tabPanels = document.querySelectorAll('.tab-panel');
@@ -762,8 +912,11 @@ function renderDaily() {
     const succeeded = (d.modules_succeeded || []).length;
     document.getElementById('dqModules').textContent = `${succeeded}/16 modules reporting`;
 
+    // Degraded banner (Req 6)
+    renderDegradedBanner(d, 'dailyDegradedBanner', 'dailyDegradedMsg');
+
     // Pulse
-    document.getElementById('pulseText').innerHTML = esc(d.executive_pulse || 'Brief generated. Review priorities below.');
+    document.getElementById('pulseText').innerHTML = esc(d.executive_pulse || 'Brief generated. Review decisions below.');
     const status = d.health_status || 'stable';
     const chip = document.getElementById('statusChip');
     chip.textContent = status.replace('_', ' ').toUpperCase();
@@ -779,25 +932,17 @@ function renderDaily() {
     document.getElementById('kpiSessD').innerHTML = delta(kpi.sessions_7d, kpi.sessions_prev_7d);
     document.getElementById('kpiCart').textContent = (kpi.cart_abandonment_rate || 0).toFixed(1) + '%';
 
-    // Priorities
+    // Decisions (Req 1 — action-first cards)
     const priorities = d.todays_priorities || [];
-    document.getElementById('priorityCount').textContent = priorities.length + ' priorities';
+    const recs = d.recommendations || [];
+    document.getElementById('priorityCount').textContent = priorities.length + ' decisions';
     if (priorities.length) {
-        document.getElementById('priorityList').innerHTML = priorities.map((p, i) => `
-            <div class="priority-card">
-                <div class="priority-num">${p.rank || (i + 1)}</div>
-                <div class="priority-body">
-                    <div class="priority-title">${esc(p.title)}</div>
-                    <div class="priority-why">${esc(p.why || p.description || '')}</div>
-                    <div class="priority-action">${esc(p.action || p.specific_solution || '')}</div>
-                    <div class="priority-meta">
-                        ${p.estimated_impact ? `<span class="meta-badge meta-impact">${esc(p.estimated_impact)}</span>` : ''}
-                        ${p.effort ? `<span class="meta-badge meta-effort">${esc(p.effort)}</span>` : ''}
-                        ${p.urgency ? `<span class="meta-badge meta-urgency-${p.urgency}">${esc(p.urgency)}</span>` : ''}
-                    </div>
-                </div>
-            </div>
-        `).join('');
+        // Merge recommendation details if available (by matching rank/title)
+        const merged = priorities.map((p, i) => {
+            const match = recs.find(r => r.title === p.title || r.priority_rank === (p.rank || i + 1));
+            return match ? { ...p, ...match } : p;
+        });
+        document.getElementById('priorityList').innerHTML = merged.map((p, i) => renderDecisionCard(p, i)).join('');
     }
 
     // What's Working
@@ -810,6 +955,9 @@ function renderWeekly() {
     if (!WEEKLY) return;
     const d = WEEKLY;
     const kpi = d.kpi_snapshot || {};
+
+    // Degraded banner (Req 6)
+    renderDegradedBanner(d, 'weeklyDegradedBanner', 'weeklyDegradedMsg');
 
     // Pulse
     document.getElementById('weeklyPulseText').innerHTML = esc(d.executive_pulse || 'Weekly brief generated.');
@@ -828,24 +976,16 @@ function renderWeekly() {
     document.getElementById('wSessD').innerHTML = delta(kpi.sessions_7d, kpi.sessions_prev_7d);
     document.getElementById('wRisk').textContent = fmt(kpi.at_risk_customers);
 
-    // Priorities
+    // Decisions (Req 1 — action-first cards)
     const priorities = d.todays_priorities || [];
-    document.getElementById('weeklyPriorityCount').textContent = priorities.length + ' priorities';
+    const recs = d.recommendations || [];
+    document.getElementById('weeklyPriorityCount').textContent = priorities.length + ' decisions';
     if (priorities.length) {
-        document.getElementById('weeklyPriorityList').innerHTML = priorities.map((p, i) => `
-            <div class="priority-card">
-                <div class="priority-num">${p.rank || (i + 1)}</div>
-                <div class="priority-body">
-                    <div class="priority-title">${esc(p.title)}</div>
-                    <div class="priority-why">${esc(p.why || '')}</div>
-                    <div class="priority-action">${esc(p.action || '')}</div>
-                    <div class="priority-meta">
-                        ${p.estimated_impact ? `<span class="meta-badge meta-impact">${esc(p.estimated_impact)}</span>` : ''}
-                        ${p.effort ? `<span class="meta-badge meta-effort">${esc(p.effort)}</span>` : ''}
-                    </div>
-                </div>
-            </div>
-        `).join('');
+        const merged = priorities.map((p, i) => {
+            const match = recs.find(r => r.title === p.title || r.priority_rank === (p.rank || i + 1));
+            return match ? { ...p, ...match } : p;
+        });
+        document.getElementById('weeklyPriorityList').innerHTML = merged.map((p, i) => renderDecisionCard(p, i)).join('');
     }
 
     // Correlations
@@ -965,16 +1105,34 @@ function updateSharedSections() {
     // Data confidence
     const succeeded = (d.modules_succeeded || []).length;
     const failed = d.modules_failed || [];
+    // Build freshness detail (Req 2+6)
+    const freshness = d.module_freshness || {};
+    const freshKeys = Object.keys(freshness);
+    let freshnessHtml = '';
+    if (freshKeys.length) {
+        freshnessHtml = '<div style="margin-top:10px;"><strong>Source Freshness:</strong></div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">';
+        freshKeys.forEach(src => {
+            const f = freshness[src];
+            const isStale = f.is_stale;
+            const lag = f.lag_hours != null ? f.lag_hours.toFixed(1) + 'h ago' : 'unknown';
+            const color = isStale ? 'var(--red)' : 'var(--green)';
+            freshnessHtml += `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:600;background:${isStale ? 'var(--red-bg)' : 'var(--green-bg)'};color:${color};">${esc(src)}: ${lag}${isStale ? ' (STALE)' : ''}</span>`;
+        });
+        freshnessHtml += '</div>';
+    }
+
     document.getElementById('dataConfidence').innerHTML = `
         <div style="margin-bottom:8px;">
             <strong>Data Quality Score:</strong> ${d.data_quality_score || 0}/100
             &middot; <strong>Modules:</strong> ${succeeded}/16 reporting
             ${d.generation_time_seconds ? `&middot; <strong>Generated in:</strong> ${d.generation_time_seconds}s` : ''}
             ${d.llm_calls_made ? `&middot; <strong>LLM Calls:</strong> ${d.llm_calls_made}` : ''}
+            ${d.is_degraded ? `&middot; <span style="color:var(--amber);font-weight:700;">DEGRADED</span>` : ''}
         </div>
         ${failed.length ? `<div style="color:var(--amber);">
             <strong>Failed modules:</strong> ${failed.map(f => typeof f === 'string' ? f : (f.module || 'unknown')).join(', ')}
         </div>` : '<div style="color:var(--green);">All modules reporting successfully.</div>'}
+        ${freshnessHtml}
     `;
 
     // Issue triage (LLM markdown)
