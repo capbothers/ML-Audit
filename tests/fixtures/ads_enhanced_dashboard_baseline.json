@@ -1,0 +1,3859 @@
+{
+  "snapshot_date": "2026-02-16",
+  "data_as_of": "2026-02-15",
+  "summary": {
+    "total_campaigns": 13,
+    "total_spend": 40319.159999999996,
+    "total_profit": 436175.14,
+    "profitable_count": 13
+  },
+  "campaigns": [
+    {
+      "campaign_id": "17880722348",
+      "campaign_name": "PM-AU Hardware All",
+      "campaign_type": "performance_max",
+      "spend": 20072.39,
+      "daily_budget": 669.08,
+      "google_metrics": {
+        "conversions": 536,
+        "conversion_value": 258788.29,
+        "roas": 12.9
+      },
+      "true_metrics": {
+        "conversions": 536,
+        "revenue": 258788.29,
+        "product_costs": 0.0,
+        "profit": 238715.9,
+        "true_roas": 12.9,
+        "revenue_roas": 12.9,
+        "allocated_overhead": 57652.16,
+        "fully_loaded_profit": 181063.74,
+        "fully_loaded_roas": 10.0,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 12.9,
+        "true_roas": 12.9,
+        "inflated_by": 0.0
+      },
+      "performance": {
+        "clicks": 24716,
+        "avg_cpc": 0.81,
+        "ctr": 1.85
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": 0.4
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "fast_turn",
+        "decision_score": 74,
+        "short_term_status": "strong",
+        "strategic_value": "high",
+        "action": "scale_aggressively",
+        "confidence": "high",
+        "why_now": "ROAS 12.9x exceeds Fast Turn target (4.0x) with 74/100 decision score. Scale budget by 50%."
+      }
+    },
+    {
+      "campaign_id": "23148781677",
+      "campaign_name": "PMAX Zombie Campaign",
+      "campaign_type": "performance_max",
+      "spend": 5767.91,
+      "daily_budget": 192.26,
+      "google_metrics": {
+        "conversions": 107,
+        "conversion_value": 56717.02,
+        "roas": 9.8
+      },
+      "true_metrics": {
+        "conversions": 107,
+        "revenue": 56717.02,
+        "product_costs": 0.0,
+        "profit": 50949.11,
+        "true_roas": 9.8,
+        "revenue_roas": 9.8,
+        "allocated_overhead": 11508.92,
+        "fully_loaded_profit": 39440.19,
+        "fully_loaded_roas": 7.8,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 9.8,
+        "true_roas": 9.8,
+        "inflated_by": 0.0
+      },
+      "performance": {
+        "clicks": 7242,
+        "avg_cpc": 0.8,
+        "ctr": 3.4
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": 1.5
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "unknown",
+        "decision_score": 81,
+        "short_term_status": "strong",
+        "strategic_value": "high",
+        "action": "scale_aggressively",
+        "confidence": "high",
+        "why_now": "ROAS 9.8x exceeds Unknown target (3.0x) with 81/100 decision score. Scale budget by 50%."
+      }
+    },
+    {
+      "campaign_id": "21518769565",
+      "campaign_name": "PM-AU Zip Taps",
+      "campaign_type": "performance_max",
+      "spend": 5184.11,
+      "daily_budget": 172.8,
+      "google_metrics": {
+        "conversions": 16,
+        "conversion_value": 55374.62,
+        "roas": 10.7
+      },
+      "true_metrics": {
+        "conversions": 16,
+        "revenue": 55374.62,
+        "product_costs": 0.0,
+        "profit": 50190.51,
+        "true_roas": 10.7,
+        "revenue_roas": 10.7,
+        "allocated_overhead": 1720.96,
+        "fully_loaded_profit": 48469.55,
+        "fully_loaded_roas": 10.3,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 10.7,
+        "true_roas": 10.7,
+        "inflated_by": 0.0
+      },
+      "performance": {
+        "clicks": 2852,
+        "avg_cpc": 1.82,
+        "ctr": 1.22
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": null
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "high_consideration",
+        "decision_score": 68,
+        "short_term_status": "strong",
+        "strategic_value": "moderate",
+        "action": "scale",
+        "confidence": "high",
+        "why_now": "ROAS 10.7x above High Consideration good (2.5x). Decision score 68/100. Increase budget 25%."
+      }
+    },
+    {
+      "campaign_id": "22440600456",
+      "campaign_name": "PM-AU Zip Filters",
+      "campaign_type": "performance_max",
+      "spend": 1997.96,
+      "daily_budget": 66.6,
+      "google_metrics": {
+        "conversions": 74,
+        "conversion_value": 28576.5,
+        "roas": 14.3
+      },
+      "true_metrics": {
+        "conversions": 74,
+        "revenue": 28576.5,
+        "product_costs": 0.0,
+        "profit": 26578.54,
+        "true_roas": 14.3,
+        "revenue_roas": 14.3,
+        "allocated_overhead": 7959.44,
+        "fully_loaded_profit": 18619.1,
+        "fully_loaded_roas": 10.3,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 14.3,
+        "true_roas": 14.3,
+        "inflated_by": 0.0
+      },
+      "performance": {
+        "clicks": 1281,
+        "avg_cpc": 1.56,
+        "ctr": 4.72
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": null
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "fast_turn",
+        "decision_score": 77,
+        "short_term_status": "strong",
+        "strategic_value": "high",
+        "action": "scale_aggressively",
+        "confidence": "high",
+        "why_now": "ROAS 14.3x exceeds Fast Turn target (4.0x) with 77/100 decision score. Scale budget by 50%."
+      }
+    },
+    {
+      "campaign_id": "22477075829",
+      "campaign_name": "PM-AU Franke",
+      "campaign_type": "performance_max",
+      "spend": 1157.06,
+      "daily_budget": 38.57,
+      "google_metrics": {
+        "conversions": 50,
+        "conversion_value": 20670.28,
+        "roas": 17.9
+      },
+      "true_metrics": {
+        "conversions": 50,
+        "revenue": 20670.28,
+        "product_costs": 0.0,
+        "profit": 19513.22,
+        "true_roas": 17.9,
+        "revenue_roas": 17.9,
+        "allocated_overhead": 5378.0,
+        "fully_loaded_profit": 14135.22,
+        "fully_loaded_roas": 13.2,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 17.9,
+        "true_roas": 17.9,
+        "inflated_by": 0.0
+      },
+      "performance": {
+        "clicks": 1262,
+        "avg_cpc": 0.92,
+        "ctr": 2.41
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": null
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "high_consideration",
+        "decision_score": 86,
+        "short_term_status": "strong",
+        "strategic_value": "high",
+        "action": "scale_aggressively",
+        "confidence": "high",
+        "why_now": "ROAS 17.9x exceeds High Consideration target (2.5x) with 86/100 decision score. Scale budget by 50%."
+      }
+    },
+    {
+      "campaign_id": "21542099736",
+      "campaign_name": "PM-AU Billi",
+      "campaign_type": "performance_max",
+      "spend": 1313.54,
+      "daily_budget": 43.78,
+      "google_metrics": {
+        "conversions": 13,
+        "conversion_value": 17985.42,
+        "roas": 13.7
+      },
+      "true_metrics": {
+        "conversions": 13,
+        "revenue": 17985.42,
+        "product_costs": 0.0,
+        "profit": 16671.88,
+        "true_roas": 13.7,
+        "revenue_roas": 13.7,
+        "allocated_overhead": 1398.28,
+        "fully_loaded_profit": 15273.6,
+        "fully_loaded_roas": 12.6,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 13.7,
+        "true_roas": 13.7,
+        "inflated_by": 0.0
+      },
+      "performance": {
+        "clicks": 657,
+        "avg_cpc": 2.0,
+        "ctr": 1.4
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": null
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "high_consideration",
+        "decision_score": 79,
+        "short_term_status": "strong",
+        "strategic_value": "high",
+        "action": "scale_aggressively",
+        "confidence": "high",
+        "why_now": "ROAS 13.7x exceeds High Consideration target (2.5x) with 79/100 decision score. Scale budget by 50%."
+      }
+    },
+    {
+      "campaign_id": "21818251190",
+      "campaign_name": "PM-AU Caroma",
+      "campaign_type": "performance_max",
+      "spend": 1269.35,
+      "daily_budget": 42.31,
+      "google_metrics": {
+        "conversions": 26,
+        "conversion_value": 11930.33,
+        "roas": 9.4
+      },
+      "true_metrics": {
+        "conversions": 26,
+        "revenue": 11930.33,
+        "product_costs": 0.0,
+        "profit": 10660.98,
+        "true_roas": 9.4,
+        "revenue_roas": 9.4,
+        "allocated_overhead": 2796.56,
+        "fully_loaded_profit": 7864.42,
+        "fully_loaded_roas": 7.2,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 9.4,
+        "true_roas": 9.4,
+        "inflated_by": 0.0
+      },
+      "performance": {
+        "clicks": 1450,
+        "avg_cpc": 0.88,
+        "ctr": 1.72
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": 0.1
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "high_consideration",
+        "decision_score": 88,
+        "short_term_status": "strong",
+        "strategic_value": "high",
+        "action": "scale_aggressively",
+        "confidence": "high",
+        "why_now": "ROAS 9.4x exceeds High Consideration target (2.5x) with 88/100 decision score. Scale budget by 50%."
+      }
+    },
+    {
+      "campaign_id": "22549060789",
+      "campaign_name": "AI Max Search Campaign",
+      "campaign_type": "search",
+      "spend": 2193.1,
+      "daily_budget": 73.1,
+      "google_metrics": {
+        "conversions": 34,
+        "conversion_value": 22414.71,
+        "roas": 10.2
+      },
+      "true_metrics": {
+        "conversions": 42,
+        "revenue": 34731.0,
+        "product_costs": 25880.36,
+        "profit": 6657.54,
+        "true_roas": 4.0,
+        "revenue_roas": 15.8,
+        "allocated_overhead": 4517.52,
+        "fully_loaded_profit": 2140.02,
+        "fully_loaded_roas": 2.0,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 10.2,
+        "true_roas": 4.0,
+        "inflated_by": 6.2
+      },
+      "performance": {
+        "clicks": 1982,
+        "avg_cpc": 1.11,
+        "ctr": 9.64
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": null
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "brand_defense",
+        "decision_score": 57,
+        "short_term_status": "strong",
+        "strategic_value": "moderate",
+        "action": "scale",
+        "confidence": "high",
+        "why_now": "ROAS 4.0x above Brand Defense good (1.5x). Decision score 57/100. Increase budget 25%."
+      }
+    },
+    {
+      "campaign_id": "22749172451",
+      "campaign_name": "PM-AU Abey",
+      "campaign_type": "performance_max",
+      "spend": 389.34,
+      "daily_budget": 12.98,
+      "google_metrics": {
+        "conversions": 8,
+        "conversion_value": 6463.45,
+        "roas": 16.6
+      },
+      "true_metrics": {
+        "conversions": 8,
+        "revenue": 6463.45,
+        "product_costs": 0.0,
+        "profit": 6074.11,
+        "true_roas": 16.6,
+        "revenue_roas": 16.6,
+        "allocated_overhead": 860.48,
+        "fully_loaded_profit": 5213.63,
+        "fully_loaded_roas": 14.4,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 16.6,
+        "true_roas": 16.6,
+        "inflated_by": 0.0
+      },
+      "performance": {
+        "clicks": 406,
+        "avg_cpc": 0.96,
+        "ctr": 1.96
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": null
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "high_consideration",
+        "decision_score": 83,
+        "short_term_status": "strong",
+        "strategic_value": "high",
+        "action": "scale_aggressively",
+        "confidence": "high",
+        "why_now": "ROAS 16.6x exceeds High Consideration target (2.5x) with 83/100 decision score. Scale budget by 50%."
+      }
+    },
+    {
+      "campaign_id": "22480898821",
+      "campaign_name": "PM-SYD Rheem",
+      "campaign_type": "performance_max",
+      "spend": 295.5,
+      "daily_budget": 9.85,
+      "google_metrics": {
+        "conversions": 5,
+        "conversion_value": 5309.24,
+        "roas": 18.0
+      },
+      "true_metrics": {
+        "conversions": 5,
+        "revenue": 5309.24,
+        "product_costs": 0.0,
+        "profit": 5013.74,
+        "true_roas": 18.0,
+        "revenue_roas": 18.0,
+        "allocated_overhead": 537.8,
+        "fully_loaded_profit": 4475.94,
+        "fully_loaded_roas": 16.1,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 18.0,
+        "true_roas": 18.0,
+        "inflated_by": 0.0
+      },
+      "performance": {
+        "clicks": 391,
+        "avg_cpc": 0.76,
+        "ctr": 1.73
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": null
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "high_consideration",
+        "decision_score": 83,
+        "short_term_status": "strong",
+        "strategic_value": "high",
+        "action": "scale_aggressively",
+        "confidence": "high",
+        "why_now": "ROAS 18.0x exceeds High Consideration target (2.5x) with 83/100 decision score. Scale budget by 50%."
+      }
+    },
+    {
+      "campaign_id": "22470557199",
+      "campaign_name": "PM-SYD Rinnai",
+      "campaign_type": "performance_max",
+      "spend": 430.41,
+      "daily_budget": 14.35,
+      "google_metrics": {
+        "conversions": 6,
+        "conversion_value": 2320.05,
+        "roas": 5.4
+      },
+      "true_metrics": {
+        "conversions": 6,
+        "revenue": 2320.05,
+        "product_costs": 0.0,
+        "profit": 1889.64,
+        "true_roas": 5.4,
+        "revenue_roas": 5.4,
+        "allocated_overhead": 645.36,
+        "fully_loaded_profit": 1244.28,
+        "fully_loaded_roas": 3.9,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 5.4,
+        "true_roas": 5.4,
+        "inflated_by": 0.0
+      },
+      "performance": {
+        "clicks": 420,
+        "avg_cpc": 1.02,
+        "ctr": 2.26
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": null
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "high_consideration",
+        "decision_score": 82,
+        "short_term_status": "strong",
+        "strategic_value": "high",
+        "action": "scale_aggressively",
+        "confidence": "high",
+        "why_now": "ROAS 5.4x exceeds High Consideration target (2.5x) with 82/100 decision score. Scale budget by 50%."
+      }
+    },
+    {
+      "campaign_id": "22471147434",
+      "campaign_name": "PM-AU Rinnai  Non Sydney Non Storage",
+      "campaign_type": "performance_max",
+      "spend": 157.65,
+      "daily_budget": 5.25,
+      "google_metrics": {
+        "conversions": 4,
+        "conversion_value": 1844.29,
+        "roas": 11.7
+      },
+      "true_metrics": {
+        "conversions": 4,
+        "revenue": 1844.29,
+        "product_costs": 0.0,
+        "profit": 1686.64,
+        "true_roas": 11.7,
+        "revenue_roas": 11.7,
+        "allocated_overhead": 430.24,
+        "fully_loaded_profit": 1256.4,
+        "fully_loaded_roas": 9.0,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 11.7,
+        "true_roas": 11.7,
+        "inflated_by": 0.0
+      },
+      "performance": {
+        "clicks": 173,
+        "avg_cpc": 0.91,
+        "ctr": 1.33
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": null
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "high_consideration",
+        "decision_score": 84,
+        "short_term_status": "strong",
+        "strategic_value": "high",
+        "action": "maintain",
+        "confidence": "low",
+        "why_now": "ROAS 11.7x near High Consideration target. Decision score 84/100. Hold current budget."
+      }
+    },
+    {
+      "campaign_id": "22888970844",
+      "campaign_name": "PM-SYD Kaldewei",
+      "campaign_type": "performance_max",
+      "spend": 90.84,
+      "daily_budget": 3.03,
+      "google_metrics": {
+        "conversions": 2,
+        "conversion_value": 1664.17,
+        "roas": 18.3
+      },
+      "true_metrics": {
+        "conversions": 2,
+        "revenue": 1664.17,
+        "product_costs": 0.0,
+        "profit": 1573.33,
+        "true_roas": 18.3,
+        "revenue_roas": 18.3,
+        "allocated_overhead": 215.12,
+        "fully_loaded_profit": 1358.21,
+        "fully_loaded_roas": 16.0,
+        "is_profitable_fully_loaded": true
+      },
+      "roas_difference": {
+        "google_roas": 18.3,
+        "true_roas": 18.3,
+        "inflated_by": 0.0
+      },
+      "performance": {
+        "clicks": 251,
+        "avg_cpc": 0.36,
+        "ctr": 3.72
+      },
+      "budget_status": {
+        "status": "standard",
+        "is_capped": false,
+        "cap_time": null,
+        "lost_impression_share": null
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_scaling_opportunity": false,
+        "is_wasting_budget": false
+      },
+      "recommendation": {
+        "action": "optimize",
+        "recommended_budget": null,
+        "expected_impact": null
+      },
+      "strategy": {
+        "type": "high_consideration",
+        "decision_score": 84,
+        "short_term_status": "strong",
+        "strategic_value": "high",
+        "action": "maintain",
+        "confidence": "low",
+        "why_now": "ROAS 18.3x near High Consideration target. Decision score 84/100. Hold current budget."
+      }
+    }
+  ],
+  "health_scores": [
+    {
+      "campaign_id": "21518769565",
+      "campaign_name": "PM-AU Zip Taps",
+      "health_score": 39.9,
+      "grade": "D",
+      "components": {
+        "roas": 30,
+        "ctr": 0.0,
+        "cpc_trend": 0,
+        "impression_share": 9.9,
+        "conversion_rate": 0.0
+      },
+      "color": "amber"
+    },
+    {
+      "campaign_id": "22471147434",
+      "campaign_name": "PM-AU Rinnai  Non Sydney Non Storage",
+      "health_score": 47.6,
+      "grade": "D",
+      "components": {
+        "roas": 30,
+        "ctr": 1.5,
+        "cpc_trend": 0,
+        "impression_share": 4.5,
+        "conversion_rate": 11.5
+      },
+      "color": "amber"
+    },
+    {
+      "campaign_id": "22749172451",
+      "campaign_name": "PM-AU Abey",
+      "health_score": 53.3,
+      "grade": "C",
+      "components": {
+        "roas": 30,
+        "ctr": 9.2,
+        "cpc_trend": 5,
+        "impression_share": 2.1,
+        "conversion_rate": 6.9
+      },
+      "color": "amber"
+    },
+    {
+      "campaign_id": "21542099736",
+      "campaign_name": "PM-AU Billi",
+      "health_score": 55.2,
+      "grade": "C",
+      "components": {
+        "roas": 30,
+        "ctr": 3.1,
+        "cpc_trend": 5,
+        "impression_share": 9.1,
+        "conversion_rate": 8.1
+      },
+      "color": "amber"
+    },
+    {
+      "campaign_id": "22888970844",
+      "campaign_name": "PM-SYD Kaldewei",
+      "health_score": 57.1,
+      "grade": "C",
+      "components": {
+        "roas": 30,
+        "ctr": 15.4,
+        "cpc_trend": 5,
+        "impression_share": 5.5,
+        "conversion_rate": 1.2
+      },
+      "color": "amber"
+    },
+    {
+      "campaign_id": "22470557199",
+      "campaign_name": "PM-SYD Rinnai",
+      "health_score": 58.3,
+      "grade": "C",
+      "components": {
+        "roas": 30,
+        "ctr": 10.8,
+        "cpc_trend": 10,
+        "impression_share": 4.1,
+        "conversion_rate": 3.5
+      },
+      "color": "amber"
+    },
+    {
+      "campaign_id": "21818251190",
+      "campaign_name": "PM-AU Caroma",
+      "health_score": 59.1,
+      "grade": "C",
+      "components": {
+        "roas": 30,
+        "ctr": 4.6,
+        "cpc_trend": 15,
+        "impression_share": 3.7,
+        "conversion_rate": 5.8
+      },
+      "color": "amber"
+    },
+    {
+      "campaign_id": "22480898821",
+      "campaign_name": "PM-SYD Rheem",
+      "health_score": 61.8,
+      "grade": "C",
+      "components": {
+        "roas": 30,
+        "ctr": 6.2,
+        "cpc_trend": 15,
+        "impression_share": 8.3,
+        "conversion_rate": 2.3
+      },
+      "color": "amber"
+    },
+    {
+      "campaign_id": "22549060789",
+      "campaign_name": "AI Max Search Campaign",
+      "health_score": 63.9,
+      "grade": "C",
+      "components": {
+        "roas": 24.2,
+        "ctr": 18.5,
+        "cpc_trend": 10,
+        "impression_share": 2.0,
+        "conversion_rate": 9.2
+      },
+      "color": "amber"
+    },
+    {
+      "campaign_id": "23148781677",
+      "campaign_name": "PMAX Zombie Campaign",
+      "health_score": 65.8,
+      "grade": "B",
+      "components": {
+        "roas": 30,
+        "ctr": 13.8,
+        "cpc_trend": 15,
+        "impression_share": 2.3,
+        "conversion_rate": 4.6
+      },
+      "color": "green"
+    },
+    {
+      "campaign_id": "17880722348",
+      "campaign_name": "PM-AU Hardware All",
+      "health_score": 69.2,
+      "grade": "B",
+      "components": {
+        "roas": 30,
+        "ctr": 7.7,
+        "cpc_trend": 15,
+        "impression_share": 6.2,
+        "conversion_rate": 10.4
+      },
+      "color": "green"
+    },
+    {
+      "campaign_id": "22440600456",
+      "campaign_name": "PM-AU Zip Filters",
+      "health_score": 72.8,
+      "grade": "B",
+      "components": {
+        "roas": 30,
+        "ctr": 16.9,
+        "cpc_trend": 10,
+        "impression_share": 2.0,
+        "conversion_rate": 13.8
+      },
+      "color": "green"
+    },
+    {
+      "campaign_id": "22477075829",
+      "campaign_name": "PM-AU Franke",
+      "health_score": 75.7,
+      "grade": "B",
+      "components": {
+        "roas": 30,
+        "ctr": 12.3,
+        "cpc_trend": 15,
+        "impression_share": 5.7,
+        "conversion_rate": 12.7
+      },
+      "color": "green"
+    }
+  ],
+  "deep_metrics": [
+    {
+      "campaign_id": "17880722348",
+      "campaign_name": "PM-AU Hardware All",
+      "metrics": {
+        "avg_cpc": 0.81,
+        "avg_ctr": 0.0185,
+        "conv_rate": 0.0218,
+        "cpa": 37.32,
+        "aov": 482.99
+      },
+      "trends": {
+        "cpc_trend": "stable",
+        "ctr_trend": "stable",
+        "conv_rate_trend": "stable",
+        "cpa_trend": "stable",
+        "aov_trend": "falling"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 0.8,
+          "avg_ctr": 0.0204,
+          "conv_rate": 0.0118,
+          "cpa": 67.67,
+          "aov": 293.14
+        },
+        {
+          "week": 4,
+          "avg_cpc": 0.6,
+          "avg_ctr": 0.0205,
+          "conv_rate": 0.0205,
+          "cpa": 29.13,
+          "aov": 392.89
+        },
+        {
+          "week": 5,
+          "avg_cpc": 0.78,
+          "avg_ctr": 0.0184,
+          "conv_rate": 0.0211,
+          "cpa": 36.9,
+          "aov": 589.87
+        },
+        {
+          "week": 6,
+          "avg_cpc": 0.92,
+          "avg_ctr": 0.018,
+          "conv_rate": 0.0221,
+          "cpa": 41.49,
+          "aov": 457.8
+        },
+        {
+          "week": 7,
+          "avg_cpc": 0.83,
+          "avg_ctr": 0.0182,
+          "conv_rate": 0.0233,
+          "cpa": 35.69,
+          "aov": 461.72
+        }
+      ]
+    },
+    {
+      "campaign_id": "21518769565",
+      "campaign_name": "PM-AU Zip Taps",
+      "metrics": {
+        "avg_cpc": 1.84,
+        "avg_ctr": 0.012,
+        "conv_rate": 0.0059,
+        "cpa": 311.42,
+        "aov": 3243.21
+      },
+      "trends": {
+        "cpc_trend": "rising",
+        "ctr_trend": "falling",
+        "conv_rate_trend": "falling",
+        "cpa_trend": "rising",
+        "aov_trend": "rising"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 2.26,
+          "avg_ctr": 0.0116,
+          "conv_rate": 0.0164,
+          "cpa": 137.8,
+          "aov": 249.54
+        },
+        {
+          "week": 4,
+          "avg_cpc": 1.69,
+          "avg_ctr": 0.0107,
+          "conv_rate": 0.0066,
+          "cpa": 253.72,
+          "aov": 4134.36
+        },
+        {
+          "week": 5,
+          "avg_cpc": 1.77,
+          "avg_ctr": 0.0117,
+          "conv_rate": 0.0058,
+          "cpa": 302.62,
+          "aov": 2058.01
+        },
+        {
+          "week": 6,
+          "avg_cpc": 1.84,
+          "avg_ctr": 0.0142,
+          "conv_rate": 0.005,
+          "cpa": 368.75,
+          "aov": 3707.52
+        },
+        {
+          "week": 7,
+          "avg_cpc": 2.32,
+          "avg_ctr": 0.0131,
+          "conv_rate": 0.0043,
+          "cpa": 540.71,
+          "aov": 5718.25
+        }
+      ]
+    },
+    {
+      "campaign_id": "21542099736",
+      "campaign_name": "PM-AU Billi",
+      "metrics": {
+        "avg_cpc": 2.04,
+        "avg_ctr": 0.0139,
+        "conv_rate": 0.0207,
+        "cpa": 98.7,
+        "aov": 1241.73
+      },
+      "trends": {
+        "cpc_trend": "rising",
+        "ctr_trend": "falling",
+        "conv_rate_trend": "stable",
+        "cpa_trend": "rising",
+        "aov_trend": "rising"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 1.24,
+          "avg_ctr": 0.0108,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        },
+        {
+          "week": 4,
+          "avg_cpc": 1.88,
+          "avg_ctr": 0.0163,
+          "conv_rate": 0.0193,
+          "cpa": 97.31,
+          "aov": 1076.54
+        },
+        {
+          "week": 5,
+          "avg_cpc": 2.5,
+          "avg_ctr": 0.0138,
+          "conv_rate": 0.0318,
+          "cpa": 78.59,
+          "aov": 1098.19
+        },
+        {
+          "week": 6,
+          "avg_cpc": 1.83,
+          "avg_ctr": 0.0135,
+          "conv_rate": 0.0081,
+          "cpa": 227.46,
+          "aov": 4634.02
+        },
+        {
+          "week": 7,
+          "avg_cpc": 2.02,
+          "avg_ctr": 0.0109,
+          "conv_rate": 0.025,
+          "cpa": 80.64,
+          "aov": 271.56
+        }
+      ]
+    },
+    {
+      "campaign_id": "21818251190",
+      "campaign_name": "PM-AU Caroma",
+      "metrics": {
+        "avg_cpc": 0.88,
+        "avg_ctr": 0.0172,
+        "conv_rate": 0.0183,
+        "cpa": 47.77,
+        "aov": 452.59
+      },
+      "trends": {
+        "cpc_trend": "falling",
+        "ctr_trend": "falling",
+        "conv_rate_trend": "stable",
+        "cpa_trend": "falling",
+        "aov_trend": "rising"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 1.6,
+          "avg_ctr": 0.0168,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        },
+        {
+          "week": 4,
+          "avg_cpc": 0.77,
+          "avg_ctr": 0.0193,
+          "conv_rate": 0.0175,
+          "cpa": 44.02,
+          "aov": 238.2
+        },
+        {
+          "week": 5,
+          "avg_cpc": 0.88,
+          "avg_ctr": 0.0162,
+          "conv_rate": 0.0104,
+          "cpa": 84.59,
+          "aov": 1124.71
+        },
+        {
+          "week": 6,
+          "avg_cpc": 0.91,
+          "avg_ctr": 0.0166,
+          "conv_rate": 0.0219,
+          "cpa": 41.64,
+          "aov": 556.25
+        },
+        {
+          "week": 7,
+          "avg_cpc": 0.85,
+          "avg_ctr": 0.0174,
+          "conv_rate": 0.0222,
+          "cpa": 38.5,
+          "aov": 217.71
+        }
+      ]
+    },
+    {
+      "campaign_id": "22440600456",
+      "campaign_name": "PM-AU Zip Filters",
+      "metrics": {
+        "avg_cpc": 1.56,
+        "avg_ctr": 0.047,
+        "conv_rate": 0.0581,
+        "cpa": 26.87,
+        "aov": 383.84
+      },
+      "trends": {
+        "cpc_trend": "rising",
+        "ctr_trend": "rising",
+        "conv_rate_trend": "rising",
+        "cpa_trend": "falling",
+        "aov_trend": "falling"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 1.21,
+          "avg_ctr": 0.0662,
+          "conv_rate": 0.0656,
+          "cpa": 18.43,
+          "aov": 532.64
+        },
+        {
+          "week": 4,
+          "avg_cpc": 1.28,
+          "avg_ctr": 0.055,
+          "conv_rate": 0.0483,
+          "cpa": 26.48,
+          "aov": 401.47
+        },
+        {
+          "week": 5,
+          "avg_cpc": 1.53,
+          "avg_ctr": 0.0458,
+          "conv_rate": 0.0567,
+          "cpa": 26.88,
+          "aov": 466.82
+        },
+        {
+          "week": 6,
+          "avg_cpc": 1.76,
+          "avg_ctr": 0.046,
+          "conv_rate": 0.0495,
+          "cpa": 35.5,
+          "aov": 310.09
+        },
+        {
+          "week": 7,
+          "avg_cpc": 1.79,
+          "avg_ctr": 0.0396,
+          "conv_rate": 0.0818,
+          "cpa": 21.92,
+          "aov": 324.22
+        }
+      ]
+    },
+    {
+      "campaign_id": "22470557199",
+      "campaign_name": "PM-SYD Rinnai",
+      "metrics": {
+        "avg_cpc": 1.03,
+        "avg_ctr": 0.0224,
+        "conv_rate": 0.0134,
+        "cpa": 76.69,
+        "aov": 388.82
+      },
+      "trends": {
+        "cpc_trend": "stable",
+        "ctr_trend": "stable",
+        "conv_rate_trend": "falling",
+        "cpa_trend": "rising",
+        "aov_trend": "falling"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 1.83,
+          "avg_ctr": 0.0256,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        },
+        {
+          "week": 4,
+          "avg_cpc": 1.32,
+          "avg_ctr": 0.0231,
+          "conv_rate": 0.0349,
+          "cpa": 37.8,
+          "aov": 279.8
+        },
+        {
+          "week": 5,
+          "avg_cpc": 0.87,
+          "avg_ctr": 0.0249,
+          "conv_rate": 0.0098,
+          "cpa": 88.57,
+          "aov": 215.54
+        },
+        {
+          "week": 6,
+          "avg_cpc": 0.99,
+          "avg_ctr": 0.0217,
+          "conv_rate": 0.0129,
+          "cpa": 76.39,
+          "aov": 722.38
+        },
+        {
+          "week": 7,
+          "avg_cpc": 0.98,
+          "avg_ctr": 0.0205,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        }
+      ]
+    },
+    {
+      "campaign_id": "22471147434",
+      "campaign_name": "PM-AU Rinnai  Non Sydney Non Storage",
+      "metrics": {
+        "avg_cpc": 0.91,
+        "avg_ctr": 0.0133,
+        "conv_rate": 0.026,
+        "cpa": 35.03,
+        "aov": 409.84
+      },
+      "trends": {
+        "cpc_trend": "stable",
+        "ctr_trend": "stable",
+        "conv_rate_trend": "rising",
+        "cpa_trend": "falling",
+        "aov_trend": "falling"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 0,
+          "avg_ctr": 0.0,
+          "conv_rate": 0,
+          "cpa": 0,
+          "aov": 0
+        },
+        {
+          "week": 4,
+          "avg_cpc": 0.92,
+          "avg_ctr": 0.012,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        },
+        {
+          "week": 5,
+          "avg_cpc": 0.56,
+          "avg_ctr": 0.0134,
+          "conv_rate": 0.0952,
+          "cpa": 5.92,
+          "aov": 274.45
+        },
+        {
+          "week": 6,
+          "avg_cpc": 0.75,
+          "avg_ctr": 0.0168,
+          "conv_rate": 0.0075,
+          "cpa": 101.02,
+          "aov": 1493.0
+        },
+        {
+          "week": 7,
+          "avg_cpc": 1.6,
+          "avg_ctr": 0.0103,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        }
+      ]
+    },
+    {
+      "campaign_id": "22477075829",
+      "campaign_name": "PM-AU Franke",
+      "metrics": {
+        "avg_cpc": 0.92,
+        "avg_ctr": 0.024,
+        "conv_rate": 0.0398,
+        "cpa": 23.05,
+        "aov": 400.72
+      },
+      "trends": {
+        "cpc_trend": "stable",
+        "ctr_trend": "rising",
+        "conv_rate_trend": "rising",
+        "cpa_trend": "falling",
+        "aov_trend": "falling"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 0.72,
+          "avg_ctr": 0.0272,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        },
+        {
+          "week": 4,
+          "avg_cpc": 0.87,
+          "avg_ctr": 0.0214,
+          "conv_rate": 0.0275,
+          "cpa": 31.68,
+          "aov": 1026.1
+        },
+        {
+          "week": 5,
+          "avg_cpc": 0.87,
+          "avg_ctr": 0.0223,
+          "conv_rate": 0.028,
+          "cpa": 31.23,
+          "aov": 171.44
+        },
+        {
+          "week": 6,
+          "avg_cpc": 0.97,
+          "avg_ctr": 0.0264,
+          "conv_rate": 0.0545,
+          "cpa": 17.79,
+          "aov": 249.09
+        },
+        {
+          "week": 7,
+          "avg_cpc": 0.91,
+          "avg_ctr": 0.0236,
+          "conv_rate": 0.0357,
+          "cpa": 25.34,
+          "aov": 578.19
+        }
+      ]
+    },
+    {
+      "campaign_id": "22480898821",
+      "campaign_name": "PM-SYD Rheem",
+      "metrics": {
+        "avg_cpc": 0.76,
+        "avg_ctr": 0.0174,
+        "conv_rate": 0.0147,
+        "cpa": 51.59,
+        "aov": 921.15
+      },
+      "trends": {
+        "cpc_trend": "falling",
+        "ctr_trend": "stable",
+        "conv_rate_trend": "falling",
+        "cpa_trend": "rising",
+        "aov_trend": "rising"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 1.22,
+          "avg_ctr": 0.0171,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        },
+        {
+          "week": 4,
+          "avg_cpc": 0.57,
+          "avg_ctr": 0.0134,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        },
+        {
+          "week": 5,
+          "avg_cpc": 0.48,
+          "avg_ctr": 0.0151,
+          "conv_rate": 0.004,
+          "cpa": 119.42,
+          "aov": 1616.7
+        },
+        {
+          "week": 6,
+          "avg_cpc": 0.92,
+          "avg_ctr": 0.0216,
+          "conv_rate": 0.0256,
+          "cpa": 35.93,
+          "aov": 817.04
+        },
+        {
+          "week": 7,
+          "avg_cpc": 0.84,
+          "avg_ctr": 0.0173,
+          "conv_rate": 0.0161,
+          "cpa": 52.27,
+          "aov": 998.26
+        }
+      ]
+    },
+    {
+      "campaign_id": "22549060789",
+      "campaign_name": "AI Max Search Campaign",
+      "metrics": {
+        "avg_cpc": 1.13,
+        "avg_ctr": 0.0962,
+        "conv_rate": 0.0178,
+        "cpa": 63.15,
+        "aov": 637.21
+      },
+      "trends": {
+        "cpc_trend": "rising",
+        "ctr_trend": "stable",
+        "conv_rate_trend": "falling",
+        "cpa_trend": "rising",
+        "aov_trend": "rising"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 1.0,
+          "avg_ctr": 0.1113,
+          "conv_rate": 0.0441,
+          "cpa": 22.61,
+          "aov": 547.82
+        },
+        {
+          "week": 4,
+          "avg_cpc": 1.16,
+          "avg_ctr": 0.0839,
+          "conv_rate": 0.0231,
+          "cpa": 50.49,
+          "aov": 586.92
+        },
+        {
+          "week": 5,
+          "avg_cpc": 1.34,
+          "avg_ctr": 0.0858,
+          "conv_rate": 0.0141,
+          "cpa": 94.91,
+          "aov": 647.18
+        },
+        {
+          "week": 6,
+          "avg_cpc": 1.07,
+          "avg_ctr": 0.1005,
+          "conv_rate": 0.0148,
+          "cpa": 72.37,
+          "aov": 957.3
+        },
+        {
+          "week": 7,
+          "avg_cpc": 1.02,
+          "avg_ctr": 0.1129,
+          "conv_rate": 0.0108,
+          "cpa": 94.33,
+          "aov": 380.62
+        }
+      ]
+    },
+    {
+      "campaign_id": "22749172451",
+      "campaign_name": "PM-AU Abey",
+      "metrics": {
+        "avg_cpc": 0.96,
+        "avg_ctr": 0.0196,
+        "conv_rate": 0.0219,
+        "cpa": 44.11,
+        "aov": 735.32
+      },
+      "trends": {
+        "cpc_trend": "stable",
+        "ctr_trend": "rising",
+        "conv_rate_trend": "rising",
+        "cpa_trend": "stable",
+        "aov_trend": "rising"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 2.78,
+          "avg_ctr": 0.011,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        },
+        {
+          "week": 4,
+          "avg_cpc": 0.87,
+          "avg_ctr": 0.0172,
+          "conv_rate": 0.0091,
+          "cpa": 96.0,
+          "aov": 438.0
+        },
+        {
+          "week": 5,
+          "avg_cpc": 0.93,
+          "avg_ctr": 0.0217,
+          "conv_rate": 0.0392,
+          "cpa": 23.65,
+          "aov": 779.16
+        },
+        {
+          "week": 6,
+          "avg_cpc": 0.93,
+          "avg_ctr": 0.0208,
+          "conv_rate": 0.0161,
+          "cpa": 58.04,
+          "aov": 874.09
+        },
+        {
+          "week": 7,
+          "avg_cpc": 1.03,
+          "avg_ctr": 0.0181,
+          "conv_rate": 0.0204,
+          "cpa": 50.4,
+          "aov": 556.71
+        }
+      ]
+    },
+    {
+      "campaign_id": "22888970844",
+      "campaign_name": "PM-SYD Kaldewei",
+      "metrics": {
+        "avg_cpc": 0.37,
+        "avg_ctr": 0.037,
+        "conv_rate": 0.0083,
+        "cpa": 44.41,
+        "aov": 832.08
+      },
+      "trends": {
+        "cpc_trend": "falling",
+        "ctr_trend": "rising",
+        "conv_rate_trend": "stable",
+        "cpa_trend": "stable",
+        "aov_trend": "stable"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 0.37,
+          "avg_ctr": 0.0387,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        },
+        {
+          "week": 4,
+          "avg_cpc": 0.59,
+          "avg_ctr": 0.0304,
+          "conv_rate": 0.0244,
+          "cpa": 24.27,
+          "aov": 1540.54
+        },
+        {
+          "week": 5,
+          "avg_cpc": 0.39,
+          "avg_ctr": 0.0399,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        },
+        {
+          "week": 6,
+          "avg_cpc": 0.26,
+          "avg_ctr": 0.037,
+          "conv_rate": 0.0143,
+          "cpa": 18.45,
+          "aov": 123.35
+        },
+        {
+          "week": 7,
+          "avg_cpc": 0.32,
+          "avg_ctr": 0.0395,
+          "conv_rate": 0.0,
+          "cpa": 0,
+          "aov": 0
+        }
+      ]
+    },
+    {
+      "campaign_id": "23148781677",
+      "campaign_name": "PMAX Zombie Campaign",
+      "metrics": {
+        "avg_cpc": 0.8,
+        "avg_ctr": 0.0344,
+        "conv_rate": 0.0145,
+        "cpa": 55.21,
+        "aov": 513.06
+      },
+      "trends": {
+        "cpc_trend": "falling",
+        "ctr_trend": "stable",
+        "conv_rate_trend": "falling",
+        "cpa_trend": "rising",
+        "aov_trend": "rising"
+      },
+      "weekly_data": [
+        {
+          "week": 3,
+          "avg_cpc": 0.82,
+          "avg_ctr": 0.0254,
+          "conv_rate": 0.0092,
+          "cpa": 88.5,
+          "aov": 275.51
+        },
+        {
+          "week": 4,
+          "avg_cpc": 0.88,
+          "avg_ctr": 0.0355,
+          "conv_rate": 0.0164,
+          "cpa": 53.8,
+          "aov": 498.69
+        },
+        {
+          "week": 5,
+          "avg_cpc": 0.84,
+          "avg_ctr": 0.0318,
+          "conv_rate": 0.015,
+          "cpa": 56.26,
+          "aov": 631.75
+        },
+        {
+          "week": 6,
+          "avg_cpc": 0.81,
+          "avg_ctr": 0.0332,
+          "conv_rate": 0.0164,
+          "cpa": 49.4,
+          "aov": 376.43
+        },
+        {
+          "week": 7,
+          "avg_cpc": 0.61,
+          "avg_ctr": 0.0428,
+          "conv_rate": 0.0098,
+          "cpa": 61.79,
+          "aov": 662.75
+        }
+      ]
+    }
+  ],
+  "concentration": {
+    "hhi_score": 3021.3,
+    "risk_level": "high",
+    "top_2_share_pct": 62.8,
+    "top_5_share_pct": 86.4,
+    "campaigns": [
+      {
+        "name": "PM-AU Hardware All",
+        "revenue": 258788.29,
+        "share_pct": 51.5
+      },
+      {
+        "name": "PMAX Zombie Campaign",
+        "revenue": 56717.02,
+        "share_pct": 11.3
+      },
+      {
+        "name": "PM-AU Zip Taps",
+        "revenue": 55374.62,
+        "share_pct": 11.0
+      },
+      {
+        "name": "AI Max Search Campaign",
+        "revenue": 34731.0,
+        "share_pct": 6.9
+      },
+      {
+        "name": "PM-AU Zip Filters",
+        "revenue": 28576.5,
+        "share_pct": 5.7
+      },
+      {
+        "name": "PM-AU Franke",
+        "revenue": 20670.28,
+        "share_pct": 4.1
+      },
+      {
+        "name": "PM-AU Billi",
+        "revenue": 17985.42,
+        "share_pct": 3.6
+      },
+      {
+        "name": "PM-AU Caroma",
+        "revenue": 11930.33,
+        "share_pct": 2.4
+      },
+      {
+        "name": "PM-AU Abey",
+        "revenue": 6463.45,
+        "share_pct": 1.3
+      },
+      {
+        "name": "PM-SYD Rheem",
+        "revenue": 5309.24,
+        "share_pct": 1.1
+      },
+      {
+        "name": "PM-SYD Rinnai",
+        "revenue": 2320.05,
+        "share_pct": 0.5
+      },
+      {
+        "name": "PM-AU Rinnai  Non Sydney Non Storage",
+        "revenue": 1844.29,
+        "share_pct": 0.4
+      },
+      {
+        "name": "PM-SYD Kaldewei",
+        "revenue": 1664.17,
+        "share_pct": 0.3
+      }
+    ]
+  },
+  "break_even": [
+    {
+      "campaign_id": "17880722348",
+      "campaign_name": "PM-AU Hardware All",
+      "actual_roas": 12.89,
+      "break_even_roas": 1.22,
+      "margin_of_safety": 9.54,
+      "headroom_dollars": 234243.24,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    },
+    {
+      "campaign_id": "21518769565",
+      "campaign_name": "PM-AU Zip Taps",
+      "actual_roas": 10.68,
+      "break_even_roas": 1.03,
+      "margin_of_safety": 9.36,
+      "headroom_dollars": 50029.37,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    },
+    {
+      "campaign_id": "21542099736",
+      "campaign_name": "PM-AU Billi",
+      "actual_roas": 13.69,
+      "break_even_roas": 1.08,
+      "margin_of_safety": 11.7,
+      "headroom_dollars": 16569.72,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    },
+    {
+      "campaign_id": "21818251190",
+      "campaign_name": "PM-AU Caroma",
+      "actual_roas": 9.4,
+      "break_even_roas": 1.23,
+      "margin_of_safety": 6.61,
+      "headroom_dollars": 10363.47,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    },
+    {
+      "campaign_id": "22440600456",
+      "campaign_name": "PM-AU Zip Filters",
+      "actual_roas": 14.3,
+      "break_even_roas": 1.28,
+      "margin_of_safety": 10.19,
+      "headroom_dollars": 26021.97,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    },
+    {
+      "campaign_id": "22470557199",
+      "campaign_name": "PM-SYD Rinnai",
+      "actual_roas": 5.39,
+      "break_even_roas": 1.28,
+      "margin_of_safety": 3.22,
+      "headroom_dollars": 1769.9,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    },
+    {
+      "campaign_id": "22471147434",
+      "campaign_name": "PM-AU Rinnai  Non Sydney Non Storage",
+      "actual_roas": 11.7,
+      "break_even_roas": 1.23,
+      "margin_of_safety": 8.49,
+      "headroom_dollars": 1649.86,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    },
+    {
+      "campaign_id": "22477075829",
+      "campaign_name": "PM-AU Franke",
+      "actual_roas": 17.86,
+      "break_even_roas": 1.26,
+      "margin_of_safety": 13.18,
+      "headroom_dollars": 19212.19,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    },
+    {
+      "campaign_id": "22480898821",
+      "campaign_name": "PM-SYD Rheem",
+      "actual_roas": 17.97,
+      "break_even_roas": 1.1,
+      "margin_of_safety": 15.31,
+      "headroom_dollars": 4983.82,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    },
+    {
+      "campaign_id": "22549060789",
+      "campaign_name": "AI Max Search Campaign",
+      "actual_roas": 4.04,
+      "break_even_roas": 1.13,
+      "margin_of_safety": 2.57,
+      "headroom_dollars": 6372.33,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    },
+    {
+      "campaign_id": "22749172451",
+      "campaign_name": "PM-AU Abey",
+      "actual_roas": 16.6,
+      "break_even_roas": 1.13,
+      "margin_of_safety": 13.65,
+      "headroom_dollars": 6022.26,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    },
+    {
+      "campaign_id": "22888970844",
+      "campaign_name": "PM-SYD Kaldewei",
+      "actual_roas": 18.32,
+      "break_even_roas": 1.13,
+      "margin_of_safety": 15.22,
+      "headroom_dollars": 1561.59,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    },
+    {
+      "campaign_id": "23148781677",
+      "campaign_name": "PMAX Zombie Campaign",
+      "actual_roas": 9.83,
+      "break_even_roas": 1.2,
+      "margin_of_safety": 7.17,
+      "headroom_dollars": 49778.69,
+      "above_break_even": true,
+      "overhead_per_order": 107.56
+    }
+  ],
+  "diminishing_returns": [
+    {
+      "campaign_id": "17880722348",
+      "campaign_name": "PM-AU Hardware All",
+      "buckets": [
+        {
+          "range_label": "$0-$42",
+          "min_spend": 0,
+          "max_spend": 42.18,
+          "avg_roas": 13.28,
+          "days_count": 22
+        },
+        {
+          "range_label": "$42-$367",
+          "min_spend": 42.18,
+          "max_spend": 366.87,
+          "avg_roas": 12.65,
+          "days_count": 23
+        },
+        {
+          "range_label": "$367-$762",
+          "min_spend": 366.87,
+          "max_spend": 761.51,
+          "avg_roas": 13.49,
+          "days_count": 22
+        },
+        {
+          "range_label": "$762-$1459",
+          "min_spend": 761.51,
+          "max_spend": 1458.58,
+          "avg_roas": 14.21,
+          "days_count": 23
+        }
+      ],
+      "optimal_daily_spend": 1110.05,
+      "current_daily_spend": 432.57,
+      "overspend_per_day": 0,
+      "status": "underspending"
+    },
+    {
+      "campaign_id": "21518769565",
+      "campaign_name": "PM-AU Zip Taps",
+      "buckets": [
+        {
+          "range_label": "$0-$58",
+          "min_spend": 0,
+          "max_spend": 58.14,
+          "avg_roas": 19.75,
+          "days_count": 22
+        },
+        {
+          "range_label": "$58-$161",
+          "min_spend": 58.14,
+          "max_spend": 160.51,
+          "avg_roas": 16.63,
+          "days_count": 23
+        },
+        {
+          "range_label": "$161-$261",
+          "min_spend": 160.51,
+          "max_spend": 260.98,
+          "avg_roas": 16.64,
+          "days_count": 22
+        },
+        {
+          "range_label": "$261-$1084",
+          "min_spend": 260.98,
+          "max_spend": 1083.92,
+          "avg_roas": 8.68,
+          "days_count": 23
+        }
+      ],
+      "optimal_daily_spend": 29.07,
+      "current_daily_spend": 241.45,
+      "overspend_per_day": 212.38,
+      "status": "overspending"
+    },
+    {
+      "campaign_id": "21542099736",
+      "campaign_name": "PM-AU Billi",
+      "buckets": [
+        {
+          "range_label": "$0-$35",
+          "min_spend": 0,
+          "max_spend": 35.45,
+          "avg_roas": 12.52,
+          "days_count": 20
+        },
+        {
+          "range_label": "$35-$62",
+          "min_spend": 35.45,
+          "max_spend": 62.34,
+          "avg_roas": 13.68,
+          "days_count": 21
+        },
+        {
+          "range_label": "$62-$180",
+          "min_spend": 62.34,
+          "max_spend": 180.26,
+          "avg_roas": 17.48,
+          "days_count": 21
+        },
+        {
+          "range_label": "$180-$652",
+          "min_spend": 180.26,
+          "max_spend": 652.47,
+          "avg_roas": 9.86,
+          "days_count": 21
+        }
+      ],
+      "optimal_daily_spend": 121.3,
+      "current_daily_spend": 116.57,
+      "overspend_per_day": 0,
+      "status": "optimal"
+    },
+    {
+      "campaign_id": "21818251190",
+      "campaign_name": "PM-AU Caroma",
+      "buckets": [
+        {
+          "range_label": "$0-$28",
+          "min_spend": 0,
+          "max_spend": 27.78,
+          "avg_roas": 24.86,
+          "days_count": 20
+        },
+        {
+          "range_label": "$28-$49",
+          "min_spend": 27.78,
+          "max_spend": 49.3,
+          "avg_roas": 6.14,
+          "days_count": 21
+        },
+        {
+          "range_label": "$49-$204",
+          "min_spend": 49.3,
+          "max_spend": 204.04,
+          "avg_roas": 11.16,
+          "days_count": 21
+        },
+        {
+          "range_label": "$204-$826",
+          "min_spend": 204.04,
+          "max_spend": 825.75,
+          "avg_roas": 7.33,
+          "days_count": 21
+        }
+      ],
+      "optimal_daily_spend": 13.89,
+      "current_daily_spend": 123.25,
+      "overspend_per_day": 109.36,
+      "status": "overspending"
+    },
+    {
+      "campaign_id": "22440600456",
+      "campaign_name": "PM-AU Zip Filters",
+      "buckets": [
+        {
+          "range_label": "$0-$36",
+          "min_spend": 0,
+          "max_spend": 36.29,
+          "avg_roas": 19.01,
+          "days_count": 22
+        },
+        {
+          "range_label": "$36-$64",
+          "min_spend": 36.29,
+          "max_spend": 64.06,
+          "avg_roas": 21.55,
+          "days_count": 23
+        },
+        {
+          "range_label": "$64-$110",
+          "min_spend": 64.06,
+          "max_spend": 110.31,
+          "avg_roas": 13.77,
+          "days_count": 22
+        },
+        {
+          "range_label": "$110-$963",
+          "min_spend": 110.31,
+          "max_spend": 963.12,
+          "avg_roas": 13.27,
+          "days_count": 23
+        }
+      ],
+      "optimal_daily_spend": 50.17,
+      "current_daily_spend": 102.34,
+      "overspend_per_day": 52.17,
+      "status": "overspending"
+    },
+    {
+      "campaign_id": "22470557199",
+      "campaign_name": "PM-SYD Rinnai",
+      "buckets": [
+        {
+          "range_label": "$0-$12",
+          "min_spend": 0,
+          "max_spend": 12.16,
+          "avg_roas": 31.35,
+          "days_count": 20
+        },
+        {
+          "range_label": "$12-$23",
+          "min_spend": 12.16,
+          "max_spend": 23.43,
+          "avg_roas": 13.68,
+          "days_count": 21
+        },
+        {
+          "range_label": "$23-$42",
+          "min_spend": 23.43,
+          "max_spend": 41.91,
+          "avg_roas": 37.45,
+          "days_count": 21
+        },
+        {
+          "range_label": "$42-$101",
+          "min_spend": 41.91,
+          "max_spend": 100.81,
+          "avg_roas": 10.46,
+          "days_count": 21
+        }
+      ],
+      "optimal_daily_spend": 32.67,
+      "current_daily_spend": 28.63,
+      "overspend_per_day": 0,
+      "status": "optimal"
+    },
+    {
+      "campaign_id": "22471147434",
+      "campaign_name": "PM-AU Rinnai  Non Sydney Non Storage",
+      "buckets": [
+        {
+          "range_label": "$0-$3",
+          "min_spend": 0,
+          "max_spend": 3.26,
+          "avg_roas": 0.0,
+          "days_count": 20
+        },
+        {
+          "range_label": "$3-$9",
+          "min_spend": 3.26,
+          "max_spend": 8.71,
+          "avg_roas": 34.64,
+          "days_count": 21
+        },
+        {
+          "range_label": "$9-$26",
+          "min_spend": 8.71,
+          "max_spend": 26.08,
+          "avg_roas": 10.16,
+          "days_count": 21
+        },
+        {
+          "range_label": "$26-$84",
+          "min_spend": 26.08,
+          "max_spend": 83.62,
+          "avg_roas": 9.71,
+          "days_count": 21
+        }
+      ],
+      "optimal_daily_spend": 5.99,
+      "current_daily_spend": 18.31,
+      "overspend_per_day": 12.33,
+      "status": "overspending"
+    },
+    {
+      "campaign_id": "22477075829",
+      "campaign_name": "PM-AU Franke",
+      "buckets": [
+        {
+          "range_label": "$0-$25",
+          "min_spend": 0,
+          "max_spend": 25.2,
+          "avg_roas": 10.57,
+          "days_count": 20
+        },
+        {
+          "range_label": "$25-$45",
+          "min_spend": 25.2,
+          "max_spend": 44.56,
+          "avg_roas": 19.94,
+          "days_count": 21
+        },
+        {
+          "range_label": "$45-$87",
+          "min_spend": 44.56,
+          "max_spend": 86.94,
+          "avg_roas": 16.44,
+          "days_count": 21
+        },
+        {
+          "range_label": "$87-$249",
+          "min_spend": 86.94,
+          "max_spend": 249.21,
+          "avg_roas": 20.65,
+          "days_count": 21
+        }
+      ],
+      "optimal_daily_spend": 168.07,
+      "current_daily_spend": 60.72,
+      "overspend_per_day": 0,
+      "status": "underspending"
+    },
+    {
+      "campaign_id": "22480898821",
+      "campaign_name": "PM-SYD Rheem",
+      "buckets": [
+        {
+          "range_label": "$0-$6",
+          "min_spend": 0,
+          "max_spend": 5.51,
+          "avg_roas": 36.86,
+          "days_count": 20
+        },
+        {
+          "range_label": "$6-$15",
+          "min_spend": 5.51,
+          "max_spend": 14.56,
+          "avg_roas": 40.47,
+          "days_count": 21
+        },
+        {
+          "range_label": "$15-$27",
+          "min_spend": 14.56,
+          "max_spend": 26.54,
+          "avg_roas": 11.78,
+          "days_count": 21
+        },
+        {
+          "range_label": "$27-$91",
+          "min_spend": 26.54,
+          "max_spend": 91.17,
+          "avg_roas": 16.61,
+          "days_count": 21
+        }
+      ],
+      "optimal_daily_spend": 10.04,
+      "current_daily_spend": 20.97,
+      "overspend_per_day": 10.93,
+      "status": "overspending"
+    },
+    {
+      "campaign_id": "22549060789",
+      "campaign_name": "AI Max Search Campaign",
+      "buckets": [
+        {
+          "range_label": "$0-$23",
+          "min_spend": 0,
+          "max_spend": 23.44,
+          "avg_roas": 24.55,
+          "days_count": 20
+        },
+        {
+          "range_label": "$23-$50",
+          "min_spend": 23.44,
+          "max_spend": 50.2,
+          "avg_roas": 6.36,
+          "days_count": 21
+        },
+        {
+          "range_label": "$50-$88",
+          "min_spend": 50.2,
+          "max_spend": 87.57,
+          "avg_roas": 7.42,
+          "days_count": 21
+        },
+        {
+          "range_label": "$88-$166",
+          "min_spend": 87.57,
+          "max_spend": 166.05,
+          "avg_roas": 13.83,
+          "days_count": 21
+        }
+      ],
+      "optimal_daily_spend": 11.72,
+      "current_daily_spend": 58.11,
+      "overspend_per_day": 46.39,
+      "status": "overspending"
+    },
+    {
+      "campaign_id": "22749172451",
+      "campaign_name": "PM-AU Abey",
+      "buckets": [
+        {
+          "range_label": "$0-$9",
+          "min_spend": 0,
+          "max_spend": 8.51,
+          "avg_roas": 17.16,
+          "days_count": 20
+        },
+        {
+          "range_label": "$9-$20",
+          "min_spend": 8.51,
+          "max_spend": 20.14,
+          "avg_roas": 10.63,
+          "days_count": 21
+        },
+        {
+          "range_label": "$20-$37",
+          "min_spend": 20.14,
+          "max_spend": 36.82,
+          "avg_roas": 12.25,
+          "days_count": 21
+        },
+        {
+          "range_label": "$37-$103",
+          "min_spend": 36.82,
+          "max_spend": 103.39,
+          "avg_roas": 14.15,
+          "days_count": 21
+        }
+      ],
+      "optimal_daily_spend": 4.25,
+      "current_daily_spend": 25.97,
+      "overspend_per_day": 21.72,
+      "status": "overspending"
+    },
+    {
+      "campaign_id": "22888970844",
+      "campaign_name": "PM-SYD Kaldewei",
+      "buckets": [
+        {
+          "range_label": "$0-$0",
+          "min_spend": 0,
+          "max_spend": 0.3,
+          "avg_roas": 0.0,
+          "days_count": 18
+        },
+        {
+          "range_label": "$0-$2",
+          "min_spend": 0.3,
+          "max_spend": 1.54,
+          "avg_roas": 0.0,
+          "days_count": 19
+        },
+        {
+          "range_label": "$2-$4",
+          "min_spend": 1.54,
+          "max_spend": 3.88,
+          "avg_roas": 0.0,
+          "days_count": 19
+        },
+        {
+          "range_label": "$4-$41",
+          "min_spend": 3.88,
+          "max_spend": 41.16,
+          "avg_roas": 14.64,
+          "days_count": 19
+        }
+      ],
+      "optimal_daily_spend": 22.52,
+      "current_daily_spend": 4.88,
+      "overspend_per_day": 0,
+      "status": "optimal"
+    },
+    {
+      "campaign_id": "23148781677",
+      "campaign_name": "PMAX Zombie Campaign",
+      "buckets": [
+        {
+          "range_label": "$0-$126",
+          "min_spend": 0,
+          "max_spend": 125.64,
+          "avg_roas": 23.57,
+          "days_count": 22
+        },
+        {
+          "range_label": "$126-$200",
+          "min_spend": 125.64,
+          "max_spend": 200.14,
+          "avg_roas": 10.56,
+          "days_count": 23
+        },
+        {
+          "range_label": "$200-$252",
+          "min_spend": 200.14,
+          "max_spend": 251.58,
+          "avg_roas": 17.91,
+          "days_count": 22
+        },
+        {
+          "range_label": "$252-$429",
+          "min_spend": 251.58,
+          "max_spend": 428.65,
+          "avg_roas": 11.02,
+          "days_count": 23
+        }
+      ],
+      "optimal_daily_spend": 62.82,
+      "current_daily_spend": 199.06,
+      "overspend_per_day": 136.24,
+      "status": "overspending"
+    },
+    {
+      "campaign_id": "23456923623",
+      "campaign_name": "Zip Search Campaign",
+      "buckets": [
+        {
+          "range_label": "$0-$151",
+          "min_spend": 0,
+          "max_spend": 150.61,
+          "avg_roas": 0.0,
+          "days_count": 5
+        },
+        {
+          "range_label": "$151-$172",
+          "min_spend": 150.61,
+          "max_spend": 171.52,
+          "avg_roas": 0.0,
+          "days_count": 5
+        },
+        {
+          "range_label": "$172-$225",
+          "min_spend": 171.52,
+          "max_spend": 224.59,
+          "avg_roas": 0.0,
+          "days_count": 5
+        },
+        {
+          "range_label": "$225-$254",
+          "min_spend": 224.59,
+          "max_spend": 254.17,
+          "avg_roas": 5.28,
+          "days_count": 5
+        }
+      ],
+      "optimal_daily_spend": 239.38,
+      "current_daily_spend": 175.59,
+      "overspend_per_day": 0,
+      "status": "underspending"
+    }
+  ],
+  "competitor_pressure": [
+    {
+      "campaign_id": "17880722348",
+      "campaign_name": "PM-AU Hardware All",
+      "pressure_score": 26.1,
+      "pressure_type": "demand_declining",
+      "cpc_current": 0.81,
+      "cpc_prior": 0.87,
+      "cpc_change_pct": -6.7,
+      "rank_lost_current": 72.4,
+      "rank_lost_prior": 68.1,
+      "rank_lost_change": 4.2,
+      "interpretation": "CPC down 7% and impression share declining - market demand may be shrinking"
+    },
+    {
+      "campaign_id": "21518769565",
+      "campaign_name": "PM-AU Zip Taps",
+      "pressure_score": 38.9,
+      "pressure_type": "stable",
+      "cpc_current": 1.58,
+      "cpc_prior": 1.91,
+      "cpc_change_pct": -17.3,
+      "rank_lost_current": 55.4,
+      "rank_lost_prior": 56.8,
+      "rank_lost_change": -1.4,
+      "interpretation": "No significant competitive shifts detected"
+    },
+    {
+      "campaign_id": "21542099736",
+      "campaign_name": "PM-AU Billi",
+      "pressure_score": 78.9,
+      "pressure_type": "improving",
+      "cpc_current": 1.34,
+      "cpc_prior": 1.8,
+      "cpc_change_pct": -25.6,
+      "rank_lost_current": 59.9,
+      "rank_lost_prior": 69.2,
+      "rank_lost_change": -9.2,
+      "interpretation": "Rank-lost IS improved by 9.2 points - competitive position strengthening"
+    },
+    {
+      "campaign_id": "21818251190",
+      "campaign_name": "PM-AU Caroma",
+      "pressure_score": 100,
+      "pressure_type": "demand_declining",
+      "cpc_current": 0.89,
+      "cpc_prior": 1.42,
+      "cpc_change_pct": -37.5,
+      "rank_lost_current": 79.6,
+      "rank_lost_prior": 70.8,
+      "rank_lost_change": 8.8,
+      "interpretation": "CPC down 37% and impression share declining - market demand may be shrinking"
+    },
+    {
+      "campaign_id": "22440600456",
+      "campaign_name": "PM-AU Zip Filters",
+      "pressure_score": 56.8,
+      "pressure_type": "demand_declining",
+      "cpc_current": 1.33,
+      "cpc_prior": 1.63,
+      "cpc_change_pct": -17.9,
+      "rank_lost_current": 86.0,
+      "rank_lost_prior": 79.1,
+      "rank_lost_change": 7.0,
+      "interpretation": "CPC down 18% and impression share declining - market demand may be shrinking"
+    },
+    {
+      "campaign_id": "22470557199",
+      "campaign_name": "PM-SYD Rinnai",
+      "pressure_score": 90.6,
+      "pressure_type": "demand_declining",
+      "cpc_current": 0.97,
+      "cpc_prior": 1.29,
+      "cpc_change_pct": -25.0,
+      "rank_lost_current": 74.7,
+      "rank_lost_prior": 61.2,
+      "rank_lost_change": 13.5,
+      "interpretation": "CPC down 25% and impression share declining - market demand may be shrinking"
+    },
+    {
+      "campaign_id": "22471147434",
+      "campaign_name": "PM-AU Rinnai  Non Sydney Non Storage",
+      "pressure_score": 26.4,
+      "pressure_type": "stable",
+      "cpc_current": 1.0,
+      "cpc_prior": 1.03,
+      "cpc_change_pct": -3.6,
+      "rank_lost_current": 76.4,
+      "rank_lost_prior": 69.9,
+      "rank_lost_change": 6.4,
+      "interpretation": "No significant competitive shifts detected"
+    },
+    {
+      "campaign_id": "22477075829",
+      "campaign_name": "PM-AU Franke",
+      "pressure_score": 19.3,
+      "pressure_type": "stable",
+      "cpc_current": 0.93,
+      "cpc_prior": 0.96,
+      "cpc_change_pct": -3.5,
+      "rank_lost_current": 72.4,
+      "rank_lost_prior": 68.4,
+      "rank_lost_change": 4.1,
+      "interpretation": "No significant competitive shifts detected"
+    },
+    {
+      "campaign_id": "22480898821",
+      "campaign_name": "PM-SYD Rheem",
+      "pressure_score": 32.6,
+      "pressure_type": "demand_declining",
+      "cpc_current": 0.83,
+      "cpc_prior": 0.95,
+      "cpc_change_pct": -13.2,
+      "rank_lost_current": 62.0,
+      "rank_lost_prior": 59.9,
+      "rank_lost_change": 2.1,
+      "interpretation": "CPC down 13% and impression share declining - market demand may be shrinking"
+    },
+    {
+      "campaign_id": "22549060789",
+      "campaign_name": "AI Max Search Campaign",
+      "pressure_score": 72.8,
+      "pressure_type": "demand_declining",
+      "cpc_current": 1.05,
+      "cpc_prior": 1.28,
+      "cpc_change_pct": -18.0,
+      "rank_lost_current": 90.0,
+      "rank_lost_prior": 77.7,
+      "rank_lost_change": 12.3,
+      "interpretation": "CPC down 18% and impression share declining - market demand may be shrinking"
+    },
+    {
+      "campaign_id": "22749172451",
+      "campaign_name": "PM-AU Abey",
+      "pressure_score": 63.4,
+      "pressure_type": "demand_declining",
+      "cpc_current": 0.91,
+      "cpc_prior": 1.01,
+      "cpc_change_pct": -10.2,
+      "rank_lost_current": 84.7,
+      "rank_lost_prior": 70.4,
+      "rank_lost_change": 14.3,
+      "interpretation": "CPC down 10% and impression share declining - market demand may be shrinking"
+    },
+    {
+      "campaign_id": "22888970844",
+      "campaign_name": "PM-SYD Kaldewei",
+      "pressure_score": 100,
+      "pressure_type": "demand_declining",
+      "cpc_current": 0.36,
+      "cpc_prior": 0.89,
+      "cpc_change_pct": -59.8,
+      "rank_lost_current": 77.1,
+      "rank_lost_prior": 72.6,
+      "rank_lost_change": 4.5,
+      "interpretation": "CPC down 60% and impression share declining - market demand may be shrinking"
+    },
+    {
+      "campaign_id": "23148781677",
+      "campaign_name": "PMAX Zombie Campaign",
+      "pressure_score": 73.5,
+      "pressure_type": "demand_declining",
+      "cpc_current": 0.79,
+      "cpc_prior": 0.91,
+      "cpc_change_pct": -13.7,
+      "rank_lost_current": 87.8,
+      "rank_lost_prior": 72.4,
+      "rank_lost_change": 15.4,
+      "interpretation": "CPC down 14% and impression share declining - market demand may be shrinking"
+    }
+  ],
+  "type_comparison": {
+    "types": [
+      {
+        "type": "search",
+        "campaign_count": 1,
+        "total_spend": 2193.1,
+        "total_revenue": 34731.0,
+        "total_profit": 6657.54,
+        "avg_roas": 15.84,
+        "avg_cpc": 1.11,
+        "avg_ctr": 0.0964,
+        "total_conversions": 42
+      },
+      {
+        "type": "performance_max",
+        "campaign_count": 12,
+        "total_spend": 38126.06,
+        "total_revenue": 467643.66,
+        "total_profit": 429517.6,
+        "avg_roas": 12.27,
+        "avg_cpc": 0.93,
+        "avg_ctr": 0.0198,
+        "total_conversions": 847
+      }
+    ],
+    "best_type": "search",
+    "recommendation": "search campaigns deliver the best ROAS (15.8x). Consider shifting budget from performance_max (12.3x ROAS) to search."
+  },
+  "anomalies": [
+    {
+      "campaign_id": "21542099736",
+      "campaign_name": "PM-AU Billi",
+      "metric": "Conversion Rate",
+      "previous_value": 0.0081,
+      "current_value": 0.025,
+      "change_pct": 210.0,
+      "severity": "warning",
+      "interpretation": "Conversion Rate increased by 210%"
+    },
+    {
+      "campaign_id": "22440600456",
+      "campaign_name": "PM-AU Zip Filters",
+      "metric": "Conversion Rate",
+      "previous_value": 0.0495,
+      "current_value": 0.0818,
+      "change_pct": 65.3,
+      "severity": "warning",
+      "interpretation": "Conversion Rate increased by 65%"
+    },
+    {
+      "campaign_id": "22470557199",
+      "campaign_name": "PM-SYD Rinnai",
+      "metric": "Conversion Rate",
+      "previous_value": 0.0129,
+      "current_value": 0.0,
+      "change_pct": -100.0,
+      "severity": "warning",
+      "interpretation": "Conversion rate dropped by 100% - check landing pages and offer relevance"
+    },
+    {
+      "campaign_id": "22471147434",
+      "campaign_name": "PM-AU Rinnai  Non Sydney Non Storage",
+      "metric": "CPC",
+      "previous_value": 0.7539,
+      "current_value": 1.6008,
+      "change_pct": 112.3,
+      "severity": "critical",
+      "interpretation": "CPC increased by 112% - competitors may be bidding more aggressively"
+    },
+    {
+      "campaign_id": "22471147434",
+      "campaign_name": "PM-AU Rinnai  Non Sydney Non Storage",
+      "metric": "CTR",
+      "previous_value": 0.0168,
+      "current_value": 0.0103,
+      "change_pct": -38.6,
+      "severity": "critical",
+      "interpretation": "CTR decreased by 39% - ad relevance or search intent may have shifted"
+    },
+    {
+      "campaign_id": "22471147434",
+      "campaign_name": "PM-AU Rinnai  Non Sydney Non Storage",
+      "metric": "Conversion Rate",
+      "previous_value": 0.0075,
+      "current_value": 0.0,
+      "change_pct": -100.0,
+      "severity": "critical",
+      "interpretation": "Conversion rate dropped by 100% - check landing pages and offer relevance"
+    },
+    {
+      "campaign_id": "22888970844",
+      "campaign_name": "PM-SYD Kaldewei",
+      "metric": "Conversion Rate",
+      "previous_value": 0.0143,
+      "current_value": 0.0,
+      "change_pct": -100.0,
+      "severity": "warning",
+      "interpretation": "Conversion rate dropped by 100% - check landing pages and offer relevance"
+    },
+    {
+      "campaign_id": "23148781677",
+      "campaign_name": "PMAX Zombie Campaign",
+      "metric": "Conversion Rate",
+      "previous_value": 0.0164,
+      "current_value": 0.0098,
+      "change_pct": -40.2,
+      "severity": "warning",
+      "interpretation": "Conversion rate dropped by 40% - check landing pages and offer relevance"
+    },
+    {
+      "campaign_id": "23456923623",
+      "campaign_name": "Zip Search Campaign",
+      "metric": "CPC",
+      "previous_value": 0.6126,
+      "current_value": 1.9233,
+      "change_pct": 214.0,
+      "severity": "critical",
+      "interpretation": "CPC increased by 214% - competitors may be bidding more aggressively"
+    },
+    {
+      "campaign_id": "23456923623",
+      "campaign_name": "Zip Search Campaign",
+      "metric": "Spend",
+      "previous_value": 1103.23,
+      "current_value": 286.57,
+      "change_pct": -74.0,
+      "severity": "critical",
+      "interpretation": "Spend decreased by 74%"
+    }
+  ],
+  "forecast": {
+    "historical": [
+      {
+        "week": 0,
+        "week_label": "2025-W47",
+        "spend": 16522.91,
+        "revenue": 210525.42,
+        "conversions": 330.5,
+        "roas": 12.74
+      },
+      {
+        "week": 1,
+        "week_label": "2025-W48",
+        "spend": 23274.57,
+        "revenue": 344287.55,
+        "conversions": 406.7,
+        "roas": 14.79
+      },
+      {
+        "week": 2,
+        "week_label": "2025-W49",
+        "spend": 12785.53,
+        "revenue": 175159.98,
+        "conversions": 249.3,
+        "roas": 13.7
+      },
+      {
+        "week": 3,
+        "week_label": "2025-W50",
+        "spend": 8842.4,
+        "revenue": 130342.04,
+        "conversions": 232.6,
+        "roas": 14.74
+      },
+      {
+        "week": 4,
+        "week_label": "2025-W51",
+        "spend": 9570.98,
+        "revenue": 116285.35,
+        "conversions": 204.4,
+        "roas": 12.15
+      },
+      {
+        "week": 5,
+        "week_label": "2025-W52",
+        "spend": 4604.01,
+        "revenue": 50039.68,
+        "conversions": 95.6,
+        "roas": 10.87
+      },
+      {
+        "week": 6,
+        "week_label": "2026-W01",
+        "spend": 4024.48,
+        "revenue": 59518.44,
+        "conversions": 91.2,
+        "roas": 14.79
+      },
+      {
+        "week": 7,
+        "week_label": "2026-W02",
+        "spend": 3438.56,
+        "revenue": 41158.93,
+        "conversions": 67.0,
+        "roas": 11.97
+      },
+      {
+        "week": 8,
+        "week_label": "2026-W03",
+        "spend": 5369.99,
+        "revenue": 70596.14,
+        "conversions": 97.7,
+        "roas": 13.15
+      },
+      {
+        "week": 9,
+        "week_label": "2026-W04",
+        "spend": 7910.31,
+        "revenue": 85594.34,
+        "conversions": 141.8,
+        "roas": 10.82
+      },
+      {
+        "week": 10,
+        "week_label": "2026-W05",
+        "spend": 11417.21,
+        "revenue": 135441.76,
+        "conversions": 214.7,
+        "roas": 11.86
+      },
+      {
+        "week": 11,
+        "week_label": "2026-W06",
+        "spend": 12630.07,
+        "revenue": 142465.15,
+        "conversions": 274.2,
+        "roas": 11.28
+      },
+      {
+        "week": 12,
+        "week_label": "2026-W07",
+        "spend": 9494.3,
+        "revenue": 113195.94,
+        "conversions": 228.8,
+        "roas": 11.92
+      }
+    ],
+    "projected": [
+      {
+        "week": 13,
+        "week_label": "Projected +1",
+        "spend": 5636.13,
+        "revenue": 52413.75,
+        "conversions": 128.6,
+        "roas": 9.3,
+        "is_projection": true
+      },
+      {
+        "week": 14,
+        "week_label": "Projected +2",
+        "spend": 5013.99,
+        "revenue": 41499.11,
+        "conversions": 118.0,
+        "roas": 8.28,
+        "is_projection": true
+      },
+      {
+        "week": 15,
+        "week_label": "Projected +3",
+        "spend": 4391.84,
+        "revenue": 30584.47,
+        "conversions": 107.4,
+        "roas": 6.96,
+        "is_projection": true
+      },
+      {
+        "week": 16,
+        "week_label": "Projected +4",
+        "spend": 3769.69,
+        "revenue": 19669.83,
+        "conversions": 96.9,
+        "roas": 5.22,
+        "is_projection": true
+      }
+    ],
+    "trend_direction": "declining",
+    "confidence": "low",
+    "r_squared": 0.272
+  },
+  "google_vs_reality": {
+    "campaigns": [
+      {
+        "campaign_id": "17880722348",
+        "campaign_name": "PM-AU Hardware All",
+        "google_roas": 12.89,
+        "true_roas": 12.89,
+        "google_revenue": 258788.29,
+        "actual_revenue": 258788.29,
+        "inflation_pct": 0.0
+      },
+      {
+        "campaign_id": "21518769565",
+        "campaign_name": "PM-AU Zip Taps",
+        "google_roas": 10.68,
+        "true_roas": 10.68,
+        "google_revenue": 55374.62,
+        "actual_revenue": 55374.62,
+        "inflation_pct": 0.0
+      },
+      {
+        "campaign_id": "21542099736",
+        "campaign_name": "PM-AU Billi",
+        "google_roas": 13.69,
+        "true_roas": 13.69,
+        "google_revenue": 17985.42,
+        "actual_revenue": 17985.42,
+        "inflation_pct": 0.0
+      },
+      {
+        "campaign_id": "21818251190",
+        "campaign_name": "PM-AU Caroma",
+        "google_roas": 9.4,
+        "true_roas": 9.4,
+        "google_revenue": 11930.33,
+        "actual_revenue": 11930.33,
+        "inflation_pct": 0.0
+      },
+      {
+        "campaign_id": "22440600456",
+        "campaign_name": "PM-AU Zip Filters",
+        "google_roas": 14.3,
+        "true_roas": 14.3,
+        "google_revenue": 28576.5,
+        "actual_revenue": 28576.5,
+        "inflation_pct": 0.0
+      },
+      {
+        "campaign_id": "22470557199",
+        "campaign_name": "PM-SYD Rinnai",
+        "google_roas": 5.39,
+        "true_roas": 5.39,
+        "google_revenue": 2320.05,
+        "actual_revenue": 2320.05,
+        "inflation_pct": 0.0
+      },
+      {
+        "campaign_id": "22471147434",
+        "campaign_name": "PM-AU Rinnai  Non Sydney Non Storage",
+        "google_roas": 11.7,
+        "true_roas": 11.7,
+        "google_revenue": 1844.29,
+        "actual_revenue": 1844.29,
+        "inflation_pct": 0.0
+      },
+      {
+        "campaign_id": "22477075829",
+        "campaign_name": "PM-AU Franke",
+        "google_roas": 17.86,
+        "true_roas": 17.86,
+        "google_revenue": 20670.28,
+        "actual_revenue": 20670.28,
+        "inflation_pct": 0.0
+      },
+      {
+        "campaign_id": "22480898821",
+        "campaign_name": "PM-SYD Rheem",
+        "google_roas": 17.97,
+        "true_roas": 17.97,
+        "google_revenue": 5309.24,
+        "actual_revenue": 5309.24,
+        "inflation_pct": 0.0
+      },
+      {
+        "campaign_id": "22549060789",
+        "campaign_name": "AI Max Search Campaign",
+        "google_roas": 10.22,
+        "true_roas": 4.04,
+        "google_revenue": 22414.71,
+        "actual_revenue": 34731.0,
+        "inflation_pct": 153.3
+      },
+      {
+        "campaign_id": "22749172451",
+        "campaign_name": "PM-AU Abey",
+        "google_roas": 16.6,
+        "true_roas": 16.6,
+        "google_revenue": 6463.45,
+        "actual_revenue": 6463.45,
+        "inflation_pct": 0.0
+      },
+      {
+        "campaign_id": "22888970844",
+        "campaign_name": "PM-SYD Kaldewei",
+        "google_roas": 18.32,
+        "true_roas": 18.32,
+        "google_revenue": 1664.17,
+        "actual_revenue": 1664.17,
+        "inflation_pct": 0.0
+      },
+      {
+        "campaign_id": "23148781677",
+        "campaign_name": "PMAX Zombie Campaign",
+        "google_roas": 9.83,
+        "true_roas": 9.83,
+        "google_revenue": 56717.02,
+        "actual_revenue": 56717.02,
+        "inflation_pct": 0.0
+      }
+    ],
+    "totals": {
+      "google_total_revenue": 490058.37,
+      "actual_total_revenue": 502374.66,
+      "inflation_pct": -2.5,
+      "avg_google_roas": 12.15,
+      "avg_true_roas": 12.46
+    }
+  },
+  "waste": [],
+  "reallocations": [],
+  "products": [
+    {
+      "product_title": "Zip Hydrotap G5 Arc Plus Boiling, Chilled & Sparkling - Matte Black H5L783Z03AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 183.78,
+        "campaigns": 11,
+        "avg_cpc": 2.55
+      },
+      "performance": {
+        "clicks": 72,
+        "conversions": 9,
+        "conversion_rate": 13.9,
+        "units_sold": 9
+      },
+      "revenue": {
+        "ad_revenue": 46647.81,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": 46464.03,
+        "net_profit": 46464.03,
+        "profit_margin": 99.6
+      },
+      "roas": {
+        "revenue_roas": 253.8,
+        "profit_roas": 252.8
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_losing_money": false,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "scale",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip HydroTap G5 Boiling, Chilled & Sparkling Elite Plus - Matte Black H5E783Z03AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 1712.28,
+        "campaigns": 12,
+        "avg_cpc": 2.01
+      },
+      "performance": {
+        "clicks": 854,
+        "conversions": 17,
+        "conversion_rate": 2.0,
+        "units_sold": 17
+      },
+      "revenue": {
+        "ad_revenue": 71570.79,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": 69858.51,
+        "net_profit": 69858.51,
+        "profit_margin": 97.6
+      },
+      "roas": {
+        "revenue_roas": 41.8,
+        "profit_roas": 40.8
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_losing_money": false,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "scale",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Insinkerator Evolution Plus 1000 SR Food Waste Disposer - E1000SR-3 80384K-ISE",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 2923.31,
+        "campaigns": 12,
+        "avg_cpc": 1.88
+      },
+      "performance": {
+        "clicks": 1555,
+        "conversions": 62,
+        "conversion_rate": 4.0,
+        "units_sold": 62
+      },
+      "revenue": {
+        "ad_revenue": 103138.88,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": 100215.57,
+        "net_profit": 100215.57,
+        "profit_margin": 97.2
+      },
+      "roas": {
+        "revenue_roas": 35.3,
+        "profit_roas": 34.3
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_losing_money": false,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "scale",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip HydroTap G5 Classic Plus Boiling and Ambient - Brushed Chrome H55785Z01AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 1405.12,
+        "campaigns": 12,
+        "avg_cpc": 1.51
+      },
+      "performance": {
+        "clicks": 928,
+        "conversions": 10,
+        "conversion_rate": 1.1,
+        "units_sold": 10
+      },
+      "revenue": {
+        "ad_revenue": 48393.87,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": 46988.75,
+        "net_profit": 46988.75,
+        "profit_margin": 97.1
+      },
+      "roas": {
+        "revenue_roas": 34.4,
+        "profit_roas": 33.4
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_losing_money": false,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "scale",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip HydroTap G5 Boiling Elite Plus - Matte Black H5E786Z03AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 3248.13,
+        "campaigns": 12,
+        "avg_cpc": 1.97
+      },
+      "performance": {
+        "clicks": 1645,
+        "conversions": 13,
+        "conversion_rate": 0.8,
+        "units_sold": 13
+      },
+      "revenue": {
+        "ad_revenue": 93230.41,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": 89982.28,
+        "net_profit": 89982.28,
+        "profit_margin": 96.5
+      },
+      "roas": {
+        "revenue_roas": 28.7,
+        "profit_roas": 27.7
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_losing_money": false,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "scale",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip Genuine 93701 Replacement MicroPurity 0.2 Water Filter",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 6685.48,
+        "campaigns": 12,
+        "avg_cpc": 3.25
+      },
+      "performance": {
+        "clicks": 2055,
+        "conversions": 335,
+        "conversion_rate": 16.3,
+        "units_sold": 335
+      },
+      "revenue": {
+        "ad_revenue": 121368.35,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": 114682.87,
+        "net_profit": 114682.87,
+        "profit_margin": 94.5
+      },
+      "roas": {
+        "revenue_roas": 18.2,
+        "profit_roas": 17.2
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_losing_money": false,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "scale",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip Genuine 91295 Sparkling CO2 Cylinder - Twin Pack",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 11730.06,
+        "campaigns": 11,
+        "avg_cpc": 4.57
+      },
+      "performance": {
+        "clicks": 2564,
+        "conversions": 652,
+        "conversion_rate": 25.4,
+        "units_sold": 652
+      },
+      "revenue": {
+        "ad_revenue": 208431.9,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": 196701.84,
+        "net_profit": 196701.84,
+        "profit_margin": 94.4
+      },
+      "roas": {
+        "revenue_roas": 17.8,
+        "profit_roas": 16.8
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_losing_money": false,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "scale",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip HydroTap G5 Chilled, Sparkling, Hot & Ambient Celsius Arc Matte Black H58787Z03AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 3284.64,
+        "campaigns": 12,
+        "avg_cpc": 1.59
+      },
+      "performance": {
+        "clicks": 2068,
+        "conversions": 15,
+        "conversion_rate": 0.8,
+        "units_sold": 15
+      },
+      "revenue": {
+        "ad_revenue": 57073.12,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": 53788.48,
+        "net_profit": 53788.48,
+        "profit_margin": 94.2
+      },
+      "roas": {
+        "revenue_roas": 17.4,
+        "profit_roas": 16.4
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_losing_money": false,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "scale",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip HydroTap G5 Boiling, Chilled & Sparkling - Classic Plus - Chrome H55783Z00AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 2817.69,
+        "campaigns": 12,
+        "avg_cpc": 2.59
+      },
+      "performance": {
+        "clicks": 1087,
+        "conversions": 15,
+        "conversion_rate": 1.4,
+        "units_sold": 15
+      },
+      "revenue": {
+        "ad_revenue": 48531.51,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": 45713.82,
+        "net_profit": 45713.82,
+        "profit_margin": 94.2
+      },
+      "roas": {
+        "revenue_roas": 17.2,
+        "profit_roas": 16.2
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_losing_money": false,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "scale",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip HydroTap G5 Boiling & Chilled Classic Plus - Chrome H55784Z00AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 5035.31,
+        "campaigns": 12,
+        "avg_cpc": 2.28
+      },
+      "performance": {
+        "clicks": 2206,
+        "conversions": 13,
+        "conversion_rate": 0.6,
+        "units_sold": 13
+      },
+      "revenue": {
+        "ad_revenue": 55879.6,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": 50844.29,
+        "net_profit": 50844.29,
+        "profit_margin": 91.0
+      },
+      "roas": {
+        "revenue_roas": 11.1,
+        "profit_roas": 10.1
+      },
+      "indicators": {
+        "is_profitable": true,
+        "is_high_performer": true,
+        "is_losing_money": false,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "scale",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip HydroTap G5 Classic Plus Boiling and Ambient - Matte Black H55785Z03AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 816.48,
+        "campaigns": 12,
+        "avg_cpc": 1.43
+      },
+      "performance": {
+        "clicks": 570,
+        "conversions": 0,
+        "conversion_rate": 0.1,
+        "units_sold": 0
+      },
+      "revenue": {
+        "ad_revenue": 236.94,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": -579.54,
+        "net_profit": -579.54,
+        "profit_margin": -244.6
+      },
+      "roas": {
+        "revenue_roas": 0.3,
+        "profit_roas": -0.7
+      },
+      "indicators": {
+        "is_profitable": false,
+        "is_high_performer": false,
+        "is_losing_money": true,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "exclude",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip HydroTap G5 Boiling, Hot & Ambient Celsius Arc Brushed Gold H58786Z07AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 1029.93,
+        "campaigns": 12,
+        "avg_cpc": 2.02
+      },
+      "performance": {
+        "clicks": 509,
+        "conversions": 0,
+        "conversion_rate": 0.0,
+        "units_sold": 0
+      },
+      "revenue": {
+        "ad_revenue": 201.87,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": -828.06,
+        "net_profit": -828.06,
+        "profit_margin": -410.2
+      },
+      "roas": {
+        "revenue_roas": 0.2,
+        "profit_roas": -0.8
+      },
+      "indicators": {
+        "is_profitable": false,
+        "is_high_performer": false,
+        "is_losing_money": true,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "exclude",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip HydroTap G5 Boiling Arc Plus Matte Black H5L786Z03AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 660.69,
+        "campaigns": 11,
+        "avg_cpc": 2.15
+      },
+      "performance": {
+        "clicks": 308,
+        "conversions": 0,
+        "conversion_rate": null,
+        "units_sold": 0
+      },
+      "revenue": {
+        "ad_revenue": 0.0,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": -660.69,
+        "net_profit": -660.69,
+        "profit_margin": null
+      },
+      "roas": {
+        "revenue_roas": null,
+        "profit_roas": -1.0
+      },
+      "indicators": {
+        "is_profitable": false,
+        "is_high_performer": false,
+        "is_losing_money": true,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "exclude",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip HydroTap G5 Boiling, Chilled & Sparkling Elite Plus Brushed Chrome H5E783Z01AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 584.9,
+        "campaigns": 12,
+        "avg_cpc": 2.76
+      },
+      "performance": {
+        "clicks": 212,
+        "conversions": 0,
+        "conversion_rate": null,
+        "units_sold": 0
+      },
+      "revenue": {
+        "ad_revenue": 0.0,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": -584.9,
+        "net_profit": -584.9,
+        "profit_margin": null
+      },
+      "roas": {
+        "revenue_roas": null,
+        "profit_roas": -1.0
+      },
+      "indicators": {
+        "is_profitable": false,
+        "is_high_performer": false,
+        "is_losing_money": true,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "exclude",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Rinnai Infinity 32 Continuous Flow Hot Water System 60\u00b0C LPG - INF32L60M",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 583.77,
+        "campaigns": 12,
+        "avg_cpc": 4.2
+      },
+      "performance": {
+        "clicks": 139,
+        "conversions": 0,
+        "conversion_rate": null,
+        "units_sold": 0
+      },
+      "revenue": {
+        "ad_revenue": 0.0,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": -583.77,
+        "net_profit": -583.77,
+        "profit_margin": null
+      },
+      "roas": {
+        "revenue_roas": null,
+        "profit_roas": -1.0
+      },
+      "indicators": {
+        "is_profitable": false,
+        "is_high_performer": false,
+        "is_losing_money": true,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "exclude",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip HydroTap G5 Boiling & Chilled Classic Plus - Gun Metal H55784Z09AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 530.34,
+        "campaigns": 11,
+        "avg_cpc": 6.98
+      },
+      "performance": {
+        "clicks": 76,
+        "conversions": 0,
+        "conversion_rate": null,
+        "units_sold": 0
+      },
+      "revenue": {
+        "ad_revenue": 0.0,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": -530.34,
+        "net_profit": -530.34,
+        "profit_margin": null
+      },
+      "roas": {
+        "revenue_roas": null,
+        "profit_roas": -1.0
+      },
+      "indicators": {
+        "is_profitable": false,
+        "is_high_performer": false,
+        "is_losing_money": true,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "exclude",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Billi Home with XL Levered Dispenser Boiling & Ambient Tap - Matte White - 914000LMW",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 529.97,
+        "campaigns": 12,
+        "avg_cpc": 2.24
+      },
+      "performance": {
+        "clicks": 237,
+        "conversions": 0,
+        "conversion_rate": null,
+        "units_sold": 0
+      },
+      "revenue": {
+        "ad_revenue": 0.0,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": -529.97,
+        "net_profit": -529.97,
+        "profit_margin": null
+      },
+      "roas": {
+        "revenue_roas": null,
+        "profit_roas": -1.0
+      },
+      "indicators": {
+        "is_profitable": false,
+        "is_high_performer": false,
+        "is_losing_money": true,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "exclude",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Zip HydroTap Micro BC10 Boiling & Chilled Tap - Bright Chrome M1005AU",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 517.65,
+        "campaigns": 12,
+        "avg_cpc": 1.99
+      },
+      "performance": {
+        "clicks": 260,
+        "conversions": 0,
+        "conversion_rate": null,
+        "units_sold": 0
+      },
+      "revenue": {
+        "ad_revenue": 0.0,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": -517.65,
+        "net_profit": -517.65,
+        "profit_margin": null
+      },
+      "roas": {
+        "revenue_roas": null,
+        "profit_roas": -1.0
+      },
+      "indicators": {
+        "is_profitable": false,
+        "is_high_performer": false,
+        "is_losing_money": true,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "exclude",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Billi Home with XL Levered Dispenser Boiling & Ambient Tap - Matte Black - 914000LMB",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 499.63,
+        "campaigns": 11,
+        "avg_cpc": 1.17
+      },
+      "performance": {
+        "clicks": 428,
+        "conversions": 0,
+        "conversion_rate": null,
+        "units_sold": 0
+      },
+      "revenue": {
+        "ad_revenue": 0.0,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": -499.63,
+        "net_profit": -499.63,
+        "profit_margin": null
+      },
+      "roas": {
+        "revenue_roas": null,
+        "profit_roas": -1.0
+      },
+      "indicators": {
+        "is_profitable": false,
+        "is_high_performer": false,
+        "is_losing_money": true,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "exclude",
+        "max_cpc": null
+      }
+    },
+    {
+      "product_title": "Billi B4000 Boiling & Ambient Tap with XT Touch Dispenser - Chrome - 914000TCH",
+      "product_sku": null,
+      "ad_spend": {
+        "total_spend": 483.96,
+        "campaigns": 12,
+        "avg_cpc": 1.91
+      },
+      "performance": {
+        "clicks": 254,
+        "conversions": 0,
+        "conversion_rate": null,
+        "units_sold": 0
+      },
+      "revenue": {
+        "ad_revenue": 0.0,
+        "product_cost_per_unit": null,
+        "total_product_costs": 0.0
+      },
+      "profitability": {
+        "gross_profit": -483.96,
+        "net_profit": -483.96,
+        "profit_margin": null
+      },
+      "roas": {
+        "revenue_roas": null,
+        "profit_roas": -1.0
+      },
+      "indicators": {
+        "is_profitable": false,
+        "is_high_performer": false,
+        "is_losing_money": true,
+        "meets_margin_threshold": false
+      },
+      "recommendation": {
+        "action": "exclude",
+        "max_cpc": null
+      }
+    }
+  ]
+}

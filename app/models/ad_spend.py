@@ -90,6 +90,14 @@ class CampaignPerformance(Base):
     recommended_budget = Column(Numeric(10, 2), nullable=True)
     expected_impact = Column(Numeric(10, 2), nullable=True)  # Expected profit change
 
+    # Strategy-aware decision layer
+    strategy_type = Column(String, nullable=True, index=True)       # high_consideration, fast_turn, brand_defense, prospecting, unknown
+    decision_score = Column(Integer, nullable=True)                  # 0-100 composite
+    short_term_status = Column(String, nullable=True)                # strong, healthy, marginal, weak
+    strategic_value = Column(String, nullable=True)                  # high, moderate, low
+    strategy_action = Column(String, nullable=True, index=True)      # scale_aggressively, scale, maintain, optimize, reduce, pause, investigate
+    strategy_confidence = Column(String, nullable=True)              # high, medium, low
+
     # Analysis period
     period_start = Column(DateTime, nullable=True)
     period_end = Column(DateTime, nullable=True)

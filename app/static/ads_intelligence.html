@@ -120,6 +120,32 @@
         .trend-arrows .flat { color: var(--slate); }
         .scorecard-footer { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--slate); }
         .scorecard-footer .action { font-weight: 600; color: var(--ink); text-transform: capitalize; }
+        .scorecard-footer .action.investigate { color: #7c3aed; }
+
+        /* ── Strategy Layer ── */
+        .strategy-chip { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 700; letter-spacing: 0.5px; flex-shrink: 0; margin-left: 4px; }
+        .strategy-chip.s-high_consideration { background: #f3e8ff; color: #7c3aed; }
+        .strategy-chip.s-fast_turn { background: #ccfbf1; color: #0f766e; }
+        .strategy-chip.s-brand_defense { background: #dbeafe; color: #1d4ed8; }
+        .strategy-chip.s-prospecting { background: #ffedd5; color: #c2410c; }
+        .strategy-chip.s-unknown { background: #f3f4f6; color: #6b7280; }
+        .dual-badges { display: flex; gap: 4px; flex-shrink: 0; }
+        .sts-badge, .sv-badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; font-weight: 600; }
+        .sts-badge.sts-strong { background: #dcfce7; color: #166534; }
+        .sts-badge.sts-healthy { background: #d1fae5; color: #065f46; }
+        .sts-badge.sts-marginal { background: #fef3c7; color: #92400e; }
+        .sts-badge.sts-weak { background: #fee2e2; color: #991b1b; }
+        .sv-badge.sv-high { background: #dbeafe; color: #1d4ed8; }
+        .sv-badge.sv-moderate { background: #fef3c7; color: #92400e; }
+        .sv-badge.sv-low { background: #f3f4f6; color: #6b7280; }
+        .why-now { font-size: 11px; font-style: italic; color: var(--slate); margin-top: 8px; line-height: 1.3; }
+        .decision-score { font-family: "Space Grotesk", sans-serif; font-size: 11px; font-weight: 700; width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
+        .scorecard.scale { border-left-color: var(--green); }
+        .scorecard.maintain { border-left-color: #3b82f6; }
+        .scorecard.optimize { border-left-color: var(--amber); }
+        .scorecard.investigate { border-left-color: #7c3aed; }
+        .scorecard.reduce { border-left-color: var(--red); }
+        .scorecard.pause { border-left-color: #6b7280; }
 
         /* ── Break-Even ── */
         .break-even-chart { position: relative; min-height: 300px; }
@@ -688,6 +714,12 @@
             const sorted = [...campaigns].sort((a, b) => (b.true_metrics?.profit || 0) - (a.true_metrics?.profit || 0));
             let html = '';
 
+            const _stratLabels = {high_consideration:'HC', fast_turn:'FT', brand_defense:'BD', prospecting:'PR', unknown:'??'};
+            const _stsLabels = {strong:'Strong', healthy:'Healthy', marginal:'Marginal', weak:'Weak'};
+            const _svLabels = {high:'High SV', moderate:'Med SV', low:'Low SV'};
+            const _actionLabels = {scale_aggressively:'Scale 50%', scale:'Scale 25%', maintain:'Maintain', optimize:'Optimize', reduce:'Reduce 50%', pause:'Pause', investigate:'Investigate'};
+            const _actionCardClass = {scale_aggressively:'scale', scale:'scale', maintain:'maintain', optimize:'optimize', reduce:'reduce', pause:'pause', investigate:'investigate'};
+
             sorted.forEach(c => {
                 const profit = c.true_metrics?.profit || 0;
                 const roas = c.true_metrics?.true_roas;
@@ -699,12 +731,25 @@
                 const dm = dmMap[c.campaign_id];
                 const hs = hsMap[c.campaign_id];
                 const be = beMap[c.campaign_id];
+                const strat = c.strategy;
 
-                let status, badgeClass, cardClass;
-                if (spend === 0) { status = 'Paused'; badgeClass = 'badge-paused'; cardClass = ''; }
-                else if (c.indicators?.is_profitable && roas >= 2) { status = 'Profitable'; badgeClass = 'badge-profitable'; cardClass = 'profitable'; }
-                else if (profit > 0) { status = 'Marginal'; badgeClass = 'badge-marginal'; cardClass = 'marginal'; }
-                else { status = 'Losing'; badgeClass = 'badge-losing'; cardClass = 'losing'; }
+                // Card class: prefer strategy action, fallback to legacy
+                let cardClass;
+                if (strat?.action) {
+                    cardClass = _actionCardClass[strat.action] || '';
+                } else if (spend === 0) {
+                    cardClass = '';
+                } else if (c.indicators?.is_profitable && roas >= 2) {
+                    cardClass = 'profitable';
+                } else if (profit > 0) {
+                    cardClass = 'marginal';
+                } else {
+                    cardClass = 'losing';
+                }
+
+                // Decision score circle
+                const dScore = strat?.decision_score;
+                const dScoreBg = dScore != null ? healthColor(dScore) : '#9ca3af';
 
                 const healthBg = hs ? healthColor(hs.health_score) : '#9ca3af';
                 const healthLabel = hs ? hs.health_score + (hs.grade ? ' ' + hs.grade : '') : '--';
@@ -714,12 +759,34 @@
 
                 const beAbove = be?.above_break_even;
 
+                // Strategy chip + dual badges (when strategy is available)
+                const stratChip = strat?.type ? `<span class="strategy-chip s-${strat.type}" title="${strat.type.replace(/_/g,' ')}">${_stratLabels[strat.type] || '??'}</span>` : '';
+                const dualBadges = strat?.short_term_status
+                    ? `<div class="dual-badges">
+                        <span class="sts-badge sts-${strat.short_term_status}">${_stsLabels[strat.short_term_status] || strat.short_term_status}</span>
+                        <span class="sv-badge sv-${strat.strategic_value}">${_svLabels[strat.strategic_value] || strat.strategic_value}</span>
+                       </div>`
+                    : (() => {
+                        let status, badgeClass;
+                        if (spend === 0) { status = 'Paused'; badgeClass = 'badge-paused'; }
+                        else if (c.indicators?.is_profitable && roas >= 2) { status = 'Profitable'; badgeClass = 'badge-profitable'; }
+                        else if (profit > 0) { status = 'Marginal'; badgeClass = 'badge-marginal'; }
+                        else { status = 'Losing'; badgeClass = 'badge-losing'; }
+                        return `<span class="scorecard-badge ${badgeClass}">${status}</span>`;
+                    })();
+
+                const actionLabel = strat?.action ? (_actionLabels[strat.action] || strat.action) : (c.recommendation?.action || '--');
+                const actionClass = strat?.action === 'investigate' ? ' investigate' : '';
+                const whyNow = strat?.why_now ? `<div class="why-now">${strat.why_now}</div>` : '';
+                const confBadge = strat?.confidence ? ` <span style="font-size:10px;color:var(--slate)">(${strat.confidence} conf)</span>` : '';
+
                 html += `
                 <div class="scorecard ${cardClass}">
                     <div class="scorecard-header">
                         <span class="scorecard-name">${c.campaign_name || c.campaign_id}</span>
-                        <span class="scorecard-health" style="background:${healthBg}" title="Health: ${healthLabel}">${hs?.grade || '--'}</span>
-                        <span class="scorecard-badge ${badgeClass}" style="margin-left:6px">${status}</span>
+                        ${dScore != null ? `<span class="decision-score" style="background:${dScoreBg}" title="Decision Score: ${dScore}/100">${dScore}</span>` : `<span class="scorecard-health" style="background:${healthBg}" title="Health: ${healthLabel}">${hs?.grade || '--'}</span>`}
+                        ${stratChip}
+                        ${dualBadges}
                     </div>
                     <div class="scorecard-metrics">
                         <div class="scorecard-metric"><div class="scorecard-metric-label">Spend</div><div class="scorecard-metric-value">${fmt(spend)}</div></div>
@@ -744,8 +811,9 @@
                         <span>Conv ${trendArrow(dm.trends?.conv_rate_trend)}</span>
                         <span>CPA ${trendArrow(dm.trends?.cpa_trend)}</span>
                     </div>` : ''}
+                    ${whyNow}
                     <div class="scorecard-footer">
-                        Action: <span class="action">${c.recommendation?.action || '--'}</span>
+                        Action: <span class="action${actionClass}">${actionLabel}</span>${confBadge}
                         ${perf.clicks ? ' &middot; ' + perf.clicks.toLocaleString() + ' clicks' : ''}
                         ${c.true_metrics?.conversions ? ' &middot; ' + c.true_metrics.conversions + ' conv' : ''}
                     </div>

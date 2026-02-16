@@ -20,6 +20,7 @@ from app.models.ad_spend import (
 )
 from app.models.google_ads_data import GoogleAdsCampaign
 from app.services.finance_service import FinanceService
+from app.services.campaign_strategy import format_why_now, STRATEGY_THRESHOLDS
 from app.utils.logger import log
 
 
@@ -195,7 +196,23 @@ class AdSpendService:
                     'action': campaign.recommended_action,
                     'recommended_budget': float(campaign.recommended_budget) if campaign.recommended_budget else None,
                     'expected_impact': float(campaign.expected_impact) if campaign.expected_impact else None
-                }
+                },
+
+                'strategy': {
+                    'type': campaign.strategy_type,
+                    'decision_score': campaign.decision_score,
+                    'short_term_status': campaign.short_term_status,
+                    'strategic_value': campaign.strategic_value,
+                    'action': campaign.strategy_action,
+                    'confidence': campaign.strategy_confidence,
+                    'why_now': format_why_now(
+                        campaign.strategy_action,
+                        campaign.true_roas,
+                        campaign.strategy_type,
+                        STRATEGY_THRESHOLDS.get(campaign.strategy_type or 'unknown'),
+                        campaign.decision_score,
+                    ) if campaign.strategy_type else None,
+                } if campaign.strategy_type else None,
             }
 
             results.append(result)
@@ -419,11 +436,14 @@ class AdSpendService:
         log.info("Getting product ad performance")
 
         # Get both profitable and unprofitable products
+        # Spend floor ($50) prevents tiny-spend products dominating by ROAS
+        # Sort by spend * ROAS to prioritize actionable scale candidates
         profitable_products = self.db.query(ProductAdPerformance).filter(
             ProductAdPerformance.is_profitable_to_advertise == True,
-            ProductAdPerformance.period_days == days
+            ProductAdPerformance.period_days == days,
+            ProductAdPerformance.total_ad_spend >= 50,
         ).order_by(
-            desc(ProductAdPerformance.profit_roas)
+            desc(ProductAdPerformance.total_ad_spend * ProductAdPerformance.profit_roas)
         ).limit(limit // 2).all()
 
         unprofitable_products = self.db.query(ProductAdPerformance).filter(

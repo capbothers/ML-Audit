@@ -236,9 +236,12 @@ def test_processor_anchors_to_data_not_calendar():
         "Processor must query max(GoogleAdsCampaign.date) to anchor "
         "period_end to actual data boundary"
     )
-    # date.today() is acceptable only as a fallback (or pattern)
     assert 'period_end = date.today()' not in body, (
         "period_end must not be unconditionally set to date.today()"
+    )
+    # date.today() should not appear even as fallback — return early when no data
+    assert 'date.today()' not in body, (
+        "process() must return early when no data, not fall back to date.today()"
     )
 
 

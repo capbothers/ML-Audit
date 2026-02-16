@@ -18,6 +18,7 @@ from sqlalchemy import func, and_
 from sqlalchemy.orm import Session
 
 from app.models.google_ads_data import GoogleAdsCampaign, GoogleAdsProductPerformance
+from app.services.campaign_strategy import classify, score as strategy_score, decide as strategy_decide, STRATEGY_THRESHOLDS
 from app.models.ad_spend import (
     CampaignPerformance,
     AdWaste,
@@ -59,9 +60,21 @@ class AdSpendProcessor:
         logger.info(f"AdSpendProcessor: starting for last {days} days")
         start_time = datetime.utcnow()
 
-        # Anchor to latest ads data row, not calendar today
+        # Anchor to latest ads data row — never fall back to calendar today
         max_date = self.db.query(func.max(GoogleAdsCampaign.date)).scalar()
-        period_end = max_date or date.today()
+        if max_date is None:
+            logger.warning("No Google Ads data found — skipping processing")
+            return {
+                "campaigns_processed": 0,
+                "campaign_performance": {"upserted": 0, "created": 0, "updated": 0},
+                "waste_detected": {"created": 0, "cleared": 0},
+                "optimizations_generated": {"created": 0, "cleared": 0},
+                "product_performance": {"processed": 0, "profitable": 0, "losing_money": 0},
+                "period": {"start": None, "end": None, "days": days},
+                "message": "No Google Ads data in database",
+                "duration_seconds": round((datetime.utcnow() - start_time).total_seconds(), 2),
+            }
+        period_end = max_date
         period_start = period_end - timedelta(days=days)
 
         # Step 1: Aggregate
@@ -329,6 +342,22 @@ class AdSpendProcessor:
                     )
                 is_profitable_fully_loaded = float(fully_loaded_profit) > 0
 
+            # ── Strategy-aware decision layer ──
+            aov = float(actual_revenue) / actual_conversions if actual_conversions > 0 else None
+            strat_type = classify(agg["campaign_name"], agg["campaign_type"], aov)
+            strat_thresholds = STRATEGY_THRESHOLDS.get(strat_type, STRATEGY_THRESHOLDS['unknown'])
+
+            strat_data = {
+                'true_roas': true_roas_val,
+                'cpa': float(total_spend) / actual_conversions if actual_conversions > 0 else None,
+                'impression_share': float(avg_lost_is) if avg_lost_is else None,
+                'fully_loaded_roas': fully_loaded_roas,
+                'total_spend': total_spend,
+                'days': days,
+            }
+            d_score = strategy_score(strat_data, strat_type, strat_thresholds)
+            decision = strategy_decide(d_score, true_roas_val, strat_type, strat_thresholds, total_spend, days)
+
             results.append({
                 "campaign_id": agg["campaign_id"],
                 "campaign_name": agg["campaign_name"],
@@ -371,6 +400,12 @@ class AdSpendProcessor:
                 "recommended_action": action,
                 "recommended_budget": rec_budget,
                 "expected_impact": impact,
+                "strategy_type": strat_type,
+                "decision_score": d_score,
+                "short_term_status": decision['short_term'],
+                "strategic_value": decision['strategic_value'],
+                "strategy_action": decision['action'],
+                "strategy_confidence": decision['confidence'],
                 "period_start": datetime.combine(period_start, datetime.min.time()),
                 "period_end": datetime.combine(period_end, datetime.min.time()),
                 "period_days": days,
@@ -499,8 +534,8 @@ class AdSpendProcessor:
                 and total_spend >= self.ZERO_CONV_MIN_SPEND
                 and convs >= 1
             ):
-                # Use actual_revenue (Shopify-attributed) to match true_roas
-                actual_rev = float(row.get("actual_revenue") or row["google_conversion_value"])
+                # Use actual_revenue consistently — same source as true_roas
+                actual_rev = float(row["actual_revenue"])
                 monthly_loss = (total_spend - actual_rev) / days * 30 if days > 0 else 0
                 if monthly_loss <= 0:
                     continue  # Revenue exceeds spend — not truly wasting
