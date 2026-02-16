@@ -648,13 +648,48 @@ async def get_enhanced_dashboard(
             # Preserve conflict_note for DR monitoring (non-override) cases
             dr = dr_overspend.get(c['campaign_id'])
             if dr and not any(o['module'] == 'diminishing_returns' for o in result['overrides']):
-                overspend = dr.get('overspend_per_day', 0)
                 dr_conf = dr.get('dr_confidence', 'low')
-                if overspend > 0:
+                active_days = dr.get('active_days', '?')
+                if dr.get('overspend_per_day', 0) > 0:
                     strat['conflict_note'] = (
-                        f"Diminishing returns detected (${overspend:.0f}/day over optimal) "
-                        f"— DR confidence: {dr_conf}. Monitoring only."
+                        f"Diminishing returns signal ({dr_conf} conf, {active_days}d data) "
+                        f"— marginal ROAS declining. Run experiment to validate."
                     )
+
+        # ── Campaign Diagnostics: per-campaign working/not-working/actions ──
+        try:
+            from app.services.campaign_diagnostics import CampaignDiagnosticsService
+            ads_end = service._get_ads_data_end_date()
+            period_start = ads_end - timedelta(days=days - 1)
+            diag_service = CampaignDiagnosticsService(db)
+            diagnostics = diag_service.diagnose_all(campaigns, period_start, ads_end)
+            for c in campaigns:
+                c['diagnostics'] = diagnostics.get(c['campaign_id'], {
+                    'working': [], 'not_working': [], 'actions': [],
+                    'has_blockers': False,
+                })
+        except Exception as e:
+            log.warning(f"Campaign diagnostics failed: {e}")
+            for c in campaigns:
+                c['diagnostics'] = {'working': [], 'not_working': [], 'actions': [], 'has_blockers': False}
+
+        # ── Blocker precedence: feed/LP blockers prevent Scale ──
+        for c in campaigns:
+            strat = c.get('strategy')
+            if not strat:
+                continue
+            if c['diagnostics'].get('has_blockers') and strat['action'] == 'scale_what_works':
+                strat['original_action'] = strat['original_action'] or strat['action']
+                strat['action'] = 'fix'
+                strat['overrides'] = strat.get('overrides', []) + [{
+                    'from_action': 'scale_what_works', 'to_action': 'fix',
+                    'reason': 'Systemic blockers detected (feed/LP) — fix before scaling',
+                    'module': 'blocker_precedence',
+                }]
+                strat['why_now'] = (
+                    f"ROAS looks healthy but systemic issues found. "
+                    f"Fix blockers first, then re-evaluate scaling."
+                )
 
         # Summary
         total_spend = sum(c.get('spend', 0) for c in campaigns)

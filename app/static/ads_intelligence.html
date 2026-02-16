@@ -752,8 +752,8 @@
             const _stratLabels = {high_consideration:'HC', fast_turn:'FT', brand_defense:'BD', prospecting:'PR', unknown:'??'};
             const _stsLabels = {strong:'Strong', healthy:'Healthy', marginal:'Marginal', weak:'Weak'};
             const _svLabels = {high:'High SV', moderate:'Med SV', low:'Low SV'};
-            const _actionLabels = {scale_aggressively:'Scale 50%', scale:'Scale 25%', maintain:'Maintain', optimize:'Optimize', reduce:'Reduce 50%', pause:'Pause', investigate:'Investigate', fix_landing_page:'Fix LP'};
-            const _actionCardClass = {scale_aggressively:'scale', scale:'scale', maintain:'maintain', optimize:'optimize', reduce:'reduce', pause:'pause', investigate:'investigate', fix_landing_page:'investigate'};
+            const _actionLabels = {scale_what_works:'Scale', maintain:'Maintain', fix:'Fix', review:'Review', pause:'Pause', investigate:'Investigate'};
+            const _actionCardClass = {scale_what_works:'scale', maintain:'maintain', fix:'optimize', review:'reduce', pause:'pause', investigate:'investigate'};
 
             sorted.forEach(c => {
                 const profit = c.true_metrics?.profit || 0;
@@ -810,8 +810,8 @@
                         return `<span class="scorecard-badge ${badgeClass}">${status}</span>`;
                     })();
 
-                const actionLabel = strat?.action ? (_actionLabels[strat.action] || (strat.action === 'fix_landing_page' ? 'Fix LP' : strat.action)) : (c.recommendation?.action || '--');
-                const actionClass = strat?.action === 'investigate' ? ' investigate' : (strat?.action === 'fix_landing_page' ? ' investigate' : '');
+                const actionLabel = strat?.action ? (_actionLabels[strat.action] || strat.action) : (c.recommendation?.action || '--');
+                const actionClass = (strat?.action === 'investigate' || strat?.action === 'fix') ? ' investigate' : '';
                 const whyNow = strat?.why_now ? `<div class="why-now">${strat.why_now}</div>` : '';
                 const conflictNote = strat?.conflict_note ? `<div class="why-now" style="color:#b45309">\u26A0 ${strat.conflict_note}</div>` : '';
                 const confBadge = strat?.confidence ? ` <span style="font-size:10px;color:var(--slate)">(${strat.confidence} conf)</span>` : '';
@@ -860,6 +860,32 @@
                         <span>Conv ${trendArrow(dm.trends?.conv_rate_trend)}</span>
                         <span>CPA ${trendArrow(dm.trends?.cpa_trend)}</span>
                     </div>` : ''}
+                    ${(() => {
+                        const diag = c.diagnostics || {};
+                        const working = diag.working || [];
+                        const notWorking = diag.not_working || [];
+                        const actions = diag.actions || [];
+                        if (!working.length && !notWorking.length && !actions.length) return '';
+                        const _sw = s => s.replace(/\[site-wide\]/g, '<span style="font-size:10px;color:#9ca3af;font-style:italic">site-wide</span>');
+                        let diagHtml = '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);font-size:12px">';
+                        if (working.length) {
+                            diagHtml += '<div style="margin-bottom:6px"><strong style="color:var(--green)">What\'s Working</strong>';
+                            working.forEach(w => { diagHtml += `<div style="padding:1px 0;color:#374151">\u2713 ${_sw(w)}</div>`; });
+                            diagHtml += '</div>';
+                        }
+                        if (notWorking.length) {
+                            diagHtml += '<div style="margin-bottom:6px"><strong style="color:var(--red)">What\'s Not Working</strong>';
+                            notWorking.forEach(n => { diagHtml += `<div style="padding:1px 0;color:#374151">\u2717 ${_sw(n)}</div>`; });
+                            diagHtml += '</div>';
+                        }
+                        if (actions.length) {
+                            diagHtml += '<div><strong style="color:var(--cass-teal)">Actions</strong>';
+                            actions.forEach((a, i) => { diagHtml += `<div style="padding:1px 0;color:#1f2937">${i+1}. ${_sw(a)}</div>`; });
+                            diagHtml += '</div>';
+                        }
+                        diagHtml += '</div>';
+                        return diagHtml;
+                    })()}
                     ${whyNow}
                     ${conflictNote}
                     ${overrideHtml}

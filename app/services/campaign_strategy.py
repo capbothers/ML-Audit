@@ -110,36 +110,35 @@ STRATEGY_THRESHOLDS = {
 # ---------------------------------------------------------------------------
 
 _ACTION_MATRIX = {
-    ('strong', 'high'):     'scale_aggressively',
-    ('strong', 'moderate'): 'scale',
+    ('strong', 'high'):     'scale_what_works',
+    ('strong', 'moderate'): 'scale_what_works',
     ('strong', 'low'):      'maintain',
-    ('healthy', 'high'):    'scale',
+    ('healthy', 'high'):    'scale_what_works',
     ('healthy', 'moderate'): 'maintain',
-    ('healthy', 'low'):     'optimize',
+    ('healthy', 'low'):     'fix',
     ('marginal', 'high'):   'maintain',
-    ('marginal', 'moderate'): 'optimize',
-    ('marginal', 'low'):    'reduce',
+    ('marginal', 'moderate'): 'fix',
+    ('marginal', 'low'):    'review',
     ('weak', 'high'):       'investigate',
-    ('weak', 'moderate'):   'reduce',
+    ('weak', 'moderate'):   'review',
     ('weak', 'low'):        'pause',
 }
 
 # Actions ordered from most aggressive to most conservative (for confidence gating)
 _ACTION_RANK = {
-    'scale_aggressively': 6,
-    'scale': 5,
+    'scale_what_works': 5,
     'maintain': 4,
-    'investigate': 3,
-    'optimize': 2,
-    'reduce': 1,
+    'fix': 3,
+    'investigate': 2,
+    'review': 1,
     'pause': 0,
 }
 _RANK_TO_ACTION = {v: k for k, v in _ACTION_RANK.items()}
 
 # Confidence gating: low confidence clamps action to at most this rank
 _CONFIDENCE_CLAMP = {
-    'high': 6,    # no clamp
-    'medium': 5,  # max = scale
+    'high': 5,    # no clamp
+    'medium': 5,  # max = scale_what_works
     'low': 4,     # max = maintain
 }
 
@@ -148,37 +147,29 @@ _CONFIDENCE_CLAMP = {
 # ---------------------------------------------------------------------------
 
 _WHY_NOW_TEMPLATES = {
-    'scale_aggressively': (
-        "ROAS {roas:.1f}x exceeds {strategy} target ({target}x) "
-        "with {score}/100 decision score. Scale budget by 50%."
-    ),
-    'scale': (
-        "ROAS {roas:.1f}x above {strategy} good ({target}x). "
-        "Decision score {score}/100. Increase budget 25%."
+    'scale_what_works': (
+        "ROAS {roas:.1f}x exceeds {strategy} target ({target}x) — "
+        "lean into what's converting. Score {score}/100."
     ),
     'maintain': (
-        "ROAS {roas:.1f}x near {strategy} target. "
-        "Decision score {score}/100. Hold current budget."
+        "ROAS {roas:.1f}x at {strategy} target ({target}x). "
+        "Score {score}/100 — no changes needed."
     ),
-    'optimize': (
+    'fix': (
         "ROAS {roas:.1f}x below {strategy} target ({target}x). "
-        "Decision score {score}/100. Review targeting and bids."
+        "Score {score}/100. Fix identified issues before adjusting spend."
     ),
-    'reduce': (
+    'review': (
         "ROAS {roas:.1f}x below {strategy} floor ({floor}x). "
-        "Decision score {score}/100. Cut budget 50%."
+        "Score {score}/100. Investigate root cause before making changes."
     ),
     'pause': (
         "ROAS {roas:.1f}x well below {strategy} floor ({floor}x). "
-        "Decision score {score}/100. Pause and review."
+        "Score {score}/100. Consider pausing — zero or near-zero value."
     ),
     'investigate': (
-        "Low ROAS ({roas:.1f}x) but high strategic signals "
-        "(score {score}/100). Check attribution lag before cutting."
-    ),
-    'fix_landing_page': (
-        "Ad traffic is healthy but landing page conversion degraded. "
-        "Fix LP/checkout before adjusting budget."
+        "Low ROAS ({roas:.1f}x) but strategic signals present "
+        "(score {score}/100). Gather more data before acting."
     ),
 }
 
@@ -342,7 +333,7 @@ def decide(
         strategic_val = 'low'
 
     # Action from matrix
-    action = _ACTION_MATRIX.get((short_term, strategic_val), 'optimize')
+    action = _ACTION_MATRIX.get((short_term, strategic_val), 'fix')
 
     # Confidence assessment
     min_spend = thresholds.get('min_spend_for_eval', 100)
@@ -356,7 +347,7 @@ def decide(
         confidence = 'low'
 
     # Confidence gating: clamp action
-    max_rank = _CONFIDENCE_CLAMP.get(confidence, 6)
+    max_rank = _CONFIDENCE_CLAMP.get(confidence, 5)
     # Strategy-type gating: unknown/zombie campaigns never scale
     if strategy == 'unknown':
         max_rank = min(max_rank, _CONFIDENCE_CLAMP['low'])  # cap at maintain

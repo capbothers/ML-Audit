@@ -7,8 +7,8 @@ if its evidence meets the confidence threshold.
 
 Policy rules (priority order):
   1. Measurement gate          — stale data → investigate
-  2. Landing page override     — LP friction → fix_landing_page
-  3. Attribution gate          — low attr conf → can't reduce/pause
+  2. Landing page override     — LP friction → fix
+  3. Attribution gate          — low attr conf → can't review/pause
   4. DR override               — high-conf overspend → can't scale
   5. Waste override            — wasting + scale → investigate
   6. Profitability protection  — high-conf profitable → floor at maintain
@@ -18,11 +18,10 @@ from typing import Dict, List, Optional
 from app.services.campaign_strategy import format_why_now, STRATEGY_THRESHOLDS
 
 
-# Action rank for comparison
+# Action rank for comparison (new diagnostic vocabulary)
 _ACTION_RANK = {
-    'scale_aggressively': 7, 'scale': 6, 'maintain': 5,
-    'fix_landing_page': 4, 'optimize': 3, 'investigate': 2,
-    'reduce': 1, 'pause': 0,
+    'scale_what_works': 5, 'maintain': 4, 'fix': 3,
+    'investigate': 2, 'review': 1, 'pause': 0,
 }
 
 
@@ -34,7 +33,7 @@ class DecisionArbitrator:
     Invariants:
       - High-confidence negative evidence can downgrade actions
       - Low-confidence modules cannot override high-confidence profitability
-      - Explanation is always generated from the final action
+      - Explanation always references diagnostic actions, never budget amounts
     """
 
     def arbitrate(self, campaign: Dict, evidence: Dict) -> Dict:
@@ -88,22 +87,22 @@ class DecisionArbitrator:
         # --- Rule 2: Landing page override ---
         if triage:
             lp = next((c for c in triage.get('causes', []) if c['cause'] == 'landing_page'), None)
-            if lp and lp['score'] >= 0.7 and action in ('reduce', 'pause', 'optimize'):
+            if lp and lp['score'] >= 0.7 and action in ('review', 'pause', 'fix'):
                 overrides.append({
-                    'from_action': action, 'to_action': 'fix_landing_page',
+                    'from_action': action, 'to_action': 'fix',
                     'reason': f"LP issue detected: {lp['evidence']}",
                     'module': 'landing_page',
                 })
-                action = 'fix_landing_page'
+                action = 'fix'
                 evidence_chain.append({
                     'module': 'landing_page', 'signal': lp['evidence'],
-                    'confidence': 'high', 'direction': 'fix_landing_page',
+                    'confidence': 'high', 'direction': 'fix',
                 })
 
         # --- Rule 3: Attribution confidence gate ---
         attr = evidence.get('attribution') or {}
         attr_conf = attr.get('confidence', 'high')
-        if attr_conf == 'low' and action in ('reduce', 'pause'):
+        if attr_conf == 'low' and action in ('review', 'pause'):
             gap = attr.get('gap_pct')
             gap_str = f" (gap: {gap:.0f}%)" if gap is not None else ""
             overrides.append({
@@ -119,7 +118,7 @@ class DecisionArbitrator:
 
         # --- Rule 4: Diminishing returns override ---
         dr = evidence.get('diminishing_returns')
-        if dr and action in ('scale', 'scale_aggressively'):
+        if dr and action == 'scale_what_works':
             overspend = dr.get('overspend_per_day', 0)
             optimal = dr.get('optimal_daily_spend', 0)
             current = dr.get('current_daily_spend', 0)
@@ -127,39 +126,39 @@ class DecisionArbitrator:
             pct_over = (overspend / optimal) if optimal > 0 else 0
             is_material = current >= 50 and (overspend > 50 or pct_over > 0.20)
 
-            # Human-readable DR description: use % when reasonable, abs dollars otherwise
-            if pct_over <= 2.0:
-                dr_desc = f"${overspend:.0f}/day overspend ({pct_over:.0%} above optimal ${optimal:.0f}/day)"
-            else:
-                dr_desc = f"${overspend:.0f}/day overspend (optimal ~${optimal:.0f}/day, current ${current:.0f}/day)"
+            # DR description: flag efficiency concern, never prescribe budget target
+            dr_desc = (
+                f"spend efficiency declining — "
+                f"marginal ROAS dropping after {dr.get('active_days', '?')}d of data"
+            )
 
             if is_material and dr_conf == 'high':
                 overrides.append({
                     'from_action': action, 'to_action': 'investigate',
                     'reason': (
-                        f"DR (high conf, {dr.get('active_days', '?')}d) shows {dr_desc}"
+                        f"DR (high conf, {dr.get('active_days', '?')}d): {dr_desc}"
                     ),
                     'module': 'diminishing_returns',
                 })
                 action = 'investigate'
                 evidence_chain.append({
                     'module': 'diminishing_returns',
-                    'signal': f'overspend ${overspend:.0f}/day',
+                    'signal': dr_desc,
                     'confidence': dr_conf, 'direction': 'investigate',
                 })
             elif is_material:
                 evidence_chain.append({
                     'module': 'diminishing_returns',
-                    'signal': f'overspend ${overspend:.0f}/day (low conf)',
+                    'signal': f'{dr_desc} (low conf)',
                     'confidence': dr_conf, 'direction': 'monitor',
                 })
 
         # --- Rule 5: Waste override ---
         waste = evidence.get('waste') or {}
-        if waste.get('is_wasting') and action in ('scale', 'scale_aggressively'):
+        if waste.get('is_wasting') and action == 'scale_what_works':
             overrides.append({
                 'from_action': action, 'to_action': 'investigate',
-                'reason': 'Campaign flagged as wasting budget',
+                'reason': 'Waste signals detected — investigate before scaling',
                 'module': 'waste',
             })
             action = 'investigate'
@@ -169,13 +168,13 @@ class DecisionArbitrator:
         roas_good = thresholds.get('roas_good', 2.5)
         if (strat_confidence == 'high'
                 and roas is not None and roas >= roas_good
-                and _ACTION_RANK.get(action, 5) < _ACTION_RANK.get('maintain', 5)):
+                and _ACTION_RANK.get(action, 4) < _ACTION_RANK.get('maintain', 4)):
             # High-confidence profitable campaign — floor at maintain
             overrides.append({
                 'from_action': action, 'to_action': 'maintain',
                 'reason': (
                     f"ROAS {roas:.1f}x above {stype} target ({roas_good}x) "
-                    f"with high strategy confidence — floor at maintain"
+                    f"with high confidence — floor at maintain"
                 ),
                 'module': 'profitability_protection',
             })
@@ -204,29 +203,30 @@ class DecisionArbitrator:
         overrides: List[Dict],
         triage: Optional[Dict],
     ) -> Optional[str]:
-        """Generate why_now from the final action + any override context."""
-        # If there was an override, explain the override
+        """Generate why_now — always diagnostic, never budget-prescriptive."""
+        # If there was an override, explain it
         if overrides:
             last = overrides[-1]
-            if action == 'fix_landing_page':
-                lp_evidence = last.get('reason', '')
+            if last['module'] == 'landing_page':
                 return (
-                    f"Ad traffic is healthy but landing page conversion degraded. "
-                    f"{lp_evidence}. Fix LP/checkout before adjusting budget."
+                    f"LP conversion degraded ({last.get('reason', '')}). "
+                    f"Fix page issues before adjusting spend."
                 )
             elif action == 'investigate' and last['module'] == 'diminishing_returns':
                 return (
                     f"ROAS {roas:.1f}x looks strong but {last['reason']}. "
-                    f"Verify spend efficiency before scaling."
+                    f"Investigate spend efficiency."
                 ) if roas else last['reason']
             elif action == 'investigate' and last['module'] == 'attribution':
                 return last['reason']
             elif action == 'investigate' and last['module'] == 'measurement':
                 return f"Data quality concern: {last['reason']}. Resolve before acting."
+            elif action == 'investigate' and last['module'] == 'waste':
+                return last['reason']
             elif last['module'] == 'profitability_protection':
                 return (
-                    f"ROAS {roas:.1f}x is profitable — holding at maintain despite "
-                    f"low-confidence signals. {last['reason']}."
+                    f"ROAS {roas:.1f}x is profitable — holding at maintain "
+                    f"despite low-confidence signals."
                 ) if roas else last['reason']
 
         # If triage identified a primary cause, incorporate it
@@ -237,7 +237,11 @@ class DecisionArbitrator:
                 ''
             )
             base = format_why_now(action, roas, stype, thresholds, score)
-            if base and cause_evidence and cause_evidence not in ('Demand stable', 'LP metrics stable', 'All sources fresh', 'Feed health OK', 'Auction pressure stable'):
+            neutral_causes = (
+                'Demand stable', 'LP metrics stable', 'All sources fresh',
+                'Feed health OK', 'Auction pressure stable',
+            )
+            if base and cause_evidence and cause_evidence not in neutral_causes:
                 return f"{base} Root cause: {cause_evidence}."
             return base
 

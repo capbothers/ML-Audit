@@ -359,7 +359,7 @@ class AdSpendProcessor:
             decision = strategy_decide(d_score, true_roas_val, strat_type, strat_thresholds, total_spend, days)
 
             # Guardrail: waste signal overrides scale
-            if is_wasting_budget and decision['action'] in ('scale', 'scale_aggressively'):
+            if is_wasting_budget and decision['action'] == 'scale_what_works':
                 decision['action'] = 'investigate'
 
             # ── Attribution confidence (Capability 2) ──
@@ -388,7 +388,7 @@ class AdSpendProcessor:
                 attr_gap_pct = None
 
             # Attribution gate: low confidence cannot trigger hard cut
-            if attr_confidence == 'low' and decision['action'] in ('reduce', 'pause'):
+            if attr_confidence == 'low' and decision['action'] in ('review', 'pause'):
                 decision['action'] = 'investigate'
 
             # ── Causal triage (Capability 1) — only for non-scaling campaigns ──
@@ -399,7 +399,7 @@ class AdSpendProcessor:
             lp_bounce_change = None
             lp_is_friction = None
 
-            if decision['action'] not in ('scale', 'scale_aggressively'):
+            if decision['action'] != 'scale_what_works':
                 try:
                     from app.services.causal_triage import CausalTriageService
                     triage_svc = CausalTriageService(self.db)
