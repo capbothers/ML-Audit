@@ -1277,7 +1277,7 @@
                             <span style="color:${profitColor}">${fmtMoney(profit)}</span>
                             <span>${p.roas?.profit_roas != null ? fmtRoas(p.roas.profit_roas) : '--'}</span>
                         </div>
-                        <span class="product-action" style="background:${actionBg};color:${actionColor}">${p.recommendation?.action || (isScale ? 'Scale' : 'Exclude')}</span>${p.sample_quality?.is_low_sample ? `<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#fef3c7;color:#92400e;margin-left:4px;cursor:help" title="Less than 5 conversions \u2014 ROAS may not be reliable. Minimum thresholds: $200 spend, 3 conversions.">Low sample</span>` : ''}
+                        <span class="product-action" style="background:${actionBg};color:${actionColor}">${p.recommendation?.action || (isScale ? 'Scale' : 'Exclude')}</span>${p.sample_quality?.is_low_sample ? `<span style="font-size:9px;padding:1px 5px;border-radius:3px;background:#fef3c7;color:#92400e;margin-left:4px;cursor:help" title="Only ${p.sample_quality.conversions ?? 0} conversions (threshold \u2265 5) \u2014 ROAS may not be reliable.">Low sample (${p.sample_quality.conversions ?? 0} conv, need \u2265 5)</span>` : ''}
                     </div>`;
                 });
 

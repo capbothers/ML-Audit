@@ -603,7 +603,8 @@ async def get_enhanced_dashboard(
         })
 
         # Cross-reference strategy vs diminishing returns — auto-downgrade action
-        # Only override when overspend is material: >$50/day or >20% above optimal
+        # Gates: (1) overspend is material (>$50/day or >20% above optimal)
+        #         (2) DR curve confidence is high (≥21 active days, ≥5 days per bucket)
         dr_overspend = {dr['campaign_id']: dr for dr in diminishing if dr.get('overspend_per_day', 0) > 0}
         for c in campaigns:
             strat = c.get('strategy')
@@ -615,16 +616,30 @@ async def get_enhanced_dashboard(
                 optimal = dr.get('optimal_daily_spend', 0)
                 pct_over = (overspend / optimal) if optimal > 0 else 0
                 is_material = overspend > 50 or pct_over > 0.20
-                if is_material:
+                dr_conf = dr.get('dr_confidence', 'low')
+                if is_material and dr_conf == 'high':
                     strat['original_action'] = strat['action']
                     strat['action'] = 'investigate'
                     strat['conflict_note'] = (
-                        f"Diminishing returns suggests overspending by "
-                        f"${overspend:.0f}/day ({pct_over:.0%} above optimal) "
+                        f"Diminishing returns (high confidence, {dr.get('active_days', '?')} days) "
+                        f"suggests overspending by ${overspend:.0f}/day ({pct_over:.0%} above optimal) "
                         f"\u2014 downgraded from "
                         f"{strat['original_action'].replace('_', ' ')} to investigate."
                     )
-                else:
+                    # Regenerate why_now to match final action (not pre-override)
+                    roas = c.get('true_metrics', {}).get('roas') or 0
+                    strat['why_now'] = (
+                        f"ROAS {roas:.1f}x looks strong but diminishing returns "
+                        f"analysis shows overspend of ${overspend:.0f}/day. "
+                        f"Verify spend efficiency before scaling."
+                    )
+                elif is_material:
+                    strat['conflict_note'] = (
+                        f"Diminishing returns detected (${overspend:.0f}/day over optimal) "
+                        f"but DR confidence is {dr_conf} ({dr.get('active_days', '?')} days, "
+                        f"min {dr.get('min_bucket_days', '?')}/bucket) \u2014 monitoring only."
+                    )
+                elif overspend > 0:
                     strat['conflict_note'] = (
                         f"Minor diminishing returns detected (${overspend:.0f}/day over optimal) "
                         f"\u2014 monitoring, no action override."

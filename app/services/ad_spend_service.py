@@ -1109,6 +1109,16 @@ class AdSpendService:
             else:
                 status = 'optimal'
 
+            # DR curve confidence: need enough active days and stable buckets
+            active_days = len(daily_data)
+            min_bucket_days = min(b['days_count'] for b in buckets)
+            if active_days >= 21 and min_bucket_days >= 5:
+                dr_confidence = 'high'
+            elif active_days >= 14 and min_bucket_days >= 3:
+                dr_confidence = 'medium'
+            else:
+                dr_confidence = 'low'
+
             results.append({
                 'campaign_id': cid,
                 'campaign_name': cname,
@@ -1117,6 +1127,9 @@ class AdSpendService:
                 'current_daily_spend': round(current_daily_spend, 2),
                 'overspend_per_day': round(overspend, 2),
                 'status': status,
+                'active_days': active_days,
+                'min_bucket_days': min_bucket_days,
+                'dr_confidence': dr_confidence,
             })
 
         log.info(f"Diminishing returns analyzed for {len(results)} campaigns")
