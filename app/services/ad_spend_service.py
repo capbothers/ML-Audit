@@ -436,12 +436,13 @@ class AdSpendService:
         log.info("Getting product ad performance")
 
         # Get both profitable and unprofitable products
-        # Spend floor ($50) prevents tiny-spend products dominating by ROAS
+        # Spend floor ($200) + conversions floor (3) prevents low-confidence outliers
         # Sort by spend * ROAS to prioritize actionable scale candidates
         profitable_products = self.db.query(ProductAdPerformance).filter(
             ProductAdPerformance.is_profitable_to_advertise == True,
             ProductAdPerformance.period_days == days,
-            ProductAdPerformance.total_ad_spend >= 50,
+            ProductAdPerformance.total_ad_spend >= 200,
+            ProductAdPerformance.ad_conversions >= 3,
         ).order_by(
             desc(ProductAdPerformance.total_ad_spend * ProductAdPerformance.profit_roas)
         ).limit(limit // 2).all()
@@ -499,6 +500,11 @@ class AdSpendService:
                     'meets_margin_threshold': product.margin_threshold_met
                 },
 
+                'sample_quality': {
+                    'conversions': product.ad_conversions,
+                    'is_low_sample': (product.ad_conversions or 0) < 5,
+                },
+
                 'recommendation': {
                     'action': product.recommended_action,
                     'max_cpc': float(product.recommended_max_cpc) if product.recommended_max_cpc else None
@@ -507,8 +513,7 @@ class AdSpendService:
 
             results.append(result)
 
-        # Sort by profit ROAS descending
-        results.sort(key=lambda x: x['roas'].get('profit_roas') or -999, reverse=True)
+        # DB query already sorts by spend * ROAS (actionability); don't re-sort by ROAS alone
 
         log.info(f"Found {len(results)} products with ad performance data")
 
@@ -1385,14 +1390,30 @@ class AdSpendService:
                 if abs(change_pct) > threshold:
                     direction = "increased" if change_pct > 0 else "decreased"
 
+                    # Sentiment: is this change good, bad, or neutral?
+                    _good_dir = {'CPC': 'down', 'CTR': 'up', 'Conversion Rate': 'up'}
+                    dir_key = 'up' if change_pct > 0 else 'down'
+                    good_dir = _good_dir.get(metric_name)
+                    sentiment = 'positive' if good_dir == dir_key else ('negative' if good_dir and good_dir != dir_key else 'neutral')
+
+                    # Negative interpretations
                     if metric_name == 'CPC' and change_pct > 0:
-                        interp = f"CPC increased by {abs(change_pct)*100:.0f}% - competitors may be bidding more aggressively"
+                        interp = f"CPC increased by {abs(change_pct)*100:.0f}% \u2014 competitors may be bidding more aggressively"
                     elif metric_name == 'CTR' and change_pct < 0:
-                        interp = f"CTR decreased by {abs(change_pct)*100:.0f}% - ad relevance or search intent may have shifted"
+                        interp = f"CTR decreased by {abs(change_pct)*100:.0f}% \u2014 ad relevance or search intent may have shifted"
                     elif metric_name == 'Conversion Rate' and change_pct < 0:
-                        interp = f"Conversion rate dropped by {abs(change_pct)*100:.0f}% - check landing pages and offer relevance"
+                        interp = f"Conversion rate dropped by {abs(change_pct)*100:.0f}% \u2014 check landing pages and offer relevance"
                     elif metric_name == 'Spend' and change_pct > 0:
-                        interp = f"Spend surged by {abs(change_pct)*100:.0f}% - review budget settings and bid strategy"
+                        interp = f"Spend surged by {abs(change_pct)*100:.0f}% \u2014 review budget settings and bid strategy"
+                    # Positive interpretations
+                    elif metric_name == 'CPC' and change_pct < 0:
+                        interp = f"CPC decreased by {abs(change_pct)*100:.0f}% \u2014 competitive pressure may be easing"
+                    elif metric_name == 'CTR' and change_pct > 0:
+                        interp = f"CTR improved by {abs(change_pct)*100:.0f}% \u2014 ad relevance may be strengthening"
+                    elif metric_name == 'Conversion Rate' and change_pct > 0:
+                        interp = f"Conversion rate improved by {abs(change_pct)*100:.0f}% \u2014 verify sustainability"
+                    elif metric_name == 'Spend' and change_pct < 0:
+                        interp = f"Spend decreased by {abs(change_pct)*100:.0f}% \u2014 check if intentional"
                     else:
                         interp = f"{metric_name} {direction} by {abs(change_pct)*100:.0f}%"
 
@@ -1402,6 +1423,7 @@ class AdSpendService:
                         'current_value': round(curr_val, 4),
                         'change_pct': round(change_pct * 100, 1),
                         'interpretation': interp,
+                        'sentiment': sentiment,
                     })
 
             if not anomalies_found:
@@ -1419,6 +1441,7 @@ class AdSpendService:
                     'change_pct': anomaly['change_pct'],
                     'severity': severity,
                     'interpretation': anomaly['interpretation'],
+                    'sentiment': anomaly['sentiment'],
                 })
 
         log.info(f"Detected {len(results)} anomalies")

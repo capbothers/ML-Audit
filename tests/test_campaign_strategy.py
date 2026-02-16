@@ -226,3 +226,27 @@ def test_brand_defense_roas_1_classified_marginal_not_weak():
     thresholds = STRATEGY_THRESHOLDS['brand_defense']
     result = decide(50, 1.0, 'brand_defense', thresholds, 200, 30)
     assert result['short_term'] == 'marginal', f"Expected marginal, got {result['short_term']}"
+
+
+# ---------------------------------------------------------------------------
+# Unknown/zombie guardrail tests
+# ---------------------------------------------------------------------------
+
+def test_unknown_strategy_capped_to_maintain():
+    """Unknown strategy with high ROAS still maxes at maintain."""
+    thresholds = STRATEGY_THRESHOLDS['unknown']
+    result = decide(90, 8.0, 'unknown', thresholds, 500, 30)
+    assert result['action'] == 'maintain', (
+        f"Unknown strategy should cap at maintain, got {result['action']}"
+    )
+
+
+def test_zombie_never_scales():
+    """Zombie campaign classified as unknown can't get scale/scale_aggressively."""
+    strategy = classify("PM Zombie Campaign", "PERFORMANCE_MAX", 500)
+    assert strategy == 'unknown'
+    thresholds = STRATEGY_THRESHOLDS['unknown']
+    result = decide(95, 10.0, strategy, thresholds, 1000, 30)
+    assert result['action'] not in ('scale', 'scale_aggressively'), (
+        f"Zombie campaign should never scale, got {result['action']}"
+    )

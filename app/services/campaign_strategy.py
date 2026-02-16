@@ -353,6 +353,9 @@ def decide(
 
     # Confidence gating: clamp action
     max_rank = _CONFIDENCE_CLAMP.get(confidence, 6)
+    # Strategy-type gating: unknown/zombie campaigns never scale
+    if strategy == 'unknown':
+        max_rank = min(max_rank, _CONFIDENCE_CLAMP['low'])  # cap at maintain
     action_rank = _ACTION_RANK.get(action, 2)
     if action_rank > max_rank:
         action = _RANK_TO_ACTION.get(max_rank, action)

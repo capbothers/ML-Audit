@@ -293,3 +293,102 @@ def test_forecast_trend_values_handled_in_html():
     assert "'declining'" in html or '"declining"' in html, (
         "Frontend must handle 'declining' trend direction from backend"
     )
+
+
+# ---------------------------------------------------------------------------
+# Test 6 — Waste-conflict guardrail
+# ---------------------------------------------------------------------------
+
+def test_waste_conflict_downgrades_scale():
+    """If is_wasting_budget=True, strategy_action cannot be scale or scale_aggressively."""
+    db = SessionLocal()
+    try:
+        campaigns = db.query(CampaignPerformance).filter(
+            CampaignPerformance.is_wasting_budget == True,
+            CampaignPerformance.strategy_action.isnot(None),
+        ).all()
+        for c in campaigns:
+            assert c.strategy_action not in ('scale', 'scale_aggressively'), (
+                f"Campaign '{c.campaign_name}' is wasting budget but has "
+                f"strategy_action='{c.strategy_action}' — should be investigate or lower"
+            )
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Test 7 — Anomaly sentiment
+# ---------------------------------------------------------------------------
+
+def test_anomaly_has_sentiment_field():
+    """All anomalies must include a 'sentiment' field."""
+    db = SessionLocal()
+    try:
+        svc = AdSpendService(db)
+        anomalies = _run(svc.detect_anomalies(days=30))
+        for a in anomalies:
+            assert 'sentiment' in a, (
+                f"Anomaly for {a.get('campaign_name')} / {a.get('metric')} "
+                f"missing 'sentiment' field"
+            )
+            assert a['sentiment'] in ('positive', 'negative', 'neutral'), (
+                f"Invalid sentiment '{a['sentiment']}' — must be positive/negative/neutral"
+            )
+    finally:
+        db.close()
+
+
+def test_anomaly_positive_sentiment():
+    """CTR increase and CPC decrease must have 'positive' sentiment."""
+    db = SessionLocal()
+    try:
+        svc = AdSpendService(db)
+        anomalies = _run(svc.detect_anomalies(days=30))
+        ctr_ups = [a for a in anomalies if a['metric'] == 'CTR' and a['change_pct'] > 0]
+        for a in ctr_ups:
+            assert a['sentiment'] == 'positive', (
+                f"CTR increase should have positive sentiment, got {a['sentiment']}"
+            )
+        cpc_downs = [a for a in anomalies if a['metric'] == 'CPC' and a['change_pct'] < 0]
+        for a in cpc_downs:
+            assert a['sentiment'] == 'positive', (
+                f"CPC decrease should have positive sentiment, got {a['sentiment']}"
+            )
+    finally:
+        db.close()
+
+
+# ---------------------------------------------------------------------------
+# Test 8 — Product confidence gating
+# ---------------------------------------------------------------------------
+
+def test_products_spend_floor_200():
+    """Profitable products must have at least $200 in ad spend."""
+    db = SessionLocal()
+    try:
+        svc = AdSpendService(db)
+        products = _run(svc.get_product_ad_performance(days=30))
+        profitable = [p for p in products if p['indicators']['is_profitable']]
+        for p in profitable:
+            assert p['ad_spend']['total_spend'] >= 200, (
+                f"Product '{p['product_title']}' has only ${p['ad_spend']['total_spend']:.0f} "
+                f"spend — below minimum floor of $200"
+            )
+    finally:
+        db.close()
+
+
+def test_products_min_conversions_3():
+    """Profitable products must have at least 3 conversions."""
+    db = SessionLocal()
+    try:
+        svc = AdSpendService(db)
+        products = _run(svc.get_product_ad_performance(days=30))
+        profitable = [p for p in products if p['indicators']['is_profitable']]
+        for p in profitable:
+            assert p['performance']['conversions'] >= 3, (
+                f"Product '{p['product_title']}' has only {p['performance']['conversions']} "
+                f"conversions — below minimum floor of 3"
+            )
+    finally:
+        db.close()

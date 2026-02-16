@@ -358,6 +358,10 @@ class AdSpendProcessor:
             d_score = strategy_score(strat_data, strat_type, strat_thresholds)
             decision = strategy_decide(d_score, true_roas_val, strat_type, strat_thresholds, total_spend, days)
 
+            # Guardrail: waste signal overrides scale
+            if is_wasting_budget and decision['action'] in ('scale', 'scale_aggressively'):
+                decision['action'] = 'investigate'
+
             results.append({
                 "campaign_id": agg["campaign_id"],
                 "campaign_name": agg["campaign_name"],
