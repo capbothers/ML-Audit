@@ -5,14 +5,27 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional
 from pydantic import BaseModel
 
-from app.services.analysis_service import AnalysisService
-from app.services.data_sync_service import DataSyncService
 from app.utils.logger import log
 
 router = APIRouter(prefix="/insights", tags=["insights"])
 
-analysis_service = AnalysisService()
-data_sync = DataSyncService()
+# Lazy-initialized to avoid loading pandas/sklearn at startup
+_analysis_service = None
+_data_sync = None
+
+def _get_analysis_service():
+    global _analysis_service
+    if _analysis_service is None:
+        from app.services.analysis_service import AnalysisService
+        _analysis_service = AnalysisService()
+    return _analysis_service
+
+def _get_data_sync():
+    global _data_sync
+    if _data_sync is None:
+        from app.services.data_sync_service import DataSyncService
+        _data_sync = DataSyncService()
+    return _data_sync
 
 
 class ChurnRequest(BaseModel):
@@ -46,7 +59,7 @@ async def run_full_analysis(request: FullAnalysisRequest):
     Run comprehensive analysis across all modules
     """
     try:
-        results = await analysis_service.run_full_analysis(
+        results = await _get_analysis_service().run_full_analysis(
             customer_data=request.customer_data,
             campaign_data=request.campaign_data,
             traffic_data=request.traffic_data,
@@ -68,7 +81,7 @@ async def predict_churn(request: ChurnRequest):
     Predict customer churn probability
     """
     try:
-        predictions = await analysis_service.predict_churn(request.customer_data)
+        predictions = await _get_analysis_service().predict_churn(request.customer_data)
         return {
             "predictions": predictions,
             "total_customers": len(predictions),
@@ -87,7 +100,7 @@ async def train_churn_model(request: ChurnRequest):
     Train churn prediction model with new data
     """
     try:
-        result = await analysis_service.train_churn_model(request.customer_data)
+        result = await _get_analysis_service().train_churn_model(request.customer_data)
         return result
     except Exception as e:
         log.error(f"Model training error: {str(e)}")
@@ -100,7 +113,7 @@ async def detect_anomalies(request: AnomalyRequest):
     Detect anomalies in a specific metric
     """
     try:
-        anomalies = await analysis_service.detect_anomalies(
+        anomalies = await _get_analysis_service().detect_anomalies(
             request.data,
             request.metric_name,
             request.method
@@ -121,7 +134,7 @@ async def audit_seo(request: SEOAuditRequest):
     Run SEO audit on specified URLs
     """
     try:
-        results = await analysis_service.audit_seo(request.urls)
+        results = await _get_analysis_service().audit_seo(request.urls)
         return results
     except Exception as e:
         log.error(f"SEO audit error: {str(e)}")

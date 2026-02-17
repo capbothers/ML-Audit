@@ -5,11 +5,6 @@ Runs ML analysis and generates insights
 from typing import Dict, List, Optional
 from datetime import datetime
 
-from app.ml.churn_prediction import ChurnPredictor
-from app.ml.anomaly_detection import AnomalyDetector
-from app.ml.seo_analyzer import SEOAnalyzer
-from app.ml.recommendation_engine import RecommendationEngine
-from app.services.llm_service import LLMService
 from app.utils.logger import log
 
 
@@ -19,6 +14,14 @@ class AnalysisService:
     """
 
     def __init__(self):
+        # Lazy-import ML modules to avoid loading pandas/sklearn at startup
+        # (saves ~50MB RAM on the free Render tier)
+        from app.ml.churn_prediction import ChurnPredictor
+        from app.ml.anomaly_detection import AnomalyDetector
+        from app.ml.seo_analyzer import SEOAnalyzer
+        from app.ml.recommendation_engine import RecommendationEngine
+        from app.services.llm_service import LLMService
+
         self.churn_predictor = ChurnPredictor()
         self.anomaly_detector = AnomalyDetector()
         self.seo_analyzer = SEOAnalyzer()

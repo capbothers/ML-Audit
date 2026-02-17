@@ -11,8 +11,6 @@ import json
 from sqlalchemy import func
 from sqlalchemy.sql import and_
 
-from app.services.data_sync_service import DataSyncService
-from app.services.analysis_service import AnalysisService
 from app.services.alert_service import AlertService
 from app.services.llm_service import LLMService
 from app.models.base import SessionLocal
@@ -36,7 +34,9 @@ class MonitoringService:
     """
 
     def __init__(self):
+        from app.services.data_sync_service import DataSyncService
         self.data_sync = DataSyncService()
+        from app.services.analysis_service import AnalysisService
         self.analysis_service = AnalysisService()
         self.alert_service = AlertService()
         self.llm_service = LLMService()

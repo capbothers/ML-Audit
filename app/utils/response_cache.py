@@ -20,11 +20,12 @@ from typing import Any
 
 
 class ResponseCache:
-    """Thread-safe in-memory cache with TTL expiry."""
+    """Thread-safe in-memory cache with TTL expiry and max-entry limit."""
 
-    def __init__(self):
+    def __init__(self, max_entries: int = 20):
         self._store: dict[str, tuple[float, Any]] = {}
         self._lock = threading.Lock()
+        self._max_entries = max_entries
 
     def get(self, key: str) -> Any | None:
         with self._lock:
@@ -39,6 +40,16 @@ class ResponseCache:
 
     def set(self, key: str, value: Any, ttl: int = 300) -> None:
         with self._lock:
+            # Evict expired entries first to stay under limit
+            if len(self._store) >= self._max_entries:
+                now = time.time()
+                expired = [k for k, (exp, _) in self._store.items() if now > exp]
+                for k in expired:
+                    del self._store[k]
+            # If still at limit, evict oldest entry
+            if len(self._store) >= self._max_entries:
+                oldest_key = min(self._store, key=lambda k: self._store[k][0])
+                del self._store[oldest_key]
             self._store[key] = (time.time() + ttl, value)
 
     def clear(self) -> None:

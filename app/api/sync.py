@@ -5,8 +5,6 @@ from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from datetime import datetime, timedelta
 from app.services.data_sync_service import DataSyncService
-from app.services.caprice_import_service import CapriceImportService
-from app.services.google_ads_import_service import GoogleAdsImportService
 from app.services.google_ads_sheet_import import GoogleAdsSheetImportService, GOOGLE_AVAILABLE
 from app.models.base import SessionLocal
 from app.models.analytics import DataSyncLog
@@ -648,6 +646,7 @@ def import_caprice_latest():
     uses pandas + DB writes.
     """
     try:
+        from app.services.caprice_import_service import CapriceImportService
         service = CapriceImportService()
         result = service.run_import()
         return {"success": True, **result}
@@ -709,6 +708,7 @@ def import_google_ads_csv():
     Files are moved to processed/ or failed/ after import.
     """
     try:
+        from app.services.google_ads_import_service import GoogleAdsImportService
         service = GoogleAdsImportService()
         result = service.run_import()
         return {"success": True, **result}
