@@ -9,10 +9,19 @@ from sqlalchemy.orm import Session
 from app.models.base import get_db
 from app.models.user import User
 from app.services import auth_service
+from app.config import get_settings
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 static_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+
+
+def _require_authenticated(request: Request) -> User:
+    """Dependency: raise 401 if no authenticated user on request."""
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
 
 
 # ── Schemas ──────────────────────────────────────────────
@@ -67,10 +76,12 @@ async def login(body: LoginRequest, db: Session = Depends(get_db)):
 
     token = auth_service.create_session(db, user.id)
     response = JSONResponse(content={"success": True, "user": _user_out(user)})
+    is_prod = get_settings().environment != "development"
     response.set_cookie(
         key="session_token",
         value=token,
         httponly=True,
+        secure=is_prod,
         samesite="lax",
         max_age=60 * 60 * 72,  # 72 hours
         path="/",
@@ -101,15 +112,24 @@ async def me(request: Request):
 # ── User management ─────────────────────────────────────
 
 @router.get("/users")
-async def list_users(db: Session = Depends(get_db)):
-    """List all users."""
+async def list_users(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_authenticated),
+):
+    """List all users (authenticated users only)."""
     users = db.query(User).order_by(User.created_at).all()
     return [_user_out(u) for u in users]
 
 
 @router.post("/users", status_code=201)
-async def create_user(body: CreateUserRequest, db: Session = Depends(get_db)):
-    """Create a new user account."""
+async def create_user(
+    body: CreateUserRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_authenticated),
+):
+    """Create a new user account (authenticated users only)."""
     existing = db.query(User).filter(User.email == body.email.lower().strip()).first()
     if existing:
         raise HTTPException(status_code=409, detail="Email already registered")
@@ -120,10 +140,14 @@ async def create_user(body: CreateUserRequest, db: Session = Depends(get_db)):
 
 
 @router.delete("/users/{user_id}")
-async def deactivate_user(user_id: int, request: Request, db: Session = Depends(get_db)):
+async def deactivate_user(
+    user_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_authenticated),
+):
     """Deactivate a user account (cannot deactivate yourself)."""
-    current_user = getattr(request.state, "user", None)
-    if current_user and current_user.id == user_id:
+    if current_user.id == user_id:
         raise HTTPException(status_code=400, detail="Cannot deactivate your own account")
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
