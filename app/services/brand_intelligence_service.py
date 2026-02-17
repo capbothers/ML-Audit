@@ -924,6 +924,28 @@ class BrandIntelligenceService:
                     else_=literal_column('0')
                 )
             ).label('units_with_cost'),
+            # Revenue/discounts/refunds for costed items only (for accurate margin)
+            func.sum(
+                case(
+                    (ShopifyOrderItem.cost_per_item.isnot(None),
+                     ShopifyOrderItem.total_price),
+                    else_=literal_column('0')
+                )
+            ).label('costed_revenue'),
+            func.sum(
+                case(
+                    (ShopifyOrderItem.cost_per_item.isnot(None),
+                     func.coalesce(ShopifyOrderItem.total_discount, literal_column('0'))),
+                    else_=literal_column('0')
+                )
+            ).label('costed_discounts'),
+            func.sum(
+                case(
+                    (ShopifyOrderItem.cost_per_item.isnot(None),
+                     func.coalesce(rpi.c.refund_amount, literal_column('0'))),
+                    else_=literal_column('0')
+                )
+            ).label('costed_refunds'),
         )
         q = q.outerjoin(rpi, rpi.c.line_item_id == ShopifyOrderItem.line_item_id)
         q = self._base_filters(q, start, end)
@@ -945,19 +967,11 @@ class BrandIntelligenceService:
             cost_coverage = round(units_costed / units * 100, 1) if units > 0 else 0
             asp = round(net_rev / net_units, 2) if net_units > 0 else 0
 
-            # Margin: when cost coverage is partial, extrapolate COGS to all
-            # units so we don't inflate margin by dividing partial cost by
-            # full revenue.
-            estimated_margin = None
-            if net_rev > 0 and net_cogs > 0 and 0 < cost_coverage < 100 and units_costed > 0:
-                avg_cost_per_unit = gross_cogs / units_costed
-                estimated_cogs = avg_cost_per_unit * net_units
-                estimated_margin = round((net_rev - estimated_cogs) / net_rev * 100, 1)
-                margin = max(estimated_margin, 0)
-            elif net_rev > 0 and net_cogs > 0:
-                margin = round((net_rev - net_cogs) / net_rev * 100, 1)
-            else:
-                margin = 0
+            # Margin: use only costed-item revenue vs costed-item COGS
+            # so we compare like-for-like instead of partial cost / full revenue.
+            costed_net_rev = _dec(r.costed_revenue) - _dec(r.costed_discounts) - _dec(r.costed_refunds)
+            margin = round((costed_net_rev - net_cogs) / costed_net_rev * 100, 1) if costed_net_rev > 0 and net_cogs > 0 else 0
+            estimated_margin = margin if 0 < cost_coverage < 100 else None
 
             results.append({
                 "brand": r.vendor,
@@ -1006,6 +1020,28 @@ class BrandIntelligenceService:
                     else_=literal_column('0')
                 )
             ).label('units_with_cost'),
+            # Revenue/discounts/refunds for costed items only (for accurate margin)
+            func.sum(
+                case(
+                    (ShopifyOrderItem.cost_per_item.isnot(None),
+                     ShopifyOrderItem.total_price),
+                    else_=literal_column('0')
+                )
+            ).label('costed_revenue'),
+            func.sum(
+                case(
+                    (ShopifyOrderItem.cost_per_item.isnot(None),
+                     func.coalesce(ShopifyOrderItem.total_discount, literal_column('0'))),
+                    else_=literal_column('0')
+                )
+            ).label('costed_discounts'),
+            func.sum(
+                case(
+                    (ShopifyOrderItem.cost_per_item.isnot(None),
+                     func.coalesce(rpi.c.refund_amount, literal_column('0'))),
+                    else_=literal_column('0')
+                )
+            ).label('costed_refunds'),
         ).outerjoin(
             rpi, rpi.c.line_item_id == ShopifyOrderItem.line_item_id
         ).filter(
@@ -1027,17 +1063,10 @@ class BrandIntelligenceService:
         net_units = units - refund_units
         units_costed = int(r.units_with_cost or 0) if r else 0
         cost_coverage = round(units_costed / units * 100, 1) if units > 0 else 0
-        # Margin: extrapolate COGS when coverage is partial
-        estimated_margin = None
-        if net_rev > 0 and net_cogs > 0 and 0 < cost_coverage < 100 and units_costed > 0 and net_units > 0:
-            avg_cost_per_unit = gross_cogs / units_costed
-            estimated_cogs = avg_cost_per_unit * net_units
-            estimated_margin = round((net_rev - estimated_cogs) / net_rev * 100, 1)
-            margin = max(estimated_margin, 0)
-        elif net_rev > 0 and net_cogs > 0:
-            margin = round((net_rev - net_cogs) / net_rev * 100, 1)
-        else:
-            margin = 0
+        # Margin: use costed-item revenue vs costed-item COGS (like-for-like)
+        costed_net_rev = _dec(r.costed_revenue) - _dec(r.costed_discounts) - _dec(r.costed_refunds) if r else 0
+        margin = round((costed_net_rev - net_cogs) / costed_net_rev * 100, 1) if costed_net_rev > 0 and net_cogs > 0 else 0
+        estimated_margin = margin if 0 < cost_coverage < 100 else None
 
         return {
             "revenue": round(net_rev, 2),
