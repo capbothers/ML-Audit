@@ -505,7 +505,7 @@ class BrandIntelligenceService:
             ShopifyOrderItem.order_date < end,
             ShopifyOrderItem.vendor.isnot(None),
             ShopifyOrderItem.vendor != '',
-            ShopifyOrderItem.financial_status.in_(['paid', 'partially_refunded', 'refunded']),
+            ShopifyOrderItem.financial_status.notin_(['voided']),
         )
 
     def _count_active_days(self, start, end) -> int:
@@ -515,7 +515,7 @@ class BrandIntelligenceService:
         ).filter(
             ShopifyOrderItem.order_date >= start,
             ShopifyOrderItem.order_date < end,
-            ShopifyOrderItem.financial_status.in_(['paid', 'partially_refunded', 'refunded']),
+            ShopifyOrderItem.financial_status.notin_(['voided']),
         ).scalar()
         return int(result or 0)
 
@@ -1006,7 +1006,7 @@ class BrandIntelligenceService:
             ShopifyOrderItem.vendor == brand,
             ShopifyOrderItem.order_date >= start,
             ShopifyOrderItem.order_date < end,
-            ShopifyOrderItem.financial_status.in_(['paid', 'partially_refunded', 'refunded']),
+            ShopifyOrderItem.financial_status.notin_(['voided']),
         )
         r = q.first()
         gross_rev = _dec(r.revenue) if r else 0
@@ -1056,7 +1056,7 @@ class BrandIntelligenceService:
             .filter(
                 ShopifyOrderItem.order_date >= start,
                 ShopifyOrderItem.order_date < end,
-                ShopifyOrderItem.financial_status.in_(['paid', 'partially_refunded', 'refunded']),
+                ShopifyOrderItem.financial_status.notin_(['voided']),
             )
             .first()
         )
@@ -1272,7 +1272,7 @@ class BrandIntelligenceService:
                 ShopifyOrderItem.vendor == brand,
                 ShopifyOrderItem.order_date >= start,
                 ShopifyOrderItem.order_date < end,
-                ShopifyOrderItem.financial_status.in_(['paid', 'partially_refunded', 'refunded']),
+                ShopifyOrderItem.financial_status.notin_(['voided']),
             )
             .group_by(yr_col, mo_col)
             .order_by(yr_col, mo_col)
@@ -1341,7 +1341,7 @@ class BrandIntelligenceService:
                 ShopifyOrderItem.vendor == brand,
                 ShopifyOrderItem.order_date >= start,
                 ShopifyOrderItem.order_date < end,
-                ShopifyOrderItem.financial_status.in_(['paid', 'partially_refunded', 'refunded']),
+                ShopifyOrderItem.financial_status.notin_(['voided']),
             )
             .group_by(
                 ShopifyOrderItem.shopify_product_id,
