@@ -736,6 +736,8 @@ async def get_enhanced_dashboard(
             }
         }
         response_cache.set(cache_key, result, ttl=300)
+        # Free ORM objects from session to reduce memory pressure
+        db.expire_all()
         return result
     except Exception as e:
         log.error(f"Error generating enhanced dashboard: {str(e)}")
