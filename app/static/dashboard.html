@@ -630,6 +630,7 @@
             <a class="nav-item" href="/site-intelligence"><span></span> Site Intelligence</a>
             <a class="nav-item" href="/brand-intelligence"><span></span> Brand Intelligence</a>
             <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
+                <a class="nav-item" href="#" onclick="openInviteModal();return false" style="opacity:0.6"><span></span> Invite User</a>
                 <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
             </div>
         </aside>
@@ -1068,5 +1069,47 @@
         // Load stats on page load
         loadStats();
     </script>
+
+<!-- Invite User Modal -->
+<div id="invite-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center">
+    <div style="background:#fff;border-radius:16px;padding:32px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.15)">
+        <h3 style="font-family:'Space Grotesk',sans-serif;margin-bottom:8px">Invite User</h3>
+        <p style="color:#6b6670;font-size:14px;margin-bottom:20px">Send an invite email to create a new account</p>
+        <div id="invite-error" style="background:#fef2f2;color:#dc2626;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none"></div>
+        <div id="invite-success" style="background:#f0fdf4;color:#16a34a;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px;display:none"></div>
+        <input type="email" id="invite-email" placeholder="email@example.com" style="width:100%;padding:12px 14px;border:1px solid rgba(27,27,27,0.08);border-radius:10px;font-size:14px;font-family:'IBM Plex Sans',sans-serif;margin-bottom:16px;outline:none;background:#faf9f6">
+        <div style="display:flex;gap:12px">
+            <button onclick="closeInviteModal()" style="flex:1;padding:12px;border:1px solid rgba(27,27,27,0.08);border-radius:10px;background:#fff;font-size:14px;font-family:'Space Grotesk',sans-serif;cursor:pointer">Cancel</button>
+            <button id="send-invite-btn" onclick="sendInvite()" style="flex:1;padding:12px;background:#1b1b1b;color:#f7f1e8;border:none;border-radius:10px;font-size:14px;font-weight:600;font-family:'Space Grotesk',sans-serif;cursor:pointer">Send Invite</button>
+        </div>
+    </div>
+</div>
+<script>
+function openInviteModal(){
+    var m=document.getElementById('invite-modal');m.style.display='flex';
+    document.getElementById('invite-email').value='';
+    document.getElementById('invite-error').style.display='none';
+    document.getElementById('invite-success').style.display='none';
+    document.getElementById('invite-email').focus();
+}
+function closeInviteModal(){document.getElementById('invite-modal').style.display='none'}
+async function sendInvite(){
+    var btn=document.getElementById('send-invite-btn');
+    var email=document.getElementById('invite-email').value.trim();
+    var errEl=document.getElementById('invite-error');
+    var okEl=document.getElementById('invite-success');
+    errEl.style.display='none';okEl.style.display='none';
+    if(!email){errEl.textContent='Please enter an email address';errEl.style.display='block';return}
+    btn.disabled=true;btn.textContent='Sending...';
+    try{
+        var r=await fetch('/auth/invite',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:email})});
+        var d=await r.json();
+        if(r.ok){okEl.textContent='Invite sent to '+email;okEl.style.display='block';document.getElementById('invite-email').value=''}
+        else{errEl.textContent=d.detail||'Failed to send invite';errEl.style.display='block'}
+    }catch(e){errEl.textContent='Network error';errEl.style.display='block'}
+    btn.disabled=false;btn.textContent='Send Invite';
+}
+document.getElementById('invite-modal').addEventListener('click',function(e){if(e.target===this)closeInviteModal()});
+</script>
 </body>
 </html>
