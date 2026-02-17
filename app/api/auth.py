@@ -1,9 +1,9 @@
-"""Authentication API — login, logout, user management."""
+"""Authentication API — login, logout, user management, invites."""
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.models.base import get_db
@@ -155,3 +155,64 @@ async def deactivate_user(
     user.is_active = False
     db.commit()
     return {"success": True, "message": f"User {user.email} deactivated"}
+
+
+# ── Invite system ─────────────────────────────────────────
+
+class InviteRequest(BaseModel):
+    email: str
+
+
+class AcceptInviteRequest(BaseModel):
+    token: str
+    password: str
+
+
+@router.post("/invite")
+async def send_invite(
+    body: InviteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_authenticated),
+):
+    """Send an invite email to a new user (authenticated users only)."""
+    email = body.email.lower().strip()
+
+    # Check if email already registered
+    existing = db.query(User).filter(User.email == email).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="A user with this email already exists")
+
+    invite = auth_service.create_invite(db, email, current_user.id)
+    sent = auth_service.send_invite_email(email, invite.token)
+
+    if not sent:
+        raise HTTPException(status_code=500, detail="Failed to send invite email. Check RESEND_API_KEY.")
+
+    return {"success": True, "message": f"Invite sent to {email}"}
+
+
+@router.get("/accept-invite")
+async def accept_invite_page(token: str = "", db: Session = Depends(get_db)):
+    """Serve the 'Set Password' page if token is valid, or error page."""
+    if not token:
+        return FileResponse(os.path.join(static_dir, "invite_expired.html"))
+
+    invite = auth_service.validate_invite(db, token)
+    if not invite:
+        return FileResponse(os.path.join(static_dir, "invite_expired.html"))
+
+    return FileResponse(os.path.join(static_dir, "accept_invite.html"))
+
+
+@router.post("/accept-invite")
+async def accept_invite(body: AcceptInviteRequest, db: Session = Depends(get_db)):
+    """Accept an invite: set password and create the user account."""
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    try:
+        user = auth_service.accept_invite(db, body.token, body.password)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {"success": True, "message": "Account created. You can now sign in.", "email": user.email}

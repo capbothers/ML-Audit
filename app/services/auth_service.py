@@ -1,12 +1,15 @@
 """Authentication service — password hashing, sessions, user management"""
+import logging
 import secrets
 from datetime import datetime, timedelta
 
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
-from app.models.user import User, UserSession
+from app.models.user import User, UserSession, UserInvite
 from app.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -93,3 +96,96 @@ def seed_initial_user(db: Session) -> None:
     create_user(db, settings.initial_admin_email, settings.initial_admin_password, "Admin")
     from app.utils.logger import log
     log.info(f"Seeded initial admin user: {settings.initial_admin_email}")
+
+
+# ── Invite system ────────────────────────────────────────────
+
+def create_invite(db: Session, email: str, invited_by: int) -> UserInvite:
+    """Create a new invite token for the given email (48h expiry)."""
+    token = secrets.token_urlsafe(32)
+    invite = UserInvite(
+        email=email.lower().strip(),
+        token=token,
+        invited_by=invited_by,
+        expires_at=datetime.utcnow() + timedelta(hours=48),
+    )
+    db.add(invite)
+    db.commit()
+    db.refresh(invite)
+    return invite
+
+
+def validate_invite(db: Session, token: str) -> UserInvite | None:
+    """Return a valid, unused, non-expired invite — or None."""
+    invite = (
+        db.query(UserInvite)
+        .filter(
+            UserInvite.token == token,
+            UserInvite.expires_at > datetime.utcnow(),
+            UserInvite.accepted_at.is_(None),
+        )
+        .first()
+    )
+    return invite
+
+
+def accept_invite(db: Session, token: str, password: str) -> User:
+    """Accept an invite: create the user account and mark invite used."""
+    invite = validate_invite(db, token)
+    if not invite:
+        raise ValueError("Invite is invalid, expired, or already used")
+
+    # Check if email already registered
+    existing = db.query(User).filter(User.email == invite.email).first()
+    if existing:
+        raise ValueError("An account with this email already exists")
+
+    user = User(
+        email=invite.email,
+        password_hash=hash_password(password),
+    )
+    db.add(user)
+    invite.accepted_at = datetime.utcnow()
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def send_invite_email(email: str, token: str) -> bool:
+    """Send the invite email via Resend. Returns True on success."""
+    settings = get_settings()
+    if not settings.resend_api_key:
+        logger.error("RESEND_API_KEY not configured — cannot send invite")
+        return False
+
+    import resend
+    resend.api_key = settings.resend_api_key
+
+    invite_url = f"{settings.app_base_url.rstrip('/')}/auth/accept-invite?token={token}"
+
+    try:
+        resend.Emails.send({
+            "from": settings.invite_from_email,
+            "to": [email],
+            "subject": "You've been invited to Cass Brothers Intelligence",
+            "html": (
+                f"<div style='font-family:sans-serif;max-width:480px;margin:0 auto;padding:40px 20px'>"
+                f"<h2 style='color:#1b1b1b'>You're invited</h2>"
+                f"<p style='color:#555;line-height:1.6'>You've been invited to the "
+                f"<strong>Cass Brothers Intelligence Platform</strong>.</p>"
+                f"<p style='color:#555;line-height:1.6'>Click the button below to set your password and activate your account. "
+                f"This link expires in 48 hours.</p>"
+                f"<a href='{invite_url}' style='display:inline-block;background:#1b1b1b;color:#f7f1e8;"
+                f"padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:600;"
+                f"margin:20px 0'>Set your password</a>"
+                f"<p style='color:#999;font-size:13px;margin-top:30px'>"
+                f"If the button doesn't work, copy this link:<br>"
+                f"<a href='{invite_url}' style='color:#c49a4a'>{invite_url}</a></p>"
+                f"</div>"
+            ),
+        })
+        logger.info(f"Invite email sent to {email}")
+        return True
+    except Exception as exc:
+        logger.error(f"Failed to send invite email to {email}: {exc}")
+        return False

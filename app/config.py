@@ -126,6 +126,11 @@ class Settings(BaseSettings):
     initial_admin_password: str = ""
     session_duration_hours: int = 72
 
+    # User Invites (Resend email)
+    resend_api_key: Optional[str] = None
+    invite_from_email: str = "onboarding@resend.dev"
+    app_base_url: str = "http://localhost:8000"
+
     # Dashboard Basic Auth (gate for the whole app)
     dash_user: str = ""
     dash_pass: str = ""

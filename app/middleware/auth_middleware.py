@@ -9,6 +9,7 @@ from app.services import auth_service
 # Paths that never require authentication
 PUBLIC_PREFIXES = (
     "/auth/login",
+    "/auth/accept-invite",
     "/health",
     "/robots.txt",
     "/docs",

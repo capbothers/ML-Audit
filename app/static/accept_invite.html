@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Set Password - Cass Brothers Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        :root {
+            --ink: #1c1b1f; --ink-soft: #3d3a40; --slate: #6b6670;
+            --cass-black: #1b1b1b; --cass-cream: #f7f3ed;
+            --cass-gold: #c49a4a; --card: #ffffff;
+            --line: rgba(27,27,27,0.08);
+            --shadow: 0 18px 45px rgba(17,18,19,0.08);
+            --red: #dc2626; --green: #16a34a;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "IBM Plex Sans", sans-serif;
+            background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+            color: var(--ink);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .brand-bar {
+            display: flex; align-items: center; justify-content: center;
+            padding: 16px 28px; background: var(--cass-black); color: #f7f1e8;
+        }
+        .brand-mark {
+            display: flex; align-items: center; gap: 12px;
+            font-family: "Space Grotesk", sans-serif;
+        }
+        .brand-dot {
+            width: 14px; height: 14px; border-radius: 50%;
+            background: var(--cass-gold);
+            box-shadow: 0 0 0 4px rgba(196, 154, 74, 0.2);
+        }
+        .login-wrapper {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            padding: 40px 20px;
+        }
+        .login-card {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--line);
+            width: 100%;
+            max-width: 400px;
+        }
+        .login-card h1 {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        .login-card p {
+            color: var(--slate);
+            font-size: 14px;
+            margin-bottom: 28px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--ink-soft);
+            margin-bottom: 6px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            font-size: 14px;
+            font-family: "IBM Plex Sans", sans-serif;
+            color: var(--ink);
+            background: #faf9f6;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus {
+            border-color: var(--cass-gold);
+            box-shadow: 0 0 0 3px rgba(196, 154, 74, 0.15);
+        }
+        .login-btn {
+            width: 100%;
+            padding: 13px;
+            background: var(--cass-black);
+            color: #f7f1e8;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: "Space Grotesk", sans-serif;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .login-btn:hover { background: #333; }
+        .login-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .error-msg {
+            background: #fef2f2;
+            color: var(--red);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .error-msg.visible { display: block; }
+        .success-msg {
+            background: #f0fdf4;
+            color: var(--green);
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .success-msg.visible { display: block; }
+        .hint {
+            color: var(--slate);
+            font-size: 12px;
+            margin-top: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="brand-bar">
+        <div class="brand-mark">
+            <div class="brand-dot"></div>
+            <span style="font-size:18px;font-weight:600">Cass Brothers</span>
+            <span style="opacity:0.5;font-size:13px;margin-left:8px">Intelligence Platform</span>
+        </div>
+    </div>
+
+    <div class="login-wrapper">
+        <div class="login-card">
+            <h1>Set your password</h1>
+            <p>Create a password to activate your account</p>
+
+            <div class="error-msg" id="error-msg"></div>
+            <div class="success-msg" id="success-msg"></div>
+
+            <form id="accept-form" onsubmit="handleAccept(event)">
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required minlength="8" autofocus>
+                    <p class="hint">Minimum 8 characters</p>
+                </div>
+                <div class="form-group">
+                    <label for="confirm">Confirm password</label>
+                    <input type="password" id="confirm" name="confirm" required minlength="8">
+                </div>
+                <button type="submit" class="login-btn" id="submit-btn">Create account</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        async function handleAccept(e) {
+            e.preventDefault();
+            const btn = document.getElementById('submit-btn');
+            const errEl = document.getElementById('error-msg');
+            const successEl = document.getElementById('success-msg');
+            errEl.classList.remove('visible');
+            successEl.classList.remove('visible');
+
+            const password = document.getElementById('password').value;
+            const confirm = document.getElementById('confirm').value;
+
+            if (password !== confirm) {
+                errEl.textContent = 'Passwords do not match';
+                errEl.classList.add('visible');
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Creating account...';
+
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('token');
+
+            try {
+                const res = await fetch('/auth/accept-invite', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, password }),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    successEl.textContent = 'Account created! Redirecting to sign in...';
+                    successEl.classList.add('visible');
+                    document.getElementById('accept-form').style.display = 'none';
+                    setTimeout(() => { window.location.href = '/auth/login'; }, 2000);
+                } else {
+                    errEl.textContent = data.detail || 'Something went wrong';
+                    errEl.classList.add('visible');
+                    btn.disabled = false;
+                    btn.textContent = 'Create account';
+                }
+            } catch (err) {
+                errEl.textContent = 'Network error. Please try again.';
+                errEl.classList.add('visible');
+                btn.disabled = false;
+                btn.textContent = 'Create account';
+            }
+        }
+    </script>
+</body>
+</html>

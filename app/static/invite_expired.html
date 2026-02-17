@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invite Expired - Cass Brothers Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        :root {
+            --ink: #1c1b1f; --ink-soft: #3d3a40; --slate: #6b6670;
+            --cass-black: #1b1b1b; --cass-cream: #f7f3ed;
+            --cass-gold: #c49a4a; --card: #ffffff;
+            --line: rgba(27,27,27,0.08);
+            --shadow: 0 18px 45px rgba(17,18,19,0.08);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "IBM Plex Sans", sans-serif;
+            background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+            color: var(--ink);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .brand-bar {
+            display: flex; align-items: center; justify-content: center;
+            padding: 16px 28px; background: var(--cass-black); color: #f7f1e8;
+        }
+        .brand-mark {
+            display: flex; align-items: center; gap: 12px;
+            font-family: "Space Grotesk", sans-serif;
+        }
+        .brand-dot {
+            width: 14px; height: 14px; border-radius: 50%;
+            background: var(--cass-gold);
+            box-shadow: 0 0 0 4px rgba(196, 154, 74, 0.2);
+        }
+        .login-wrapper {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            padding: 40px 20px;
+        }
+        .login-card {
+            background: var(--card);
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--line);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+        .login-card h1 {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 12px;
+        }
+        .login-card p {
+            color: var(--slate);
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+        .login-btn {
+            display: inline-block;
+            padding: 13px 28px;
+            background: var(--cass-black);
+            color: #f7f1e8;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: "Space Grotesk", sans-serif;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.15s;
+        }
+        .login-btn:hover { background: #333; }
+        .icon { font-size: 48px; margin-bottom: 16px; }
+    </style>
+</head>
+<body>
+    <div class="brand-bar">
+        <div class="brand-mark">
+            <div class="brand-dot"></div>
+            <span style="font-size:18px;font-weight:600">Cass Brothers</span>
+            <span style="opacity:0.5;font-size:13px;margin-left:8px">Intelligence Platform</span>
+        </div>
+    </div>
+
+    <div class="login-wrapper">
+        <div class="login-card">
+            <div class="icon">&#9888;&#65039;</div>
+            <h1>Invite link expired</h1>
+            <p>This invite link is no longer valid. It may have expired or already been used. Please ask your administrator to send a new invite.</p>
+            <a href="/auth/login" class="login-btn">Go to sign in</a>
+        </div>
+    </div>
+</body>
+</html>
