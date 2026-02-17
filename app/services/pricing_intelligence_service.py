@@ -102,14 +102,22 @@ class PricingIntelligenceService:
             # Pre-fetch stockout SKUs to exclude
             stockout_skus = self._get_stockout_skus()
 
+            # Batch pre-fetch sales data (4 queries instead of 4×N)
+            sales_current = self._batch_get_units_sold(start_current, end_date)
+            sales_prior = self._batch_get_units_sold(start_prior, start_current)
+            sales_60d = self._batch_get_units_sold(end_date - timedelta(days=60), end_date)
+            sales_90d = self._batch_get_units_sold(end_date - timedelta(days=90), end_date)
+
             skus: List[Dict] = []
             for cp, pc in pricing_rows:
                 sku = cp.variant_sku
                 if not sku:
                     continue
 
+                sku_upper = sku.upper()
+
                 # Exclude stockout SKUs
-                if sku.upper() in stockout_skus:
+                if sku_upper in stockout_skus:
                     continue
 
                 our_price = float(cp.current_price) if cp.current_price else None
@@ -123,14 +131,11 @@ class PricingIntelligenceService:
                 price_gap = round(our_price - cheapest_price, 2)
                 price_gap_pct = round((price_gap / our_price) * 100, 2) if our_price else 0.0
 
-                # Sales: current period
-                units_current, rev_current = self._get_units_sold(sku, start_current, end_date)
-                # Sales: prior period
-                units_prior, _ = self._get_units_sold(sku, start_prior, start_current)
-
-                # Extended windows (60d, 90d)
-                units_60d, _ = self._get_units_sold(sku, end_date - timedelta(days=60), end_date)
-                units_90d, _ = self._get_units_sold(sku, end_date - timedelta(days=90), end_date)
+                # Sales from batch lookups
+                units_current, rev_current = sales_current.get(sku_upper, (0, 0.0))
+                units_prior, _ = sales_prior.get(sku_upper, (0, 0.0))
+                units_60d, _ = sales_60d.get(sku_upper, (0, 0.0))
+                units_90d, _ = sales_90d.get(sku_upper, (0, 0.0))
 
                 # Percentage change
                 if units_prior > 0:
@@ -301,6 +306,9 @@ class PricingIntelligenceService:
             start_date = end_date - timedelta(days=days)
             stockout_skus = self._get_stockout_skus()
 
+            # Batch pre-fetch sales data (1 query instead of N)
+            sales_30d = self._batch_get_units_sold(start_date, end_date)
+
             skus = []
             total_revenue_at_risk = 0.0
             total_orders_affected = 0
@@ -337,7 +345,7 @@ class PricingIntelligenceService:
 
                 gap_below_floor = round(floor - cheapest_price, 2)
 
-                units_30d, revenue_30d = self._get_units_sold(sku, start_date, end_date)
+                units_30d, revenue_30d = sales_30d.get(sku.upper(), (0, 0.0))
                 rev_at_risk = round(units_30d * (our_price - cheapest_price), 2)
 
                 total_revenue_at_risk += rev_at_risk
@@ -456,6 +464,29 @@ class PricingIntelligenceService:
         units = int(result[0]) if result[0] else 0
         revenue = float(result[1]) if result[1] else 0.0
         return units, revenue
+
+    def _batch_get_units_sold(
+        self, start_date: date, end_date: date
+    ) -> Dict[str, Tuple[int, float]]:
+        """
+        Batch query: total units and revenue per SKU for a date range.
+        Returns dict keyed by upper-cased SKU -> (units, revenue).
+        """
+        rows = (
+            self.db.query(
+                func.upper(ShopifyOrderItem.sku),
+                func.coalesce(func.sum(ShopifyOrderItem.quantity), 0),
+                func.coalesce(func.sum(ShopifyOrderItem.total_price), 0),
+            )
+            .filter(
+                ShopifyOrderItem.sku.isnot(None),
+                ShopifyOrderItem.order_date >= datetime.combine(start_date, datetime.min.time()),
+                ShopifyOrderItem.order_date < datetime.combine(end_date, datetime.min.time()),
+            )
+            .group_by(func.upper(ShopifyOrderItem.sku))
+            .all()
+        )
+        return {r[0]: (int(r[1]), float(r[2])) for r in rows}
 
     def _get_stockout_skus(self) -> set:
         """
