@@ -10,6 +10,7 @@ from typing import Optional
 
 from app.models.base import get_db
 from app.services.customer_intelligence_service import CustomerIntelligenceService
+from app.utils.response_cache import response_cache
 
 router = APIRouter(prefix="/customers", tags=["customers"])
 
@@ -19,10 +20,15 @@ async def get_customer_dashboard(
     db: Session = Depends(get_db),
 ):
     """Full customer intelligence dashboard payload (all 4 tabs)."""
+    cached = response_cache.get("customers:dashboard")
+    if cached:
+        return cached
     try:
         service = CustomerIntelligenceService(db)
         data = service.get_dashboard()
-        return {"success": True, "data": data}
+        result = {"success": True, "data": data}
+        response_cache.set("customers:dashboard", result, ttl=300)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

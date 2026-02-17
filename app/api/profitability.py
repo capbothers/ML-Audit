@@ -13,6 +13,7 @@ from app.services.llm_service import LLMService
 from app.models.base import get_db
 from app.api.data_quality import get_stale_data_warning
 from app.utils.logger import log
+from app.utils.response_cache import response_cache
 
 router = APIRouter(prefix="/profitability", tags=["profitability"])
 
@@ -260,6 +261,11 @@ async def get_profitability_dashboard(
     - Biggest losers
     - Hidden gems
     """
+    cache_key = f"profitability:dash:{days}"
+    cached = response_cache.get(cache_key)
+    if cached:
+        return cached
+
     end_date = datetime.utcnow()
     start_date = end_date - timedelta(days=days)
 
@@ -306,6 +312,7 @@ async def get_profitability_dashboard(
         if stale_warning:
             response['data_warning'] = stale_warning
 
+        response_cache.set(cache_key, response, ttl=300)
         return response
 
     except Exception as e:

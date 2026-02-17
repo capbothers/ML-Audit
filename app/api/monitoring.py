@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 
 from app.services.monitoring_service import MonitoringService
 from app.utils.logger import log
+from app.utils.response_cache import response_cache
 
 router = APIRouter(prefix="/monitor", tags=["monitoring"])
 
@@ -119,6 +120,9 @@ async def get_dashboard_data():
     Get dashboard data that surfaces what matters
     Returns insights, not raw data
     """
+    cached = response_cache.get("monitor:dashboard")
+    if cached:
+        return cached
     from app.models.base import SessionLocal
     from app.models.data_quality import TrackingAlert
     from app.models.shopify import ShopifyOrder, ShopifyRefund
@@ -262,7 +266,7 @@ async def get_dashboard_data():
                     return "warning"
                 return "healthy"
 
-        return {
+        result = {
             "summary": {
                 "status": overall_status,
                 "active_issues": len(active_issues),
@@ -311,6 +315,8 @@ async def get_dashboard_data():
                 }
             }
         }
+        response_cache.set("monitor:dashboard", result, ttl=120)
+        return result
 
     except Exception as e:
         log.error(f"Error fetching dashboard data: {e}")

@@ -15,6 +15,7 @@ from app.services.campaign_strategy import format_why_now, STRATEGY_THRESHOLDS
 from app.services.llm_service import LLMService
 from app.api.data_quality import get_stale_data_warning
 from app.utils.logger import log
+from app.utils.response_cache import response_cache
 
 from sqlalchemy import func
 from datetime import date, timedelta
@@ -589,6 +590,10 @@ async def get_enhanced_dashboard(
     db: Session = Depends(get_db)
 ):
     """Master endpoint returning all analytics sections for the enhanced dashboard."""
+    cache_key = f"ads:enhanced:{days}"
+    cached = response_cache.get(cache_key)
+    if cached:
+        return cached
     try:
         service = AdSpendService(db)
 
@@ -700,7 +705,7 @@ async def get_enhanced_dashboard(
         ads_end = service._get_ads_data_end_date()
         data_as_of = str(ads_end) if ads_end else None
 
-        return {
+        result = {
             "success": True,
             "data": {
                 "data_as_of": data_as_of,
@@ -730,6 +735,8 @@ async def get_enhanced_dashboard(
                 "period_days": days,
             }
         }
+        response_cache.set(cache_key, result, ttl=300)
+        return result
     except Exception as e:
         log.error(f"Error generating enhanced dashboard: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
