@@ -8,16 +8,23 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.models.base import get_db
-from app.services.competitor_blog_service import CompetitorBlogService
 
 router = APIRouter(prefix="/competitor-blogs", tags=["competitor-blogs"])
-service = CompetitorBlogService()
+
+_service = None
+
+def _get_service():
+    global _service
+    if _service is None:
+        from app.services.competitor_blog_service import CompetitorBlogService
+        _service = CompetitorBlogService()
+    return _service
 
 
 @router.get("/dashboard")
 def get_dashboard(db: Session = Depends(get_db)):
     """Get competitor blog monitoring dashboard"""
-    return service.get_dashboard(db)
+    return _get_service().get_dashboard(db)
 
 
 @router.get("/articles")
@@ -31,7 +38,7 @@ def get_articles(
     db: Session = Depends(get_db),
 ):
     """Get filtered list of competitor articles"""
-    return service.get_articles(
+    return _get_service().get_articles(
         db,
         domain=domain,
         site_type=site_type,
@@ -49,7 +56,7 @@ async def sync_competitor_blogs(
 ):
     """Trigger a competitor blog scrape (runs in background)"""
     async def _run_sync():
-        result = await service.sync_competitor_blogs(days=days)
+        result = await _get_service().sync_competitor_blogs(days=days)
         if result.get("success"):
             from app.utils.logger import log
             log.info(
@@ -69,7 +76,7 @@ def flag_article(
     db: Session = Depends(get_db),
 ):
     """Flag an article as interesting/inspirational"""
-    result = service.flag_article(db, article_id, reason=reason, notes=notes)
+    result = _get_service().flag_article(db, article_id, reason=reason, notes=notes)
     if not result:
         raise HTTPException(status_code=404, detail="Article not found")
     return result
@@ -78,7 +85,7 @@ def flag_article(
 @router.delete("/articles/{article_id}/flag")
 def unflag_article(article_id: int, db: Session = Depends(get_db)):
     """Remove flag from an article"""
-    result = service.unflag_article(db, article_id)
+    result = _get_service().unflag_article(db, article_id)
     if not result:
         raise HTTPException(status_code=404, detail="Article not found")
     return result
@@ -95,7 +102,7 @@ def add_site(
     db: Session = Depends(get_db),
 ):
     """Add a new competitor/supplier site to monitor"""
-    result = service.add_site(db, {
+    result = _get_service().add_site(db, {
         "name": name,
         "domain": domain,
         "site_type": site_type,
@@ -111,6 +118,6 @@ def add_site(
 @router.delete("/sites/{site_id}")
 def remove_site(site_id: int, db: Session = Depends(get_db)):
     """Deactivate a competitor site (soft delete)"""
-    if not service.remove_site(db, site_id):
+    if not _get_service().remove_site(db, site_id):
         raise HTTPException(status_code=404, detail="Site not found")
     return {"status": "removed"}

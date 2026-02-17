@@ -4,8 +4,6 @@ Data synchronization endpoints
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
 from datetime import datetime, timedelta
-from app.services.data_sync_service import DataSyncService
-from app.services.google_ads_sheet_import import GoogleAdsSheetImportService, GOOGLE_AVAILABLE
 from app.models.base import SessionLocal
 from app.models.analytics import DataSyncLog
 from app.models.caprice_import import CapriceImportLog
@@ -15,7 +13,16 @@ from app.utils.cache import clear_cache
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
-data_sync = DataSyncService()
+# Lazy-init to avoid loading heavy connectors (shopify/GA4) at startup
+_data_sync = None
+
+def _get_data_sync():
+    global _data_sync
+    if _data_sync is None:
+        from app.services.data_sync_service import DataSyncService
+        _data_sync = DataSyncService()
+    return _data_sync
+
 
 
 @router.post("/all")
@@ -24,7 +31,7 @@ async def sync_all_sources(days: int = Query(30, description="Number of days to 
     Sync data from all sources
     """
     try:
-        result = await data_sync.sync_all(days=days)
+        result = await _get_data_sync().sync_all(days=days)
         clear_cache()
         return result
     except Exception as e:
@@ -79,7 +86,7 @@ async def sync_cost_sheet():
     Example: POST /sync/costs
     """
     try:
-        result = await data_sync.sync_cost_sheet()
+        result = await _get_data_sync().sync_cost_sheet()
         return result
     except Exception as e:
         log.error(f"Cost sheet sync error: {str(e)}")
@@ -97,7 +104,7 @@ async def sync_shopify(
     Set include_products=false for faster orders-only sync (~5 sec vs ~2 min)
     """
     try:
-        result = await data_sync.sync_shopify(days=days, include_products=include_products)
+        result = await _get_data_sync().sync_shopify(days=days, include_products=include_products)
         clear_cache()
         return result
     except Exception as e:
@@ -113,7 +120,7 @@ async def sync_shopify_quick(days: int = Query(0, description="Number of days to
     Use this for chat/real-time queries. Skips the 35K+ product catalog.
     """
     try:
-        result = await data_sync.sync_shopify(days=days, include_products=False)
+        result = await _get_data_sync().sync_shopify(days=days, include_products=False)
         return result
     except Exception as e:
         log.error(f"Shopify quick sync error: {str(e)}")
@@ -141,7 +148,7 @@ async def backfill_shopify(
     Example: POST /sync/shopify/backfill?days=365
     """
     try:
-        result = await data_sync.backfill_shopify(days=days)
+        result = await _get_data_sync().backfill_shopify(days=days)
         return result
     except Exception as e:
         log.error(f"Shopify backfill error: {str(e)}")
@@ -164,7 +171,7 @@ async def sync_shopify_inventory():
     Example: POST /sync/shopify/inventory
     """
     try:
-        result = await data_sync.sync_shopify_inventory()
+        result = await _get_data_sync().sync_shopify_inventory()
         return result
     except Exception as e:
         log.error(f"Shopify inventory sync error: {str(e)}")
@@ -264,7 +271,7 @@ async def sync_klaviyo(days: int = Query(30, description="Number of days to sync
     Sync Klaviyo data
     """
     try:
-        result = await data_sync.sync_klaviyo(days=days)
+        result = await _get_data_sync().sync_klaviyo(days=days)
         return result
     except Exception as e:
         log.error(f"Klaviyo sync error: {str(e)}")
@@ -277,7 +284,7 @@ async def sync_ga4(days: int = Query(30, description="Number of days to sync")):
     Sync Google Analytics 4 data
     """
     try:
-        result = await data_sync.sync_ga4(days=days)
+        result = await _get_data_sync().sync_ga4(days=days)
         clear_cache()
         return result
     except Exception as e:
@@ -291,7 +298,7 @@ async def sync_google_ads(days: int = Query(30, description="Number of days to s
     Sync Google Ads data
     """
     try:
-        result = await data_sync.sync_google_ads(days=days)
+        result = await _get_data_sync().sync_google_ads(days=days)
         return result
     except Exception as e:
         log.error(f"Google Ads sync error: {str(e)}")
@@ -307,7 +314,7 @@ async def sync_merchant_center(quick: bool = Query(False, description="Quick mod
     - Quick mode (quick=true): Skip full product list, just statuses and summary
     """
     try:
-        result = await data_sync.sync_merchant_center(quick=quick)
+        result = await _get_data_sync().sync_merchant_center(quick=quick)
         return result
     except Exception as e:
         log.error(f"Merchant Center sync error: {str(e)}")
@@ -322,7 +329,7 @@ async def sync_merchant_center_quick():
     Use this for chat/real-time queries.
     """
     try:
-        result = await data_sync.sync_merchant_center(quick=True)
+        result = await _get_data_sync().sync_merchant_center(quick=True)
         return result
     except Exception as e:
         log.error(f"Merchant Center quick sync error: {str(e)}")
@@ -339,7 +346,7 @@ async def sync_shippit(
     Looks up fulfilled Shopify orders in Shippit to get actual shipping costs.
     """
     try:
-        result = await data_sync.sync_shippit(days=days)
+        result = await _get_data_sync().sync_shippit(days=days)
         return result
     except Exception as e:
         log.error(f"Shippit sync error: {str(e)}")
@@ -352,7 +359,7 @@ async def backfill_shippit(
 ):
     """Backfill Shippit shipping costs for historical orders."""
     try:
-        result = await data_sync.sync_shippit(days=days)
+        result = await _get_data_sync().sync_shippit(days=days)
         return result
     except Exception as e:
         log.error(f"Shippit backfill error: {str(e)}")
@@ -371,7 +378,7 @@ async def sync_github(
     - Quick mode (quick=true): Skip file contents for faster sync
     """
     try:
-        result = await data_sync.sync_github(days=days, quick=quick)
+        result = await _get_data_sync().sync_github(days=days, quick=quick)
         return result
     except Exception as e:
         log.error(f"GitHub sync error: {str(e)}")
@@ -386,7 +393,7 @@ async def sync_github_quick():
     Use this for chat/real-time queries.
     """
     try:
-        result = await data_sync.sync_github(quick=True)
+        result = await _get_data_sync().sync_github(quick=True)
         return result
     except Exception as e:
         log.error(f"GitHub quick sync error: {str(e)}")
@@ -405,7 +412,7 @@ async def sync_search_console(
     - Quick mode (quick=true): Last 7 days summary only
     """
     try:
-        result = await data_sync.sync_search_console(days=days, quick=quick)
+        result = await _get_data_sync().sync_search_console(days=days, quick=quick)
         clear_cache()
         return result
     except Exception as e:
@@ -421,7 +428,7 @@ async def sync_search_console_quick():
     Use this for chat/real-time queries.
     """
     try:
-        result = await data_sync.sync_search_console(quick=True)
+        result = await _get_data_sync().sync_search_console(quick=True)
         return result
     except Exception as e:
         log.error(f"Search Console quick sync error: {str(e)}")
@@ -447,7 +454,7 @@ async def backfill_search_console(
     Example: POST /sync/search-console/backfill?months=16&window_days=14
     """
     try:
-        result = await data_sync.backfill_search_console(
+        result = await _get_data_sync().backfill_search_console(
             months=months,
             window_days=window_days,
             delay_between_windows=delay
@@ -473,7 +480,7 @@ async def daily_sync_search_console(
     Example: POST /sync/search-console/daily?days=3
     """
     try:
-        result = await data_sync.daily_sync_search_console(days=days)
+        result = await _get_data_sync().daily_sync_search_console(days=days)
         return result
     except Exception as e:
         log.error(f"Search Console daily sync error: {str(e)}")
@@ -486,7 +493,7 @@ async def get_sync_status():
     Get sync status for all connectors
     """
     try:
-        status = data_sync.get_sync_status()
+        status = _get_data_sync().get_sync_status()
         return status
     except Exception as e:
         log.error(f"Get sync status error: {str(e)}")
@@ -797,6 +804,7 @@ def import_google_ads_from_sheet(
         credentials_path = settings.google_sheets_credentials_path
         resolved_tab = tab or settings.google_ads_sheet_tab
 
+        from app.services.google_ads_sheet_import import GoogleAdsSheetImportService
         service = GoogleAdsSheetImportService()
 
         # Import campaigns
@@ -877,6 +885,7 @@ def get_google_ads_sheet_status():
             return status
 
         # Try to read metadata
+        from app.services.google_ads_sheet_import import GOOGLE_AVAILABLE
         if GOOGLE_AVAILABLE:
             try:
                 from google.oauth2 import service_account as sa

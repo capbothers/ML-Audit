@@ -6,7 +6,6 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
-from app.services.monitoring_service import MonitoringService
 from app.utils.logger import log
 from app.utils.response_cache import response_cache
 
@@ -15,6 +14,10 @@ router = APIRouter(prefix="/monitor", tags=["monitoring"])
 # Global monitoring service instance
 monitoring_service = None
 monitoring_task = None
+
+def _create_monitoring_service():
+    from app.services.monitoring_service import MonitoringService
+    return MonitoringService()
 
 
 @router.post("/start")
@@ -31,7 +34,7 @@ async def start_monitoring(background_tasks: BackgroundTasks):
             "message": "Monitoring service is already active"
         }
 
-    monitoring_service = MonitoringService()
+    monitoring_service = _create_monitoring_service()
 
     # Start monitoring in background
     background_tasks.add_task(monitoring_service.start_continuous_monitoring)
@@ -391,7 +394,7 @@ async def manual_check():
     Manually trigger a monitoring check
     Useful for testing or on-demand checks
     """
-    service = MonitoringService()
+    service = _create_monitoring_service()
 
     # Run one check cycle
     issues = await service._check_all_metrics()
