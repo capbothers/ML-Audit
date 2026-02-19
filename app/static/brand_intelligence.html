@@ -1775,6 +1775,7 @@
                 for (var s = 0; s < de.what_if.scenarios.length; s++) {
                     var sc = de.what_if.scenarios[s];
                     var isBlocked = sc.blocked === true;
+                    var examples = whatIfActionExamples(sc);
                     var confColor = sc.confidence === 'high' ? 'var(--green)' : sc.confidence === 'medium' ? 'var(--amber)' : 'var(--slate)';
                     var cardBorder = isBlocked ? 'border:2px solid var(--red);opacity:0.85' : '';
                     html += '<div class="whatif-card" style="' + cardBorder + '">'
@@ -1799,6 +1800,15 @@
                     }
                     if (isBlocked && sc.blocked_reason) {
                         html += '<div style="font-size:11px;color:var(--red);margin-top:6px;font-weight:600">Reason: ' + escHtml(sc.blocked_reason) + '</div>';
+                    }
+                    if (examples && examples.length) {
+                        html += '<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--line)">';
+                        html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--slate);margin-bottom:6px">How To Do This</div>';
+                        html += '<ul style="margin:0;padding-left:16px;display:grid;gap:4px">';
+                        for (var exi = 0; exi < examples.length; exi++) {
+                            html += '<li style="font-size:12px;color:var(--ink-soft);line-height:1.35">' + escHtml(examples[exi]) + '</li>';
+                        }
+                        html += '</ul></div>';
                     }
                     html += '<div style="font-size:10px;color:var(--slate);margin-top:4px">' + escHtml(sc.time_horizon || '') + '</div>'
                         + '</div>';
@@ -1905,6 +1915,46 @@
         function impactBarPct(low, high, mid) {
             if (high <= low) return 50;
             return Math.round((mid - low) / (high - low) * 100);
+        }
+
+        function whatIfActionExamples(sc) {
+            if (sc && Array.isArray(sc.examples) && sc.examples.length) {
+                return sc.examples;
+            }
+            var name = ((sc && sc.scenario) || '').toLowerCase();
+            if (name.indexOf('conversion') >= 0) {
+                return [
+                    'Add trust boosters on product and checkout pages (delivery ETA, returns policy, reviews, secure payment badges).',
+                    'Reduce checkout friction: enable express payments (Shop Pay/Apple Pay), remove optional fields, and test autofill.',
+                    'Recover abandoners with a 3-step flow: cart email/SMS at 1 hour, 24 hours, and 72 hours with top-SKU reminders.'
+                ];
+            }
+            if (name.indexOf('restore roas') >= 0) {
+                return [
+                    'Pause or reduce budget on the worst ROAS campaigns first; keep budget on best-performing campaigns.',
+                    'Refresh product titles/images and tighten search terms to remove low-intent traffic.',
+                    'Split branded vs non-branded campaigns and set stricter CPA/ROAS targets on non-branded traffic.'
+                ];
+            }
+            if (name.indexOf('scale ads') >= 0) {
+                return [
+                    'Increase spend gradually (10-15% every 3-4 days) only on campaigns already above target ROAS.',
+                    'Expand winning audiences/keywords from current converting segments before adding new broad traffic.',
+                    'Create 2-3 new ad variants per top campaign and keep only creatives that improve CTR and conversion.'
+                ];
+            }
+            if (name.indexOf('pricing') >= 0) {
+                return [
+                    'Fix below-cost or below-MAP SKUs first, starting with highest-sales products.',
+                    'Use bundles/value-adds instead of deep discounts to protect margin while improving conversion.',
+                    'Review competitor pricing weekly and define guardrails (min margin and max discount) per SKU tier.'
+                ];
+            }
+            return [
+                'Start with the top 3 products driving most revenue in this brand.',
+                'Run one change at a time for 7-14 days and compare before/after conversion, margin, and revenue.',
+                'Document what worked, then scale the winning change to the next product group.'
+            ];
         }
 
         // ── Diagnostic panel renderers ───────────────────────────

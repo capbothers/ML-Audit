@@ -1190,26 +1190,37 @@ class BrandIntelligenceService:
             total_cost = 0.0
             orders_with_cost = 0
 
-            for so in shippit_orders:
-                ship_cost = float(so.shipping_cost)
-                # Get all items in this order to calculate brand's revenue share
-                items = (
+            # Bulk query: vendor revenue breakdown for all Shippit orders at once
+            shippit_oids = [so.shopify_order_id for so in shippit_orders]
+            order_vendor_rev = defaultdict(dict)
+            if shippit_oids:
+                vendor_rev_rows = (
                     self.db.query(
+                        ShopifyOrderItem.shopify_order_id,
                         ShopifyOrderItem.vendor,
                         func.sum(
                             ShopifyOrderItem.price * ShopifyOrderItem.quantity
                         ).label("rev"),
                     )
                     .filter(
-                        ShopifyOrderItem.shopify_order_id == so.shopify_order_id
+                        ShopifyOrderItem.shopify_order_id.in_(shippit_oids)
                     )
-                    .group_by(ShopifyOrderItem.vendor)
+                    .group_by(
+                        ShopifyOrderItem.shopify_order_id,
+                        ShopifyOrderItem.vendor,
+                    )
                     .all()
                 )
-                order_rev = sum(float(i.rev or 0) for i in items)
-                brand_rev = sum(
-                    float(i.rev or 0) for i in items if i.vendor == brand
-                )
+                for row in vendor_rev_rows:
+                    order_vendor_rev[row.shopify_order_id][row.vendor] = float(
+                        row.rev or 0
+                    )
+
+            for so in shippit_orders:
+                ship_cost = float(so.shipping_cost)
+                vendor_revs = order_vendor_rev.get(so.shopify_order_id, {})
+                order_rev = sum(vendor_revs.values())
+                brand_rev = vendor_revs.get(brand, 0)
                 share = brand_rev / order_rev if order_rev > 0 else 0
                 total_cost += ship_cost * share
                 orders_with_cost += 1
@@ -1261,26 +1272,38 @@ class BrandIntelligenceService:
             )
 
             total_shipping_rev = 0.0
-            for order in orders_with_shipping:
-                shipping_charged = float(order.total_shipping or 0)
-                # Allocate by brand revenue share in this order
-                items = (
+
+            # Bulk query: vendor revenue breakdown for all shipping orders at once
+            shipping_oids = [o.shopify_order_id for o in orders_with_shipping]
+            order_vendor_rev = defaultdict(dict)
+            if shipping_oids:
+                vendor_rev_rows = (
                     self.db.query(
+                        ShopifyOrderItem.shopify_order_id,
                         ShopifyOrderItem.vendor,
                         func.sum(
                             ShopifyOrderItem.price * ShopifyOrderItem.quantity
                         ).label("rev"),
                     )
                     .filter(
-                        ShopifyOrderItem.shopify_order_id == order.shopify_order_id
+                        ShopifyOrderItem.shopify_order_id.in_(shipping_oids)
                     )
-                    .group_by(ShopifyOrderItem.vendor)
+                    .group_by(
+                        ShopifyOrderItem.shopify_order_id,
+                        ShopifyOrderItem.vendor,
+                    )
                     .all()
                 )
-                order_rev = sum(float(i.rev or 0) for i in items)
-                brand_rev = sum(
-                    float(i.rev or 0) for i in items if i.vendor == brand
-                )
+                for row in vendor_rev_rows:
+                    order_vendor_rev[row.shopify_order_id][row.vendor] = float(
+                        row.rev or 0
+                    )
+
+            for order in orders_with_shipping:
+                shipping_charged = float(order.total_shipping or 0)
+                vendor_revs = order_vendor_rev.get(order.shopify_order_id, {})
+                order_rev = sum(vendor_revs.values())
+                brand_rev = vendor_revs.get(brand, 0)
                 share = brand_rev / order_rev if order_rev > 0 else 0
                 total_shipping_rev += shipping_charged * share
 

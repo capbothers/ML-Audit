@@ -1132,28 +1132,45 @@ class BrandDiagnosisEngine:
             weeks.append((week_start, week_end))
         weeks.reverse()  # oldest first
 
-        # ── Revenue + orders per week ──
-        revenue_weeks = []
-        for ws, we in weeks:
-            row = (
-                self.db.query(
-                    func.sum(ShopifyOrderItem.total_price).label("revenue"),
-                    func.sum(ShopifyOrderItem.quantity).label("units"),
-                    func.count(func.distinct(ShopifyOrderItem.shopify_order_id)).label("orders"),
-                )
-                .filter(
-                    ShopifyOrderItem.vendor == brand,
-                    ShopifyOrderItem.order_date >= ws,
-                    ShopifyOrderItem.order_date < we,
-                    ShopifyOrderItem.financial_status.in_(["paid", "partially_refunded"]),
-                )
-                .first()
+        # ── Revenue + orders per week (single bulk query) ──
+        span_start = weeks[0][0]
+        span_end = weeks[-1][1]
+
+        week_cases = [
+            (and_(
+                ShopifyOrderItem.order_date >= ws,
+                ShopifyOrderItem.order_date < we,
+            ), idx)
+            for idx, (ws, we) in enumerate(weeks)
+        ]
+        week_bucket = case(*week_cases).label("week_idx")
+
+        rev_rows = (
+            self.db.query(
+                week_bucket,
+                func.sum(ShopifyOrderItem.total_price).label("revenue"),
+                func.sum(ShopifyOrderItem.quantity).label("units"),
+                func.count(func.distinct(ShopifyOrderItem.shopify_order_id)).label("orders"),
             )
+            .filter(
+                ShopifyOrderItem.vendor == brand,
+                ShopifyOrderItem.order_date >= span_start,
+                ShopifyOrderItem.order_date < span_end,
+                ShopifyOrderItem.financial_status.in_(["paid", "partially_refunded"]),
+            )
+            .group_by(week_bucket)
+            .all()
+        )
+
+        rev_by_week = {int(r.week_idx): r for r in rev_rows if r.week_idx is not None}
+        revenue_weeks = []
+        for idx, (ws, we) in enumerate(weeks):
+            r = rev_by_week.get(idx)
             revenue_weeks.append({
                 "week_start": ws.strftime("%Y-%m-%d"),
-                "revenue": round(_f(row.revenue), 2) if row else 0,
-                "units": int(row.units or 0) if row else 0,
-                "orders": int(row.orders or 0) if row else 0,
+                "revenue": round(_f(r.revenue), 2) if r else 0,
+                "units": int(r.units or 0) if r else 0,
+                "orders": int(r.orders or 0) if r else 0,
             })
 
         # ── Ads ROAS + spend per week (campaign-level, one bulk query) ──
@@ -1212,34 +1229,53 @@ class BrandDiagnosisEngine:
                 "roas": roas,
             })
 
-        # ── Branded search clicks per week ──
+        # ── Branded search clicks per week (single bulk query) ──
         brand_clause = SearchConsoleQuery.query.ilike(f"%{brand}%") if brand else None
         exact_brand = func.lower(SearchConsoleQuery.query) == brand_norm if brand_norm else None
 
-        search_weeks = []
-        for ws, we in weeks:
-            term_clauses = [SearchConsoleQuery.query.ilike(f"%{t}%") for t in include_terms]
-            if allowlist_used and brand_clause is not None and term_clauses:
-                include_expr = or_(exact_brand, and_(brand_clause, or_(*term_clauses)))
-            elif brand_clause is not None:
-                include_expr = or_(exact_brand, brand_clause)
-            else:
-                include_expr = exact_brand
+        term_clauses = [SearchConsoleQuery.query.ilike(f"%{t}%") for t in include_terms]
+        if allowlist_used and brand_clause is not None and term_clauses:
+            include_expr = or_(exact_brand, and_(brand_clause, or_(*term_clauses)))
+        elif brand_clause is not None:
+            include_expr = or_(exact_brand, brand_clause)
+        else:
+            include_expr = exact_brand
 
-            q = (
-                self.db.query(func.sum(SearchConsoleQuery.clicks).label("clicks"))
-                .filter(
-                    include_expr,
-                    SearchConsoleQuery.date >= (ws.date() if hasattr(ws, "date") else ws),
-                    SearchConsoleQuery.date < (we.date() if hasattr(we, "date") else we),
-                )
+        span_start_d = span_start.date() if hasattr(span_start, "date") else span_start
+        span_end_d = span_end.date() if hasattr(span_end, "date") else span_end
+
+        search_week_cases = [
+            (and_(
+                SearchConsoleQuery.date >= (ws.date() if hasattr(ws, "date") else ws),
+                SearchConsoleQuery.date < (we.date() if hasattr(we, "date") else we),
+            ), idx)
+            for idx, (ws, we) in enumerate(weeks)
+        ]
+        search_bucket = case(*search_week_cases).label("week_idx")
+
+        sq = (
+            self.db.query(
+                search_bucket,
+                func.sum(SearchConsoleQuery.clicks).label("clicks"),
             )
-            for t in exclude_terms:
-                q = q.filter(~SearchConsoleQuery.query.ilike(f"%{t}%"))
-            row = q.first()
+            .filter(
+                include_expr,
+                SearchConsoleQuery.date >= span_start_d,
+                SearchConsoleQuery.date < span_end_d,
+            )
+            .group_by(search_bucket)
+        )
+        for t in exclude_terms:
+            sq = sq.filter(~SearchConsoleQuery.query.ilike(f"%{t}%"))
+        search_rows = sq.all()
+
+        search_by_week = {int(r.week_idx): r for r in search_rows if r.week_idx is not None}
+        search_weeks = []
+        for idx, (ws, we) in enumerate(weeks):
+            r = search_by_week.get(idx)
             search_weeks.append({
                 "week_start": ws.strftime("%Y-%m-%d"),
-                "clicks": int(row.clicks or 0) if row and row.clicks else 0,
+                "clicks": int(r.clicks or 0) if r else 0,
             })
 
         # ── Trend classification ──

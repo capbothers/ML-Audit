@@ -12,6 +12,7 @@ _SOURCE_PREFIXES: dict[str, list[str]] = {
         "finance_", "perf_summary", "ml_drivers", "ml_tracking",
         "ml_forecast", "ml_anomalies", "ml_inventory", "ml_inv_dashboard",
         "ml_stock_health", "pricing_unmatchable", "pricing_brand_summary",
+        "brand_",
     ],
     "ga4": ["perf_summary", "ml_drivers", "ml_tracking"],
     "search_console": ["seo_"],

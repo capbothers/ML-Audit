@@ -381,6 +381,7 @@ class BrandDecisionEngine:
                     "time_horizon": "30 days",
                     "blocked": True,
                     "blocked_reason": f"ROAS trend: {ads_roas_trend}",
+                    "examples": self._build_what_if_examples("Scale ads +20%", detail, diag),
                 })
 
                 # Priority scenario: Restore ROAS to prior-year level
@@ -403,6 +404,7 @@ class BrandDecisionEngine:
                             "Inventory and demand remain stable",
                         ],
                         "time_horizon": "60 days",
+                        "examples": self._build_what_if_examples("Restore ROAS to prior level", detail, diag),
                     })
             else:
                 scenarios.append({
@@ -423,6 +425,7 @@ class BrandDecisionEngine:
                         "Inventory coverage sufficient",
                     ],
                     "time_horizon": "30 days",
+                    "examples": self._build_what_if_examples("Scale ads +20%", detail, diag),
                 })
 
         # Scenario 3: Fix pricing violations
@@ -439,6 +442,7 @@ class BrandDecisionEngine:
                 "confidence": "medium",
                 "assumptions": ["No volume collapse from price lift"],
                 "time_horizon": "90 days",
+                "examples": self._build_what_if_examples("Fix pricing violations", detail, diag),
             })
 
         # Scenario 4: Improve conversion +1pp
@@ -455,10 +459,93 @@ class BrandDecisionEngine:
                 "confidence": "medium" if views > 1000 else "low",
                 "assumptions": ["Traffic quality stable"],
                 "time_horizon": "30 days",
+                "examples": self._build_what_if_examples("Improve conversion +1pp", detail, diag),
             })
 
         total_upside = round(sum(s["impact_mid"] for s in scenarios), 2) if scenarios else 0
         return {"scenarios": scenarios, "total_addressable_upside": total_upside}
+
+    def _build_what_if_examples(self, scenario: str, detail: Dict, diag: Optional[Dict]) -> List[str]:
+        """Generate brand-specific plain-language execution examples for WHAT-IF cards."""
+        diagnostics = detail.get("diagnostics") or {}
+        name = (scenario or "").lower()
+
+        if "conversion" in name:
+            conv = diagnostics.get("conversion") or {}
+            funnels = conv.get("product_funnels") or []
+            weak = sorted(
+                [f for f in funnels if (f.get("view_to_cart_pct", 0) < 5 or f.get("cart_to_purchase_pct", 0) < 3)],
+                key=lambda x: x.get("views", 0),
+                reverse=True,
+            )[:2]
+            weak_labels = ", ".join((w.get("title") or "SKU")[:32] for w in weak)
+            if weak_labels:
+                return [
+                    f"Start with these high-traffic weak converters: {weak_labels}. Improve product copy, reviews, and shipping clarity first.",
+                    "Reduce checkout friction: enable express pay (Shop Pay/Apple Pay), remove non-essential fields, and keep guest checkout enabled.",
+                    "Run cart recovery for this brand: send reminders at 1h, 24h, and 72h with best-selling SKU proof points."
+                ]
+            return [
+                "Improve product page trust signals first: delivery ETA, return policy, and customer reviews above the fold.",
+                "Simplify checkout: express pay enabled, fewer form fields, clear shipping/returns before payment.",
+                "Recover abandoned carts with timed reminders and brand-specific top seller highlights."
+            ]
+
+        if "restore roas" in name:
+            ads_model = (diag or {}).get("ads_model") or {}
+            top_camps = ads_model.get("top_campaigns") or []
+            active = [c for c in top_camps if c.get("status") != "paused"][:2]
+            camp_text = "; ".join(f"{c.get('name','Campaign')} ({c.get('roas',0):.1f}x)" for c in active)
+            if camp_text:
+                return [
+                    f"Audit these campaigns first: {camp_text}. Pause waste before adding budget.",
+                    "Move budget from low-ROAS to high-ROAS campaigns and tighten search terms to remove low-intent clicks.",
+                    "Refresh ad creatives and product feed titles/images on weak ad groups, then re-check ROAS after 7 days."
+                ]
+            return [
+                "Pause or reduce the worst-performing campaigns before scaling any spend.",
+                "Separate branded vs non-branded campaigns and set stricter ROAS/CPA targets for non-branded traffic.",
+                "Refresh creatives and feed data, then review search terms to cut wasted clicks."
+            ]
+
+        if "scale ads" in name:
+            ads = diagnostics.get("ads") or {}
+            perf = ads.get("product_performance") or []
+            winners = [p for p in perf if (p.get("roas") or 0) >= 3][:2]
+            win_text = ", ".join((w.get("title") or "SKU")[:28] for w in winners)
+            if win_text:
+                return [
+                    f"Scale spend on proven winners first: {win_text}. Increase budgets in 10-15% steps every 3-4 days.",
+                    "Expand only audiences/keywords already converting; avoid broad expansion until ROAS remains stable.",
+                    "Launch 2-3 new ad variants for top campaigns and keep only creatives that improve CTR and conversion."
+                ]
+            return [
+                "Increase ad budgets gradually in small steps and monitor ROAS daily.",
+                "Prioritize campaigns with strong ROAS and high conversion intent before testing new audiences.",
+                "Keep creative testing continuous so spend growth does not rely on stale ads."
+            ]
+
+        if "pricing" in name:
+            pricing = diagnostics.get("pricing") or {}
+            worst = pricing.get("worst_skus") or []
+            sku_text = ", ".join((w.get("sku") or w.get("title") or "SKU") for w in worst[:3])
+            if sku_text:
+                return [
+                    f"Fix these margin-risk items first: {sku_text}. Raise to minimum viable margin before discounting elsewhere.",
+                    "Where price raises are risky, add bundles/value-adds instead of deeper discounts to protect gross profit.",
+                    "Set weekly guardrails per SKU: minimum margin %, max discount %, and competitor-price review cadence."
+                ]
+            return [
+                "Fix below-cost SKUs first and protect margin guardrails before launching promotions.",
+                "Use bundles or bonus value instead of deep price cuts where possible.",
+                "Review competitor pricing weekly and enforce minimum margin rules by SKU tier."
+            ]
+
+        return [
+            "Start with the top 3 products or campaigns driving most revenue in this brand.",
+            "Run one change at a time for 7-14 days and compare revenue, conversion, and margin before/after.",
+            "Scale the winning change to the next product/campaign group."
+        ]
 
     def _apply_guardrails(self, detail: Dict, diag: Optional[Dict], how: Dict) -> Dict:
         pricing = (detail.get("diagnostics") or {}).get("pricing") or {}

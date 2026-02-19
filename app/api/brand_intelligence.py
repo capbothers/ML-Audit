@@ -48,6 +48,11 @@ async def get_brand_detail(
     db: Session = Depends(get_db),
 ):
     """Deep dive into a single brand with WHY analysis and recommendations."""
+    cache_key = f"brand_detail|{brand}|{days}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
+
     try:
         service = BrandIntelligenceService(db)
         data = service.get_brand_detail(brand_name=brand, period_days=days)
@@ -63,7 +68,9 @@ async def get_brand_detail(
             log.error(f"Diagnosis engine failed for {brand}: {diag_err}")
             data["diagnosis"] = None
 
-        return {"success": True, "data": data}
+        result = {"success": True, "data": data}
+        set_cached(cache_key, result, 300)
+        return result
     except Exception as e:
         log.error(f"Error in /brands/detail: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -76,10 +83,17 @@ async def get_brand_diagnosis(
     db: Session = Depends(get_db),
 ):
     """ML-ready brand diagnosis — structured decomposition with stock gating."""
+    cache_key = f"brand_diagnosis|{brand}|{days}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
+
     try:
         engine = BrandDiagnosisEngine(db)
         data = engine.diagnose(brand, period_days=days)
-        return {"success": True, "data": data}
+        result = {"success": True, "data": data}
+        set_cached(cache_key, result, 300)
+        return result
     except Exception as e:
         log.error(f"Error in /brands/diagnosis: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -136,10 +150,17 @@ async def get_brand_decision(
     db: Session = Depends(get_db),
 ):
     """Unified WHY / HOW / WHAT-IF decision contract."""
+    cache_key = f"brand_decision|{brand}|{days}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
+
     try:
         engine = BrandDecisionEngine(db)
         data = engine.decide(brand=brand, period_days=days)
-        return {"success": True, "data": data}
+        result = {"success": True, "data": data}
+        set_cached(cache_key, result, 300)
+        return result
     except Exception as e:
         log.error(f"Error in /brands/decision: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
