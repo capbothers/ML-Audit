@@ -1356,17 +1356,11 @@
 
             try {
                 var qs = 'brand=' + encodeURIComponent(brand) + '&days=' + periodDays;
-                // Fire both requests concurrently; decision is optional
-                var results = await Promise.allSettled([
-                    fetch('/brands/detail?' + qs).then(function(r) { return r.json(); }),
-                    fetch('/brands/decision?' + qs).then(function(r) { return r.json(); })
-                ]);
-                if (results[0].status !== 'fulfilled' || !results[0].value.success) {
-                    throw new Error((results[0].value && results[0].value.detail) || 'Detail API error');
-                }
-                var detailJson = results[0].value;
-                if (results[1].status === 'fulfilled' && results[1].value && results[1].value.success) {
-                    detailJson.data.decision = results[1].value.data;
+                // Single API call — decision data is embedded in the detail response
+                var resp = await fetch('/brands/detail?' + qs);
+                var detailJson = await resp.json();
+                if (!detailJson.success) {
+                    throw new Error(detailJson.detail || 'Detail API error');
                 }
                 renderBrandDetail(detailJson.data);
             } catch (err) {

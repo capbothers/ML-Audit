@@ -59,14 +59,28 @@ async def get_brand_detail(
 
         # Attach ML-ready diagnosis — use the same anchored period end
         # as get_brand_detail() so all panels describe the same window.
+        from datetime import datetime as _dt
+        anchored_end = None
+        diag = None
         try:
-            from datetime import datetime as _dt
             anchored_end = _dt.fromisoformat(data["data_coverage"]["current_end"])
             engine = BrandDiagnosisEngine(db)
-            data["diagnosis"] = engine.diagnose(brand, period_days=days, cur_end=anchored_end)
+            diag = engine.diagnose(brand, period_days=days, cur_end=anchored_end)
+            data["diagnosis"] = diag
         except Exception as diag_err:
             log.error(f"Diagnosis engine failed for {brand}: {diag_err}")
             data["diagnosis"] = None
+
+        # Embed decision data so the frontend needs only one API call
+        try:
+            dec_engine = BrandDecisionEngine(db)
+            data["decision"] = dec_engine.decide(
+                brand=brand, period_days=days,
+                cur_end=anchored_end, detail=data, diag=diag,
+            )
+        except Exception as dec_err:
+            log.error(f"Decision engine failed for {brand}: {dec_err}")
+            data["decision"] = None
 
         result = {"success": True, "data": data}
         set_cached(cache_key, result, 300)
