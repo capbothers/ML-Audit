@@ -1032,6 +1032,11 @@
             return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
         }
 
+        function escJsStr(s) {
+            if (!s) return '';
+            return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/</g, '\\x3c');
+        }
+
         function healthBadge(score, grade) {
             if (score == null) return '';
             var cls = 'health-' + grade.toLowerCase();
@@ -1225,7 +1230,7 @@
             for (var i = 0; i < opps.length; i++) {
                 var o = opps[i];
                 var yoyCls = (o.revenue_yoy_pct || 0) >= 0 ? 'up' : 'down';
-                html += '<tr style="cursor:pointer" onclick="openBrandDetail(\'' + escHtml(o.brand) + '\')">'
+                html += '<tr style="cursor:pointer" onclick="openBrandDetail(\'' + escJsStr(o.brand) + '\')">'
                     + '<td>' + (i + 1) + '</td>'
                     + '<td><strong>' + escHtml(o.brand) + '</strong></td>'
                     + '<td>' + oppBar(o.opportunity_score) + '</td>'
@@ -1307,7 +1312,7 @@
             var html = '';
             for (var i = 0; i < filtered.length; i++) {
                 var b = filtered[i];
-                html += '<tr onclick="openBrandDetail(\'' + escHtml(b.brand) + '\')">'
+                html += '<tr onclick="openBrandDetail(\'' + escJsStr(b.brand) + '\')">'
                     + '<td><strong>' + escHtml(b.brand) + '</strong></td>'
                     + '<td class="num">' + healthBadge(b.health_score, b.health_grade || '-') + '</td>'
                     + '<td class="num">' + fmt$(b.revenue) + '</td>'
@@ -1350,19 +1355,23 @@
             document.getElementById('detail-content').innerHTML = '<div class="loading-text">Loading ' + escHtml(brand) + ' analysis...</div>';
 
             try {
-                var detailReq = fetch('/brands/detail?brand=' + encodeURIComponent(brand) + '&days=' + periodDays);
-                var decisionReq = fetch('/brands/decision?brand=' + encodeURIComponent(brand) + '&days=' + periodDays);
-                var responses = await Promise.all([detailReq, decisionReq]);
-                var detailJson = await responses[0].json();
-                if (!detailJson.success) throw new Error(detailJson.detail || 'API error');
-                var decisionJson = await responses[1].json();
-                if (decisionJson && decisionJson.success) {
-                    detailJson.data.decision = decisionJson.data;
+                var qs = 'brand=' + encodeURIComponent(brand) + '&days=' + periodDays;
+                // Fire both requests concurrently; decision is optional
+                var results = await Promise.allSettled([
+                    fetch('/brands/detail?' + qs).then(function(r) { return r.json(); }),
+                    fetch('/brands/decision?' + qs).then(function(r) { return r.json(); })
+                ]);
+                if (results[0].status !== 'fulfilled' || !results[0].value.success) {
+                    throw new Error((results[0].value && results[0].value.detail) || 'Detail API error');
+                }
+                var detailJson = results[0].value;
+                if (results[1].status === 'fulfilled' && results[1].value && results[1].value.success) {
+                    detailJson.data.decision = results[1].value.data;
                 }
                 renderBrandDetail(detailJson.data);
             } catch (err) {
                 console.error(err);
-                document.getElementById('detail-content').innerHTML = '<div class="loading-text">Error: ' + err.message + '</div>';
+                document.getElementById('detail-content').innerHTML = '<div class="loading-text">Error: ' + escHtml(err.message) + '</div>';
             }
         }
 
@@ -2432,7 +2441,7 @@
                 html += '<div class="card"><table class="product-table"><thead><tr><th>Brand</th><th class="num">Net Sales</th><th class="num">YoY %</th><th class="num">Margin %</th><th class="num">Health</th></tr></thead><tbody>';
                 for (var i = 0; i < data.overperformers.length; i++) {
                     var o = data.overperformers[i];
-                    html += '<tr style="cursor:pointer" onclick="openBrandDetail(\'' + escHtml(o.brand) + '\')">'
+                    html += '<tr style="cursor:pointer" onclick="openBrandDetail(\'' + escJsStr(o.brand) + '\')">'
                         + '<td><strong>' + escHtml(o.brand) + '</strong></td>'
                         + '<td class="num">' + fmt$(o.revenue) + '</td>'
                         + '<td class="num"><span class="yoy-up">' + fmtPct(o.revenue_yoy_pct) + '</span></td>'
@@ -2455,7 +2464,7 @@
 
             for (var i = 0; i < brands.length; i++) {
                 var b = brands[i];
-                html += '<tr style="cursor:pointer" onclick="openBrandDetail(\'' + escHtml(b.brand) + '\')">'
+                html += '<tr style="cursor:pointer" onclick="openBrandDetail(\'' + escJsStr(b.brand) + '\')">'
                     + '<td><strong>' + escHtml(b.brand) + '</strong></td>'
                     + '<td class="num">' + fmt$(b.revenue) + '</td>'
                     + '<td class="num"><span class="' + yoyClass(b.revenue_yoy_pct) + '">' + fmtPct(b.revenue_yoy_pct) + '</span></td>'

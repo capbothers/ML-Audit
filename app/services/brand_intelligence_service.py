@@ -63,13 +63,13 @@ class BrandIntelligenceService:
 
     # ── public ────────────────────────────────────────────────────
 
+    def _anchored_now(self):
+        """Period end anchored to latest order-item date (avoids empty-day skew when data lags utcnow)."""
+        latest = self.db.query(func.max(ShopifyOrderItem.order_date)).scalar()
+        return latest if latest else datetime.utcnow()
+
     def get_dashboard(self, period_days: int = 30) -> Dict:
-        # Use actual latest order-item date as period end so we don't
-        # include empty days that skew YoY comparisons (data may lag utcnow).
-        latest_order_date = self.db.query(
-            func.max(ShopifyOrderItem.order_date)
-        ).scalar()
-        now = latest_order_date if latest_order_date else datetime.utcnow()
+        now = self._anchored_now()
         cur_end = now
         cur_start = now - timedelta(days=period_days)
         yoy_end = cur_end - timedelta(days=365)
@@ -223,10 +223,7 @@ class BrandIntelligenceService:
         }
 
     def get_brand_detail(self, brand_name: str, period_days: int = 30) -> Dict:
-        latest_order_date = self.db.query(
-            func.max(ShopifyOrderItem.order_date)
-        ).scalar()
-        now = latest_order_date if latest_order_date else datetime.utcnow()
+        now = self._anchored_now()
         cur_start = now - timedelta(days=period_days)
         cur_end = now
         yoy_start = cur_start - timedelta(days=365)
@@ -472,7 +469,7 @@ class BrandIntelligenceService:
         }
 
     def get_brand_comparison(self, brand_names: List[str], period_days: int = 30) -> Dict:
-        now = datetime.utcnow()
+        now = self._anchored_now()
         start_24m = now - timedelta(days=730)
 
         comparison = []
@@ -3656,7 +3653,7 @@ class BrandIntelligenceService:
         if not brands:
             return {"period_days": period_days, "opportunities": []}
 
-        now = datetime.utcnow()
+        now = self._anchored_now()
         cur_start = now - timedelta(days=period_days)
         cur_end = now
         yoy_start = cur_start - timedelta(days=365)
