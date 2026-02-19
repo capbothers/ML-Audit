@@ -22,7 +22,7 @@ from typing import Any
 class ResponseCache:
     """Thread-safe in-memory cache with TTL expiry and max-entry limit."""
 
-    def __init__(self, max_entries: int = 20):
+    def __init__(self, max_entries: int = 80):
         self._store: dict[str, tuple[float, Any]] = {}
         self._lock = threading.Lock()
         self._max_entries = max_entries

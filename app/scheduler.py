@@ -453,7 +453,8 @@ async def sync_competitor_blogs():
 async def sync_shopify_full():
     """Full Shopify sync including products (daily at 1am AEST)"""
     from app.services.data_sync_service import DataSyncService
-    from app.utils.cache import clear_cache
+    from app.utils.cache import clear_for_source
+    from app.utils.response_cache import response_cache
     try:
         log.info("Starting Shopify full sync (with products)...")
         sync_service = DataSyncService()
@@ -465,7 +466,10 @@ async def sync_shopify_full():
                 f"{result.get('orders_saved', 0)} orders, "
                 f"{result.get('products_saved', 0)} products in {result.get('duration', 0):.1f}s"
             )
-            clear_cache()
+            clear_for_source("shopify")
+            response_cache.invalidate("profitability:")
+            response_cache.invalidate("customers:")
+            response_cache.invalidate("monitor:")
         else:
             log.error(f"Shopify full sync failed: {result.get('error')}")
 
@@ -476,7 +480,8 @@ async def sync_shopify_full():
 async def sync_google_ads_sheet():
     """Import Google Ads data from Google Sheet (daily at 6am AEST)"""
     from app.services.google_ads_sheet_import import GoogleAdsSheetImportService
-    from app.utils.cache import clear_cache
+    from app.utils.cache import clear_for_source
+    from app.utils.response_cache import response_cache
     try:
         log.info("Starting Google Ads Sheet import...")
         settings = get_settings()
@@ -502,7 +507,9 @@ async def sync_google_ads_sheet():
             f"campaigns={campaign_result.get('rows_imported', 0)}, "
             f"products={product_result.get('rows_imported', 0)}"
         )
-        clear_cache()
+        clear_for_source("google_ads")
+        response_cache.invalidate("ads:")
+        response_cache.invalidate("monitor:")
 
     except Exception as e:
         log.error(f"Google Ads Sheet import error: {str(e)}")
@@ -511,7 +518,8 @@ async def sync_google_ads_sheet():
 async def sync_cost_sheet():
     """Sync NETT Master cost sheet from Google Sheets (daily at 4:30am AEST)"""
     from app.services.data_sync_service import DataSyncService
-    from app.utils.cache import clear_cache
+    from app.utils.cache import clear_for_source
+    from app.utils.response_cache import response_cache
     try:
         log.info("Starting cost sheet sync...")
         sync_service = DataSyncService()
@@ -523,7 +531,9 @@ async def sync_cost_sheet():
                 f"{result.get('vendors_synced', 0)} vendors, "
                 f"{result.get('products_synced', 0)} products in {result.get('duration', 0):.1f}s"
             )
-            clear_cache()
+            clear_for_source("cost_sheet")
+            response_cache.invalidate("profitability:")
+            response_cache.invalidate("monitor:")
         else:
             log.error(f"Cost sheet sync failed: {result.get('error')}")
 

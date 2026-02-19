@@ -559,12 +559,18 @@ async def get_brand_summary(
     Aggregated view per brand: # SKUs undercut, avg price gap,
     % unit decline vs prior period, and revenue at risk.
     """
+    cache_key = f"pricing_brand_summary|{days}|{decline_threshold}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
     try:
         service = PricingIntelligenceService(db)
         result = await service.get_brand_pricing_impact(
             days=days, decline_threshold=decline_threshold
         )
-        return {"success": True, "data": result}
+        response = {"success": True, "data": result}
+        set_cached(cache_key, response, 300)
+        return response
     except Exception as e:
         log.error(f"Error in /pricing/brand-summary: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -581,10 +587,16 @@ async def get_unmatchable(
     SKUs where the cheapest competitor price is below our minimum floor price.
     Shows total revenue at risk and affected orders.
     """
+    cache_key = f"pricing_unmatchable|{days}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
     try:
         service = PricingIntelligenceService(db)
         result = await service.get_unmatchable_revenue_risk(days=days)
-        return {"success": True, "data": result}
+        response = {"success": True, "data": result}
+        set_cached(cache_key, response, 300)
+        return response
     except Exception as e:
         log.error(f"Error in /pricing/unmatchable: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

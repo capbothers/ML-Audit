@@ -11,6 +11,7 @@ from typing import Optional
 from app.models.base import get_db
 from app.services.ml_intelligence_service import MLIntelligenceService
 from app.services.inventory_intelligence_service import InventoryIntelligenceService
+from app.utils.cache import get_cached, set_cached, _MISS
 
 router = APIRouter(prefix="/ml", tags=["ml"])
 
@@ -22,15 +23,21 @@ async def get_forecast(
     db: Session = Depends(get_db),
 ):
     """Get the most recent forecasts."""
+    cache_key = f"ml_forecast|{metric}|{days}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
     try:
         service = MLIntelligenceService(db)
         forecasts = service.get_forecasts(metric=metric, days=days)
 
-        return {
+        result = {
             "success": True,
             "count": len(forecasts),
             "data": forecasts,
         }
+        set_cached(cache_key, result, 300)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -44,6 +51,10 @@ async def get_anomalies(
     db: Session = Depends(get_db),
 ):
     """Get detected anomalies."""
+    cache_key = f"ml_anomalies|{days}|{severity}|{metric}|{unacknowledged_only}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
     try:
         service = MLIntelligenceService(db)
         anomalies = service.get_anomalies(
@@ -53,11 +64,13 @@ async def get_anomalies(
             unacknowledged_only=unacknowledged_only,
         )
 
-        return {
+        result = {
             "success": True,
             "count": len(anomalies),
             "data": anomalies,
         }
+        set_cached(cache_key, result, 300)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -92,11 +105,17 @@ async def get_revenue_drivers(
 
     Compares current N days vs preceding N days.
     """
+    cache_key = f"ml_drivers|{days}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
     try:
         service = MLIntelligenceService(db)
         drivers = service.get_revenue_drivers(days=days)
 
-        return {"success": True, "data": drivers}
+        result = {"success": True, "data": drivers}
+        set_cached(cache_key, result, 300)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -111,11 +130,17 @@ async def get_tracking_health(
 
     Compares daily order counts and revenue between GA4 and Shopify.
     """
+    cache_key = f"ml_tracking|{days}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
     try:
         service = MLIntelligenceService(db)
         health = service.get_tracking_health(days=days)
 
-        return {"success": True, "data": health}
+        result = {"success": True, "data": health}
+        set_cached(cache_key, result, 300)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -128,17 +153,23 @@ async def get_inventory_suggestions(
     db: Session = Depends(get_db),
 ):
     """Get inventory reorder suggestions based on sales velocity."""
+    cache_key = f"ml_inventory|{brand}|{urgency}|{suggestion}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
     try:
         service = MLIntelligenceService(db)
         suggestions = service.get_inventory_suggestions(
             brand=brand, urgency=urgency, suggestion=suggestion
         )
 
-        return {
+        result = {
             "success": True,
             "count": len(suggestions),
             "data": suggestions,
         }
+        set_cached(cache_key, result, 300)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -148,10 +179,16 @@ async def get_inventory_dashboard(
     db: Session = Depends(get_db),
 ):
     """Full inventory intelligence dashboard payload (Tab 1: Pulse)."""
+    cache_key = "ml_inv_dashboard"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
     try:
         service = InventoryIntelligenceService(db)
         data = service.get_dashboard_data()
-        return {"success": True, "data": data}
+        result = {"success": True, "data": data}
+        set_cached(cache_key, result, 300)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -177,10 +214,16 @@ async def get_inventory_stock_health(
     db: Session = Depends(get_db),
 ):
     """Stock health analysis: overstock, dead stock, brand health (Tab 3)."""
+    cache_key = "ml_stock_health"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
     try:
         service = InventoryIntelligenceService(db)
         data = service.get_stock_health()
-        return {"success": True, "data": data}
+        result = {"success": True, "data": data}
+        set_cached(cache_key, result, 300)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -112,6 +112,10 @@ app.add_middleware(SecurityMiddleware)
 # Session-based authentication middleware
 app.add_middleware(AuthMiddleware)
 
+# Gzip compression (70-80% smaller JSON/HTML responses)
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 # Include routers
 app.include_router(auth.router)
 app.include_router(health.router, tags=["health"])

@@ -32,10 +32,14 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         # --- Anti-crawl header on every response ---
         response.headers["X-Robots-Tag"] = "noindex, nofollow"
 
-        # --- Cache-Control: no-store for HTML and JSON ---
+        # --- Cache-Control ---
         content_type = response.headers.get("content-type", "")
-        if "text/html" in content_type or "application/json" in content_type:
-            response.headers["Cache-Control"] = "no-store"
+        if "text/html" in content_type:
+            # Dashboard HTML rarely changes; cache 10min for instant back/forward nav
+            response.headers["Cache-Control"] = "private, max-age=600"
+        elif "application/json" in content_type:
+            # API data: browser may store but must revalidate each time
+            response.headers["Cache-Control"] = "private, no-cache"
 
         return response
 
