@@ -69,6 +69,16 @@ class BrandIntelligenceService:
         return latest if latest else datetime.utcnow()
 
     def get_dashboard(self, period_days: int = 30) -> Dict:
+        from app.utils.cache import get_cached as _gc, set_cached as _sc, _MISS as _M
+        _ck = f"brand_dashboard_svc|{period_days}"
+        _cv = _gc(_ck)
+        if _cv is not _M:
+            return _cv
+        result = self._get_dashboard_impl(period_days)
+        _sc(_ck, result, 300)
+        return result
+
+    def _get_dashboard_impl(self, period_days: int = 30) -> Dict:
         now = self._anchored_now()
         cur_end = now
         cur_start = now - timedelta(days=period_days)
@@ -3413,6 +3423,101 @@ class BrandIntelligenceService:
             log.debug(f"Demand signals skipped for {brand}: {e}")
             return None
 
+    def _get_demand_clicks_batch(self, brand_names, cur_start, cur_end,
+                                  yoy_start, yoy_end) -> Dict[str, Dict]:
+        """Batch demand clicks YoY for multiple brands in 2 queries."""
+        try:
+            brand_exprs = []
+            for brand in brand_names:
+                include_terms, exclude_terms, allowlist_used = self._get_brand_term_filters(brand)
+                brand_norm = (brand or "").strip().lower()
+                brand_clause = SearchConsoleQuery.query.ilike(f"%{brand}%")
+                exact_brand = func.lower(SearchConsoleQuery.query) == brand_norm
+                term_clauses = [SearchConsoleQuery.query.ilike(f"%{t}%") for t in include_terms]
+                if allowlist_used and term_clauses:
+                    include_expr = or_(exact_brand, and_(brand_clause, or_(*term_clauses)))
+                else:
+                    include_expr = or_(exact_brand, brand_clause)
+                if exclude_terms:
+                    full_expr = and_(include_expr, *[
+                        ~SearchConsoleQuery.query.ilike(f"%{t}%") for t in exclude_terms
+                    ])
+                else:
+                    full_expr = include_expr
+                brand_exprs.append((brand, full_expr))
+
+            def _batch_clicks(start, end):
+                start_d = start.date() if hasattr(start, "date") else start
+                end_d = end.date() if hasattr(end, "date") else end
+                cols = [
+                    func.sum(case((expr, SearchConsoleQuery.clicks), else_=0)).label(f"b{i}")
+                    for i, (_, expr) in enumerate(brand_exprs)
+                ]
+                row = (
+                    self.db.query(*cols)
+                    .filter(
+                        SearchConsoleQuery.date >= start_d,
+                        SearchConsoleQuery.date < end_d,
+                    )
+                    .first()
+                )
+                result = {}
+                if row:
+                    for i, (brand, _) in enumerate(brand_exprs):
+                        result[brand] = int(getattr(row, f"b{i}") or 0)
+                return result
+
+            cur = _batch_clicks(cur_start, cur_end)
+            prev = _batch_clicks(yoy_start, yoy_end)
+
+            results = {}
+            for brand in brand_names:
+                cur_c = cur.get(brand, 0)
+                prev_c = prev.get(brand, 0)
+                results[brand] = {
+                    "clicks_yoy_pct": _pct_change(cur_c, prev_c),
+                    "cur_clicks": cur_c,
+                    "yoy_clicks": prev_c,
+                }
+            return results
+        except Exception as e:
+            log.debug(f"Batch demand clicks failed: {e}")
+            return {}
+
+    def _get_pricing_index_batch(self, brand_names) -> Dict[str, float]:
+        """Batch pricing index for multiple brands in 2 queries."""
+        try:
+            latest_date = self.db.query(func.max(CompetitivePricing.pricing_date)).scalar()
+            if not latest_date:
+                return {}
+            rows = (
+                self.db.query(
+                    CompetitivePricing.vendor,
+                    CompetitivePricing.current_price,
+                    CompetitivePricing.lowest_competitor_price,
+                )
+                .filter(
+                    CompetitivePricing.vendor.in_(brand_names),
+                    CompetitivePricing.pricing_date == latest_date,
+                    CompetitivePricing.current_price.isnot(None),
+                    CompetitivePricing.lowest_competitor_price > 0,
+                )
+                .all()
+            )
+            brand_ratios = defaultdict(list)
+            for r in rows:
+                if r.current_price and r.lowest_competitor_price:
+                    brand_ratios[r.vendor].append(
+                        float(r.current_price) / float(r.lowest_competitor_price)
+                    )
+            return {
+                vendor: round(sum(ratios) / len(ratios), 2) if ratios else None
+                for vendor, ratios in brand_ratios.items()
+            }
+        except Exception as e:
+            log.debug(f"Batch pricing index failed: {e}")
+            return {}
+
     def _get_conversion_signals(self, brand, cur_start, cur_end) -> Optional[Dict]:
         """GA4 product funnel: views -> cart -> purchase."""
         try:
@@ -3701,48 +3806,22 @@ class BrandIntelligenceService:
 
         prelim.sort(key=lambda x: x["prelim"], reverse=True)
 
-        # Phase 2: enrich top 15 with demand and pricing
+        # Phase 2: batch demand + pricing for top 15 (4 queries, not 75)
+        top_brands = [item["brand_data"]["brand"] for item in prelim[:15]]
+        demand_batch = self._get_demand_clicks_batch(
+            top_brands, cur_start, cur_end, yoy_start, yoy_end
+        )
+        pricing_batch = self._get_pricing_index_batch(top_brands)
+
         enriched = []
         scored_items = []
-
         for item in prelim[:15]:
             b = item["brand_data"]
             brand = b["brand"]
-
-            # Demand
-            try:
-                demand = self._get_demand_signals(brand, cur_start, cur_end, yoy_start, yoy_end)
-            except Exception:
-                demand = None
-
-            # Price index (lightweight)
-            try:
-                latest_date = self.db.query(func.max(CompetitivePricing.pricing_date)).scalar()
-                if latest_date:
-                    rows = (
-                        self.db.query(
-                            CompetitivePricing.current_price,
-                            CompetitivePricing.lowest_competitor_price,
-                        )
-                        .filter(
-                            CompetitivePricing.vendor == brand,
-                            CompetitivePricing.pricing_date == latest_date,
-                            CompetitivePricing.current_price.isnot(None),
-                            CompetitivePricing.lowest_competitor_price > 0,
-                        )
-                        .all()
-                    )
-                    ratios = [float(r[0]) / float(r[1]) for r in rows if r[0] and r[1]]
-                    price_index = round(sum(ratios) / len(ratios), 2) if ratios else None
-                else:
-                    price_index = None
-            except Exception:
-                price_index = None
-
             scored_items.append({
                 "brand_data": b,
-                "demand": demand,
-                "price_index": price_index,
+                "demand": demand_batch.get(brand),
+                "price_index": pricing_batch.get(brand),
             })
 
         # Compute final scores

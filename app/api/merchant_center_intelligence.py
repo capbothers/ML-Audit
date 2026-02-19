@@ -11,6 +11,7 @@ from app.models.base import get_db
 from app.services.merchant_center_intelligence_service import (
     MerchantCenterIntelligenceService,
 )
+from app.utils.cache import get_cached, set_cached, _MISS
 
 router = APIRouter(prefix="/merchant-center", tags=["merchant-center"])
 
@@ -20,10 +21,17 @@ async def get_merchant_center_dashboard(
     db: Session = Depends(get_db),
 ):
     """Full merchant center intelligence dashboard payload (all tabs)."""
+    cache_key = "mc_dashboard"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
+
     try:
         service = MerchantCenterIntelligenceService(db)
         data = service.get_dashboard()
-        return {"success": True, "data": data}
+        result = {"success": True, "data": data}
+        set_cached(cache_key, result, 300)
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

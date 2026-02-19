@@ -18,7 +18,7 @@ _SOURCE_PREFIXES: dict[str, list[str]] = {
     "search_console": ["seo_"],
     "google_ads": ["ads:"],
     "cost_sheet": ["pricing_", "finance_"],
-    "merchant_center": [],
+    "merchant_center": ["mc_"],
 }
 
 
