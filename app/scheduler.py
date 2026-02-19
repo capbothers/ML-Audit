@@ -10,21 +10,12 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import asyncio
 from typing import Optional
+import time
 
-from app.connectors.google_ads import GoogleAdsConnector
-from app.connectors.klaviyo import KlaviyoConnector
-from app.connectors.hotjar import HotjarConnector
-from app.connectors.github import GitHubConnector
-from app.services.data_sync_service import DataSyncService, SyncResult, update_data_sync_status
-from app.services.ml_intelligence_service import MLIntelligenceService
-from app.services.caprice_import_service import CapriceImportService
-from app.services.google_ads_sheet_import import GoogleAdsSheetImportService
-from app.services.competitor_blog_service import CompetitorBlogService
-from app.models.base import get_db
+# Lazy imports: connectors and heavy services are imported inside job functions
+# to avoid loading everything at startup (saves ~50MB on Render free tier).
 from app.config import get_settings
 from app.utils.logger import log
-from app.utils.cache import clear_cache
-import time
 
 SYDNEY_TZ = ZoneInfo("Australia/Sydney")
 
@@ -51,6 +42,9 @@ def _extract_sync_counts(result: dict) -> tuple:
 
 async def sync_google_ads():
     """Sync Google Ads data (hourly)"""
+    from app.connectors.google_ads import GoogleAdsConnector
+    from app.services.data_sync_service import SyncResult, update_data_sync_status
+    from app.models.base import get_db
     start = time.time()
     try:
         log.info("Starting Google Ads sync...")
@@ -104,6 +98,7 @@ async def sync_google_ads():
 
 async def sync_ga4():
     """Sync GA4 data (twice daily) using DataSyncService"""
+    from app.services.data_sync_service import DataSyncService
     try:
         log.info("Starting GA4 sync...")
         sync_service = DataSyncService()
@@ -130,6 +125,7 @@ async def sync_ga4():
 
 async def sync_search_console():
     """Sync Search Console data (daily at 5am) using DataSyncService"""
+    from app.services.data_sync_service import DataSyncService
     try:
         log.info("Starting Search Console daily sync...")
         sync_service = DataSyncService()
@@ -151,6 +147,9 @@ async def sync_search_console():
 
 async def sync_klaviyo():
     """Sync Klaviyo data (hourly)"""
+    from app.connectors.klaviyo import KlaviyoConnector
+    from app.services.data_sync_service import SyncResult, update_data_sync_status
+    from app.models.base import get_db
     start = time.time()
     try:
         log.info("Starting Klaviyo sync...")
@@ -204,6 +203,9 @@ async def sync_klaviyo():
 
 async def sync_hotjar():
     """Sync Hotjar/Clarity data (daily at 6am)"""
+    from app.connectors.hotjar import HotjarConnector
+    from app.services.data_sync_service import SyncResult, update_data_sync_status
+    from app.models.base import get_db
     start = time.time()
     try:
         log.info("Starting Hotjar/Clarity sync...")
@@ -257,6 +259,9 @@ async def sync_hotjar():
 
 async def sync_github():
     """Sync GitHub data (daily at 7am)"""
+    from app.connectors.github import GitHubConnector
+    from app.services.data_sync_service import SyncResult, update_data_sync_status
+    from app.models.base import get_db
     start = time.time()
     try:
         log.info("Starting GitHub sync...")
@@ -310,6 +315,8 @@ async def sync_github():
 
 async def run_ml_intelligence():
     """Run ML intelligence pipeline (daily at 3am)"""
+    from app.services.ml_intelligence_service import MLIntelligenceService
+    from app.models.base import get_db
     try:
         log.info("Starting ML intelligence pipeline...")
         db = next(get_db())
@@ -337,6 +344,7 @@ async def run_ml_intelligence():
 
 async def sync_shopify():
     """Sync Shopify orders and order items (every 2 hours)"""
+    from app.services.data_sync_service import DataSyncService
     try:
         log.info("Starting Shopify sync...")
         sync_service = DataSyncService()
@@ -358,6 +366,7 @@ async def sync_shopify():
 
 async def sync_merchant_center():
     """Sync Merchant Center data (daily at 2am)"""
+    from app.services.data_sync_service import DataSyncService
     try:
         log.info("Starting Merchant Center sync...")
         sync_service = DataSyncService()
@@ -378,6 +387,7 @@ async def sync_merchant_center():
 
 async def sync_shippit():
     """Sync Shippit shipping costs (every 6 hours)"""
+    from app.services.data_sync_service import DataSyncService
     try:
         log.info("Starting Shippit sync...")
         sync_service = DataSyncService()
@@ -398,6 +408,7 @@ async def sync_shippit():
 
 async def sync_caprice_pricing():
     """Import new Caprice pricing files (daily at 1pm)"""
+    from app.services.caprice_import_service import CapriceImportService
     try:
         log.info("Starting Caprice pricing import...")
         service = CapriceImportService()
@@ -419,6 +430,7 @@ async def sync_caprice_pricing():
 
 async def sync_competitor_blogs():
     """Scrape competitor/supplier blogs (daily at 7:30am AEST)"""
+    from app.services.competitor_blog_service import CompetitorBlogService
     try:
         log.info("Starting competitor blog scrape...")
         service = CompetitorBlogService()
@@ -440,6 +452,8 @@ async def sync_competitor_blogs():
 
 async def sync_shopify_full():
     """Full Shopify sync including products (daily at 1am AEST)"""
+    from app.services.data_sync_service import DataSyncService
+    from app.utils.cache import clear_cache
     try:
         log.info("Starting Shopify full sync (with products)...")
         sync_service = DataSyncService()
@@ -461,6 +475,8 @@ async def sync_shopify_full():
 
 async def sync_google_ads_sheet():
     """Import Google Ads data from Google Sheet (daily at 6am AEST)"""
+    from app.services.google_ads_sheet_import import GoogleAdsSheetImportService
+    from app.utils.cache import clear_cache
     try:
         log.info("Starting Google Ads Sheet import...")
         settings = get_settings()
@@ -494,6 +510,8 @@ async def sync_google_ads_sheet():
 
 async def sync_cost_sheet():
     """Sync NETT Master cost sheet from Google Sheets (daily at 4:30am AEST)"""
+    from app.services.data_sync_service import DataSyncService
+    from app.utils.cache import clear_cache
     try:
         log.info("Starting cost sheet sync...")
         sync_service = DataSyncService()
@@ -515,6 +533,7 @@ async def sync_cost_sheet():
 
 async def score_decision_outcomes_7d():
     """Score 7-day decision outcomes (daily at 4am)"""
+    from app.models.base import get_db
     try:
         log.info("Scoring 7-day decision outcomes...")
         db = next(get_db())
@@ -529,6 +548,7 @@ async def score_decision_outcomes_7d():
 
 async def score_decision_outcomes_30d():
     """Score 30-day decision outcomes (daily at 4:15am)"""
+    from app.models.base import get_db
     try:
         log.info("Scoring 30-day decision outcomes...")
         db = next(get_db())

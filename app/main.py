@@ -48,9 +48,21 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         log.error(f"Database initialization error: {str(e)}")
 
+    # Start the scheduler for automated data syncs
+    try:
+        from app.scheduler import start_scheduler, stop_scheduler
+        start_scheduler()
+        log.info("Scheduler started successfully")
+    except Exception as e:
+        log.error(f"Scheduler startup error: {str(e)}")
+
     yield
 
     # Shutdown
+    try:
+        stop_scheduler()
+    except Exception:
+        pass
     log.info("Shutting down application")
 
 
