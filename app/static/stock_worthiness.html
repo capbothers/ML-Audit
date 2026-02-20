@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cass Brothers · Stock Worthiness</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+        :root {
+            --ink: #1c1b1f;
+            --ink-soft: #3d3a40;
+            --slate: #6b6670;
+            --card: #ffffff;
+            --line: rgba(27, 27, 27, 0.08);
+            --shadow: 0 1px 3px rgba(17,18,19,0.04), 0 8px 24px rgba(17,18,19,0.06);
+            --shadow-lg: 0 4px 12px rgba(17,18,19,0.05), 0 20px 48px rgba(17,18,19,0.08);
+            --cass-black: #1b1b1b;
+            --cass-cream: #f7f3ed;
+            --cass-gold: #c49a4a;
+            --cass-teal: #1f6f6b;
+            --cass-moss: #2f3d33;
+            --green: #1a7a3a;
+            --green-bg: rgba(26,122,58,0.08);
+            --red: #b5342a;
+            --red-bg: rgba(181,52,42,0.08);
+            --amber: #8b6b1f;
+            --amber-bg: rgba(196,154,74,0.12);
+            --radius: 14px;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "IBM Plex Sans", "Space Grotesk", sans-serif;
+            background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+
+        .app-shell {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr);
+            grid-template-rows: auto 1fr;
+            min-height: 100vh;
+        }
+
+        .brand-bar {
+            grid-column: 1 / -1;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 28px;
+            background: var(--cass-black); color: #f7f1e8;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+        }
+        .brand-mark { display: flex; align-items: center; gap: 12px; font-family: "Space Grotesk", sans-serif; letter-spacing: 0.5px; }
+        .brand-dot { width: 14px; height: 14px; border-radius: 50%; background: var(--cass-gold); box-shadow: 0 0 0 4px rgba(196,154,74,0.2); }
+        .brand-actions { display: flex; gap: 12px; font-size: 13px; }
+        .pill { padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.2); }
+
+        .side-nav {
+            padding: 28px 20px;
+            border-right: 1px solid var(--line);
+            background: linear-gradient(180deg, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0.4) 100%);
+        }
+        .side-nav h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--slate); margin-bottom: 12px; }
+        .nav-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 12px; border-radius: 12px; font-size: 14px;
+            color: var(--ink-soft); margin-bottom: 6px; cursor: pointer; transition: all 0.2s ease;
+            text-decoration: none;
+        }
+        .nav-item.active { background: var(--cass-black); color: #f7f1e8; box-shadow: 0 12px 24px rgba(0,0,0,0.15); }
+        .nav-item span { width: 8px; height: 8px; border-radius: 50%; background: var(--cass-gold); opacity: 0.7; }
+
+        .main-area {
+            padding: 28px 32px 32px;
+            display: flex; flex-direction: column; gap: 18px;
+            overflow-y: auto;
+        }
+
+        .overview { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+        .overview h1 { font-family: "Space Grotesk", sans-serif; font-size: 26px; }
+
+        .tab-bar { display: flex; gap: 6px; border-bottom: 1px solid var(--line); padding-bottom: 0; }
+        .tab-btn {
+            padding: 10px 18px; border: none; background: none; font-size: 14px;
+            font-family: "IBM Plex Sans", sans-serif; color: var(--slate);
+            cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;
+        }
+        .tab-btn.active { color: var(--ink); border-bottom-color: var(--cass-gold); font-weight: 600; }
+        .tab-panel { display: none; flex-direction: column; gap: 18px; }
+        .tab-panel.active { display: flex; }
+
+        .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+        .kpi-card {
+            background: var(--card); border-radius: var(--radius); padding: 16px 18px;
+            box-shadow: var(--shadow); border: 1px solid var(--line);
+        }
+        .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--slate); }
+        .kpi-value { font-size: 26px; font-weight: 700; margin-top: 6px; font-family: "Space Grotesk", sans-serif; }
+        .kpi-sub { font-size: 12px; color: var(--slate); margin-top: 4px; }
+
+        .chart-section {
+            background: var(--card); border-radius: var(--radius); padding: 20px;
+            box-shadow: var(--shadow); border: 1px solid var(--line);
+        }
+        .chart-title { font-size: 14px; font-weight: 600; margin-bottom: 14px; }
+
+        .table-card {
+            background: var(--card); border-radius: var(--radius); padding: 18px;
+            border: 1px solid var(--line); box-shadow: var(--shadow);
+        }
+        .table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 10px; }
+        .table-header h3 { font-size: 14px; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th, td { padding: 10px 8px; border-bottom: 1px solid #ede9e2; text-align: left; }
+        th { color: var(--slate); font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }
+        tr.clickable { cursor: pointer; transition: background 0.15s; }
+        tr.clickable:hover { background: rgba(196,154,74,0.06); }
+        td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        th.num { text-align: right; }
+        tbody tr:nth-child(even) { background: rgba(0,0,0,0.015); }
+        th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+
+        .badge {
+            display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;
+        }
+        .badge.critical { background: var(--red-bg); color: var(--red); }
+        .badge.warning { background: var(--amber-bg); color: var(--amber); }
+        .badge.ok { background: var(--green-bg); color: var(--green); }
+        .badge.info { background: rgba(31,111,107,0.1); color: var(--cass-teal); }
+        .badge.neutral { background: rgba(0,0,0,0.06); color: var(--slate); }
+        .trend-up { color: var(--green); font-weight: 600; }
+        .trend-down { color: var(--red); font-weight: 600; }
+        .trend-flat { color: var(--slate); }
+
+        .filters { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .filter-select { padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: #fff; font-size: 13px; }
+        .btn {
+            padding: 8px 14px; border-radius: 999px; border: 1px solid var(--line);
+            background: #fff; font-size: 13px; cursor: pointer;
+        }
+        .btn.primary { background: var(--cass-moss); color: #f7f1e8; border-color: var(--cass-moss); }
+
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(27,27,27,0.45);
+            backdrop-filter: blur(6px); z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; pointer-events: none; transition: opacity 0.2s;
+        }
+        .modal-overlay.open { opacity: 1; pointer-events: auto; }
+        .modal-box {
+            background: var(--card); border-radius: 18px; width: 90%; max-width: 820px;
+            max-height: 85vh; overflow-y: auto; padding: 28px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2); position: relative;
+        }
+        .modal-close {
+            position: absolute; top: 16px; right: 16px; width: 32px; height: 32px;
+            border-radius: 50%; border: none; background: rgba(0,0,0,0.06);
+            font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        }
+        .modal-header { margin-bottom: 20px; }
+        .modal-header h2 { font-family: "Space Grotesk", sans-serif; font-size: 20px; margin-bottom: 4px; }
+        .modal-header .subtitle { font-size: 13px; color: var(--slate); }
+        .modal-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 20px; }
+        .modal-stat { background: rgba(0,0,0,0.02); border-radius: 10px; padding: 12px; }
+        .modal-stat .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--slate); }
+        .modal-stat .val { font-size: 20px; font-weight: 700; margin-top: 4px; font-family: "Space Grotesk", sans-serif; }
+        .modal-stat .sub { font-size: 11px; color: var(--slate); margin-top: 2px; }
+        .modal-section { margin-bottom: 18px; }
+        .modal-section h3 { font-size: 13px; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--slate); }
+
+        .score-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .score-bar-label { font-size: 12px; width: 120px; color: var(--ink-soft); }
+        .score-bar-track { flex: 1; height: 10px; border-radius: 5px; background: rgba(0,0,0,0.06); overflow: hidden; }
+        .score-bar-fill { height: 100%; border-radius: 5px; transition: width 0.4s; }
+        .score-bar-pts { font-size: 12px; width: 50px; text-align: right; font-weight: 600; color: var(--ink-soft); }
+
+        .recommendation-box {
+            background: rgba(196,154,74,0.08); border: 1px solid rgba(196,154,74,0.3);
+            border-radius: var(--radius); padding: 14px 18px;
+            font-size: 13px; color: var(--ink-soft); line-height: 1.6;
+        }
+
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+
+        @media (max-width: 1100px) { .two-col { grid-template-columns: 1fr; } }
+        @media (max-width: 900px) {
+            .app-shell { grid-template-columns: 1fr; }
+            .side-nav { display: flex; gap: 12px; overflow-x: auto; padding: 12px 20px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <div class="brand-bar">
+            <div class="brand-mark">
+                <span class="brand-dot"></span>
+                <strong>Cass Brothers Intelligence</strong>
+            </div>
+            <div class="brand-actions">
+                <span class="pill">Stock Worthiness</span>
+            </div>
+        </div>
+
+        <aside class="side-nav">
+            <h2>Dashboards</h2>
+            <a class="nav-item" href="/dashboard"><span></span> Overview</a>
+            <a class="nav-item" href="/performance"><span></span> Performance</a>
+            <a class="nav-item" href="/seo-dashboard"><span></span> SEO &amp; Content</a>
+            <a class="nav-item" href="/ads-intelligence"><span></span> Ads Intelligence</a>
+            <a class="nav-item" href="/finance-dashboard"><span></span> Finance</a>
+            <a class="nav-item" href="/inventory"><span></span> Inventory</a>
+            <a class="nav-item active" href="/stock-worthiness"><span></span> Stock Worthiness</a>
+            <a class="nav-item" href="/pricing-intel"><span></span> Pricing Intel</a>
+            <a class="nav-item" href="/customer-intelligence"><span></span> Customer Intel</a>
+            <a class="nav-item" href="/merchant-center-intel"><span></span> Merchant Center</a>
+            <a class="nav-item" href="/strategic-intelligence"><span></span> Intelligence Brief</a>
+            <a class="nav-item" href="/site-intelligence"><span></span> Site Intelligence</a>
+            <a class="nav-item" href="/brand-intelligence"><span></span> Brand Intelligence</a>
+            <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
+                <a class="nav-item" href="#" onclick="openInviteModal();return false" style="opacity:0.6"><span></span> Invite User</a>
+                <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
+            </div>
+        </aside>
+
+        <section class="main-area">
+            <div class="overview">
+                <div>
+                    <h1>Stock Worthiness</h1>
+                    <p style="font-size:13px;color:var(--slate);margin-top:4px;">Identify order-in products worth moving to warehouse stock</p>
+                </div>
+                <div style="display:flex;gap:10px;">
+                    <button class="btn primary" onclick="exportCsv()">Export CSV</button>
+                </div>
+            </div>
+
+            <div class="tab-bar">
+                <button class="tab-btn active" onclick="switchTab('candidates')">Stock Candidates</button>
+                <button class="tab-btn" onclick="switchTab('destock')">Destock Review</button>
+            </div>
+
+            <!-- TAB 1: Stock Candidates -->
+            <div class="tab-panel active" id="tab-candidates">
+                <div class="kpi-row" id="kpi-row">
+                    <div class="kpi-card"><div class="kpi-label">Order-In SKUs</div><div class="kpi-value" id="kpi-order-in">--</div><div class="kpi-sub">Active products not in warehouse</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Worth Stocking</div><div class="kpi-value" id="kpi-worth">--</div><div class="kpi-sub">Score &ge; 50</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Estimated Capital</div><div class="kpi-value" id="kpi-capital">--</div><div class="kpi-sub">30-day stock for top candidates</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Revenue at Risk</div><div class="kpi-value" id="kpi-revenue">--</div><div class="kpi-sub">30d via slower order-in fulfilment</div></div>
+                </div>
+
+                <div class="two-col">
+                    <div class="chart-section">
+                        <div class="chart-title">Score Distribution</div>
+                        <canvas id="score-chart" height="200"></canvas>
+                    </div>
+                    <div class="chart-section">
+                        <div class="chart-title">Top 10 by Score</div>
+                        <canvas id="top10-chart" height="200"></canvas>
+                    </div>
+                </div>
+
+                <div class="table-card">
+                    <div class="table-header">
+                        <h3>Stock Candidates</h3>
+                        <div class="filters">
+                            <select class="filter-select" id="vendor-filter" onchange="applyFilters()">
+                                <option value="">All Brands</option>
+                            </select>
+                            <select class="filter-select" id="score-filter" onchange="applyFilters()">
+                                <option value="0">All Scores</option>
+                                <option value="75">Strong (&ge;75)</option>
+                                <option value="50">Worth Considering (&ge;50)</option>
+                                <option value="25">Marginal+ (&ge;25)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>SKU</th>
+                                    <th>Brand</th>
+                                    <th>Title</th>
+                                    <th class="num">Score</th>
+                                    <th class="num">Velocity/day</th>
+                                    <th class="num">Margin %</th>
+                                    <th class="num">Orders (30d)</th>
+                                    <th class="num">Revenue (30d)</th>
+                                    <th class="num">Capital (30d)</th>
+                                    <th>Trend</th>
+                                </tr>
+                            </thead>
+                            <tbody id="candidates-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div id="candidates-empty" style="display:none;text-align:center;padding:40px;color:var(--slate);">
+                        No candidates match the current filters.
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: Destock Review -->
+            <div class="tab-panel" id="tab-destock">
+                <div class="kpi-row" id="destock-kpi-row">
+                    <div class="kpi-card"><div class="kpi-label">Destock Candidates</div><div class="kpi-value" id="dk-count">--</div><div class="kpi-sub">Stocked items with no/low sales</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Capital Locked</div><div class="kpi-value" id="dk-capital">--</div><div class="kpi-sub">Tied up in destock candidates</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Avg Days Cover</div><div class="kpi-value" id="dk-doc">--</div><div class="kpi-sub">Average across destock items</div></div>
+                </div>
+
+                <div class="table-card">
+                    <div class="table-header">
+                        <h3>Stocked Items to Reconsider</h3>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Brand</th>
+                                    <th>Title</th>
+                                    <th class="num">On Hand</th>
+                                    <th class="num">Velocity/day</th>
+                                    <th class="num">Days Cover</th>
+                                    <th>Status</th>
+                                    <th class="num">Unit Cost</th>
+                                    <th class="num">Value Tied Up</th>
+                                </tr>
+                            </thead>
+                            <tbody id="destock-tbody"></tbody>
+                        </table>
+                    </div>
+                    <div id="destock-empty" style="display:none;text-align:center;padding:40px;color:var(--slate);">
+                        No destock candidates found.
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- SKU Detail Modal -->
+    <div class="modal-overlay" id="sku-modal" onclick="if(event.target===this)closeModal()">
+        <div class="modal-box">
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+            <div id="modal-content">
+                <div style="text-align:center;padding:40px;color:var(--slate)">Loading...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invite Modal (placeholder) -->
+    <div class="modal-overlay" id="invite-modal" onclick="if(event.target===this)closeInviteModal()">
+        <div class="modal-box" style="max-width:460px">
+            <button class="modal-close" onclick="closeInviteModal()">&times;</button>
+            <h2 style="font-family:'Space Grotesk',sans-serif;font-size:18px;margin-bottom:16px;">Invite User</h2>
+            <form onsubmit="sendInvite(event)">
+                <input type="email" id="invite-email" placeholder="Email address" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid var(--line);font-size:14px;margin-bottom:12px;">
+                <button type="submit" class="btn primary" style="width:100%;">Send Invite</button>
+            </form>
+        </div>
+    </div>
+
+<script>
+/* ── globals ── */
+var dashData = null;
+var destockData = null;
+var destockLoaded = false;
+var scoreChart = null;
+var top10Chart = null;
+var sparkChart = null;
+
+function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+function escJs(s) { if (s == null) return ''; return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/</g, '\\x3c'); }
+function fmt$(v) { return '$' + Number(v||0).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0}); }
+function fmtPct(v) { return v != null ? v.toFixed(1) + '%' : '--'; }
+
+function scoreBadge(score, bucket) {
+    var cls = 'neutral';
+    if (bucket === 'strong') cls = 'ok';
+    else if (bucket === 'consider') cls = 'warning';
+    else if (bucket === 'marginal') cls = 'info';
+    return '<span class="badge ' + cls + '">' + esc(score.toFixed(0)) + '</span>';
+}
+
+function trendArrow(trend) {
+    if (trend === 'increasing') return '<span class="trend-up">&#9650;</span>';
+    if (trend === 'decreasing') return '<span class="trend-down">&#9660;</span>';
+    return '<span class="trend-flat">&#9654;</span>';
+}
+
+function suggestionBadge(s) {
+    if (s === 'no_sales') return '<span class="badge critical">Dead Stock</span>';
+    if (s === 'overstock') return '<span class="badge warning">Overstock</span>';
+    return '<span class="badge neutral">' + esc(s) + '</span>';
+}
+
+/* ── tabs ── */
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(function(b, i) {
+        b.classList.toggle('active', (tab === 'candidates' && i === 0) || (tab === 'destock' && i === 1));
+    });
+    document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+    document.getElementById('tab-' + tab).classList.add('active');
+    if (tab === 'destock' && !destockLoaded) loadDestock();
+}
+
+/* ── main dashboard load ── */
+async function loadDashboard() {
+    try {
+        var res = await fetch('/stock-worthiness/dashboard');
+        var json = await res.json();
+        if (!json.success) throw new Error(json.detail || 'API error');
+        dashData = json.data;
+        renderKPIs(dashData.kpis);
+        renderScoreChart(dashData.score_distribution);
+        renderTop10Chart(dashData.candidates.slice(0, 10));
+        populateVendorFilter(dashData.vendors);
+        renderCandidateTable(dashData.candidates);
+    } catch (err) {
+        console.error('Dashboard load error:', err);
+        document.getElementById('candidates-tbody').innerHTML =
+            '<tr><td colspan="11" style="text-align:center;color:var(--red);padding:30px;">Error loading data: ' + esc(err.message) + '</td></tr>';
+    }
+}
+
+function renderKPIs(k) {
+    document.getElementById('kpi-order-in').textContent = (k.total_order_in || 0).toLocaleString();
+    document.getElementById('kpi-worth').textContent = (k.worth_stocking || 0).toLocaleString();
+    document.getElementById('kpi-capital').textContent = fmt$(k.estimated_capital);
+    document.getElementById('kpi-revenue').textContent = fmt$(k.revenue_at_risk);
+}
+
+function renderScoreChart(dist) {
+    var ctx = document.getElementById('score-chart').getContext('2d');
+    if (scoreChart) scoreChart.destroy();
+    scoreChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Strong (75+)', 'Worth Considering (50-74)', 'Marginal (25-49)', 'Not Recommended (<25)'],
+            datasets: [{
+                data: [dist.strong || 0, dist.consider || 0, dist.marginal || 0, dist.not_recommended || 0],
+                backgroundColor: ['#1a7a3a', '#c49a4a', '#1f6f6b', '#d1cdc6'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 12 } }
+            }
+        }
+    });
+}
+
+function renderTop10Chart(items) {
+    var ctx = document.getElementById('top10-chart').getContext('2d');
+    if (top10Chart) top10Chart.destroy();
+    var labels = items.map(function(c) { return c.sku.length > 18 ? c.sku.slice(0, 18) + '...' : c.sku; });
+    var scores = items.map(function(c) { return c.score; });
+    var colors = items.map(function(c) {
+        if (c.bucket === 'strong') return '#1a7a3a';
+        if (c.bucket === 'consider') return '#c49a4a';
+        if (c.bucket === 'marginal') return '#1f6f6b';
+        return '#d1cdc6';
+    });
+    top10Chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{ data: scores, backgroundColor: colors, borderRadius: 4, barThickness: 18 }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { min: 0, max: 100, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 11 } } },
+                y: { grid: { display: false }, ticks: { font: { size: 11 } } }
+            }
+        }
+    });
+}
+
+function populateVendorFilter(vendors) {
+    var sel = document.getElementById('vendor-filter');
+    var current = sel.value;
+    sel.innerHTML = '<option value="">All Brands</option>';
+    (vendors || []).forEach(function(v) {
+        sel.innerHTML += '<option value="' + esc(v) + '">' + esc(v) + '</option>';
+    });
+    sel.value = current;
+}
+
+function renderCandidateTable(items) {
+    var tbody = document.getElementById('candidates-tbody');
+    var empty = document.getElementById('candidates-empty');
+    if (!items || items.length === 0) {
+        tbody.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+    }
+    empty.style.display = 'none';
+    tbody.innerHTML = items.map(function(c, i) {
+        return '<tr class="clickable" onclick="openSkuModal(\'' + escJs(c.sku) + '\')">' +
+            '<td>' + (c.rank || i + 1) + '</td>' +
+            '<td><strong>' + esc(c.sku) + '</strong></td>' +
+            '<td>' + esc(c.vendor) + '</td>' +
+            '<td>' + esc((c.title || '').slice(0, 50)) + '</td>' +
+            '<td class="num">' + scoreBadge(c.score, c.bucket) + '</td>' +
+            '<td class="num">' + c.velocity_30d.toFixed(2) + '</td>' +
+            '<td class="num">' + fmtPct(c.margin_pct) + '</td>' +
+            '<td class="num">' + c.order_count_30d + '</td>' +
+            '<td class="num">' + fmt$(c.revenue_30d) + '</td>' +
+            '<td class="num">' + fmt$(c.capital_30d) + '</td>' +
+            '<td>' + trendArrow(c.trend) + '</td>' +
+            '</tr>';
+    }).join('');
+}
+
+function applyFilters() {
+    if (!dashData) return;
+    var vendor = document.getElementById('vendor-filter').value;
+    var minScore = parseInt(document.getElementById('score-filter').value) || 0;
+    var filtered = dashData.candidates.filter(function(c) {
+        if (minScore > 0 && c.score < minScore) return false;
+        if (vendor && c.vendor.toUpperCase() !== vendor.toUpperCase()) return false;
+        return true;
+    });
+    // Re-rank filtered results
+    filtered.forEach(function(c, i) { c.rank = i + 1; });
+    renderCandidateTable(filtered);
+}
+
+/* ── destock tab ── */
+async function loadDestock() {
+    try {
+        var res = await fetch('/stock-worthiness/destock-review');
+        var json = await res.json();
+        if (!json.success) throw new Error(json.detail || 'API error');
+        destockData = json.data;
+        destockLoaded = true;
+        renderDestockKPIs(destockData.kpis);
+        renderDestockTable(destockData.items);
+    } catch (err) {
+        console.error('Destock load error:', err);
+        document.getElementById('destock-tbody').innerHTML =
+            '<tr><td colspan="9" style="text-align:center;color:var(--red);padding:30px;">Error: ' + esc(err.message) + '</td></tr>';
+    }
+}
+
+function renderDestockKPIs(k) {
+    document.getElementById('dk-count').textContent = (k.destock_candidates || 0).toLocaleString();
+    document.getElementById('dk-capital').textContent = fmt$(k.capital_locked);
+    document.getElementById('dk-doc').textContent = (k.avg_days_cover || 0).toFixed(0);
+}
+
+function renderDestockTable(items) {
+    var tbody = document.getElementById('destock-tbody');
+    var empty = document.getElementById('destock-empty');
+    if (!items || items.length === 0) {
+        tbody.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+    }
+    empty.style.display = 'none';
+    tbody.innerHTML = items.map(function(d) {
+        return '<tr class="clickable" onclick="openSkuModal(\'' + escJs(d.sku) + '\')">' +
+            '<td><strong>' + esc(d.sku) + '</strong></td>' +
+            '<td>' + esc(d.brand) + '</td>' +
+            '<td>' + esc((d.title || '').slice(0, 50)) + '</td>' +
+            '<td class="num">' + d.on_hand + '</td>' +
+            '<td class="num">' + d.velocity.toFixed(2) + '</td>' +
+            '<td class="num">' + (d.days_cover > 9999 ? '9999+' : d.days_cover.toFixed(0)) + '</td>' +
+            '<td>' + suggestionBadge(d.suggestion) + '</td>' +
+            '<td class="num">' + fmt$(d.unit_cost) + '</td>' +
+            '<td class="num">' + fmt$(d.value_tied_up) + '</td>' +
+            '</tr>';
+    }).join('');
+}
+
+/* ── SKU detail modal ── */
+async function openSkuModal(sku) {
+    document.getElementById('sku-modal').classList.add('open');
+    document.getElementById('modal-content').innerHTML =
+        '<div style="text-align:center;padding:40px;color:var(--slate)">Loading...</div>';
+    try {
+        var res = await fetch('/stock-worthiness/sku-detail?sku=' + encodeURIComponent(sku));
+        var json = await res.json();
+        if (!json.success) throw new Error(json.detail || 'API error');
+        renderModal(json.data);
+    } catch (err) {
+        document.getElementById('modal-content').innerHTML =
+            '<div style="text-align:center;padding:40px;color:var(--red)">Error: ' + esc(err.message) + '</div>';
+    }
+}
+
+function closeModal() {
+    document.getElementById('sku-modal').classList.remove('open');
+    if (sparkChart) { sparkChart.destroy(); sparkChart = null; }
+}
+
+function renderModal(d) {
+    var html = '';
+    // Header
+    html += '<div class="modal-header">';
+    html += '<h2>' + esc(d.sku) + '</h2>';
+    html += '<div class="subtitle">' + esc(d.vendor) + ' &mdash; ' + esc(d.title) + '</div>';
+    html += '</div>';
+
+    // Key metrics
+    html += '<div class="modal-stats">';
+    html += statCard('Velocity/day', d.velocity_30d.toFixed(2), d.trend === 'increasing' ? 'Trending up' : d.trend === 'decreasing' ? 'Trending down' : 'Stable');
+    html += statCard('Units (30d)', d.units_sold_30d);
+    html += statCard('Revenue (30d)', fmt$(d.revenue_30d));
+    html += statCard('Orders (30d)', d.order_count_30d);
+    html += statCard('Margin', d.margin_pct != null ? d.margin_pct.toFixed(1) + '%' : 'N/A', d.cost_missing ? 'Cost missing' : '');
+    html += statCard('Capital (30d)', fmt$(d.capital_30d), '30-day stock cost');
+    html += '</div>';
+
+    // Recommendation
+    if (d.recommendation) {
+        html += '<div class="recommendation-box" style="margin-bottom:18px;">' + esc(d.recommendation) + '</div>';
+    }
+
+    // Sparkline
+    html += '<div class="modal-section">';
+    html += '<h3>30-Day Sales</h3>';
+    html += '<canvas id="modal-spark" height="100"></canvas>';
+    html += '</div>';
+
+    // Recent orders
+    if (d.recent_orders && d.recent_orders.length > 0) {
+        html += '<div class="modal-section">';
+        html += '<h3>Recent Orders</h3>';
+        html += '<table><thead><tr><th>Date</th><th>Order #</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Total</th></tr></thead><tbody>';
+        d.recent_orders.forEach(function(o) {
+            html += '<tr>';
+            html += '<td>' + esc(o.date) + '</td>';
+            html += '<td>' + esc(o.order_number) + '</td>';
+            html += '<td class="num">' + o.quantity + '</td>';
+            html += '<td class="num">' + fmt$(o.price) + '</td>';
+            html += '<td class="num">' + fmt$(o.total) + '</td>';
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        html += '</div>';
+    }
+
+    document.getElementById('modal-content').innerHTML = html;
+
+    // Render sparkline after DOM update
+    setTimeout(function() { renderSparkline(d.sparkline); }, 50);
+}
+
+function statCard(label, val, sub) {
+    return '<div class="modal-stat"><div class="label">' + esc(label) + '</div><div class="val">' + esc(String(val)) + '</div>' +
+        (sub ? '<div class="sub">' + esc(sub) + '</div>' : '') + '</div>';
+}
+
+function renderSparkline(data) {
+    var canvas = document.getElementById('modal-spark');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    if (sparkChart) sparkChart.destroy();
+    sparkChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: data.map(function(d) { return d.date.slice(5); }),
+            datasets: [{
+                data: data.map(function(d) { return d.units; }),
+                backgroundColor: 'rgba(196,154,74,0.5)',
+                borderColor: '#c49a4a',
+                borderWidth: 1,
+                borderRadius: 3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false }, ticks: { font: { size: 10 }, maxTicksLimit: 10 } },
+                y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' }, ticks: { font: { size: 11 } } }
+            }
+        }
+    });
+}
+
+/* ── CSV export ── */
+function exportCsv() {
+    if (!dashData || !dashData.candidates) return;
+    var rows = [['Rank','SKU','Brand','Title','Score','Bucket','Velocity/day','Margin %','Orders 30d','Revenue 30d','Capital 30d','Trend']];
+    dashData.candidates.forEach(function(c, i) {
+        rows.push([
+            c.rank || i + 1, c.sku, c.vendor, (c.title||'').replace(/"/g,'""'),
+            c.score.toFixed(1), c.bucket, c.velocity_30d.toFixed(2),
+            c.margin_pct != null ? c.margin_pct.toFixed(1) : '',
+            c.order_count_30d, c.revenue_30d.toFixed(2), c.capital_30d.toFixed(2), c.trend
+        ]);
+    });
+    var csv = rows.map(function(r) { return r.map(function(v) { return '"' + String(v).replace(/"/g,'""') + '"'; }).join(','); }).join('\n');
+    var blob = new Blob([csv], {type: 'text/csv'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'stock_worthiness_' + new Date().toISOString().slice(0,10) + '.csv';
+    a.click();
+}
+
+/* ── invite modal ── */
+function openInviteModal() { document.getElementById('invite-modal').classList.add('open'); }
+function closeInviteModal() { document.getElementById('invite-modal').classList.remove('open'); }
+async function sendInvite(e) {
+    e.preventDefault();
+    var email = document.getElementById('invite-email').value;
+    if (!email) return;
+    try {
+        var res = await fetch('/auth/invite', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({email: email}) });
+        var json = await res.json();
+        if (json.success) { alert('Invite sent to ' + email); closeInviteModal(); }
+        else { alert(json.detail || 'Failed to send invite'); }
+    } catch (err) { alert('Error: ' + err.message); }
+}
+
+/* ── init ── */
+loadDashboard();
+</script>
+</body>
+</html>
