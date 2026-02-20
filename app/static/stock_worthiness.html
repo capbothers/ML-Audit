@@ -253,11 +253,11 @@
                 <div class="two-col">
                     <div class="chart-section">
                         <div class="chart-title">Score Distribution</div>
-                        <canvas id="score-chart" height="200"></canvas>
+                        <div style="position:relative;height:220px;"><canvas id="score-chart"></canvas></div>
                     </div>
                     <div class="chart-section">
                         <div class="chart-title">Top 10 by Score</div>
-                        <canvas id="top10-chart" height="200"></canvas>
+                        <div style="position:relative;height:220px;"><canvas id="top10-chart"></canvas></div>
                     </div>
                 </div>
 
@@ -629,7 +629,7 @@ function renderModal(d) {
     // Sparkline
     html += '<div class="modal-section">';
     html += '<h3>30-Day Sales</h3>';
-    html += '<canvas id="modal-spark" height="100"></canvas>';
+    html += '<div style="position:relative;height:120px;"><canvas id="modal-spark"></canvas></div>';
     html += '</div>';
 
     // Recent orders
