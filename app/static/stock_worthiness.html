@@ -299,6 +299,13 @@
                     <div id="candidates-empty" style="display:none;text-align:center;padding:40px;color:var(--slate);">
                         No candidates match the current filters.
                     </div>
+                    <div class="pagination" id="candidates-pagination" style="display:none;">
+                        <div style="color:var(--slate);" id="candidates-page-info"></div>
+                        <div class="page-btns">
+                            <button class="page-btn" onclick="candidatesPage(-1)" id="cand-prev">&laquo; Prev</button>
+                            <button class="page-btn" onclick="candidatesPage(1)" id="cand-next">Next &raquo;</button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -335,6 +342,13 @@
                     <div id="destock-empty" style="display:none;text-align:center;padding:40px;color:var(--slate);">
                         No destock candidates found.
                     </div>
+                    <div class="pagination" id="destock-pagination" style="display:none;">
+                        <div style="color:var(--slate);" id="destock-page-info"></div>
+                        <div class="page-btns">
+                            <button class="page-btn" onclick="destockPage(-1)" id="dest-prev">&laquo; Prev</button>
+                            <button class="page-btn" onclick="destockPage(1)" id="dest-next">Next &raquo;</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </section>
@@ -370,6 +384,11 @@ var destockLoaded = false;
 var scoreChart = null;
 var top10Chart = null;
 var sparkChart = null;
+var PER_PAGE = 25;
+var candCurrentPage = 1;
+var candFilteredItems = [];
+var destCurrentPage = 1;
+var destFilteredItems = [];
 
 function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
 function escJs(s) { if (s == null) return ''; return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/</g, '\\x3c'); }
@@ -496,17 +515,30 @@ function populateVendorFilter(vendors) {
 }
 
 function renderCandidateTable(items) {
+    candFilteredItems = items || [];
+    candCurrentPage = 1;
+    renderCandidatePage();
+}
+
+function renderCandidatePage() {
     var tbody = document.getElementById('candidates-tbody');
     var empty = document.getElementById('candidates-empty');
+    var pag = document.getElementById('candidates-pagination');
+    var items = candFilteredItems;
     if (!items || items.length === 0) {
         tbody.innerHTML = '';
         empty.style.display = 'block';
+        pag.style.display = 'none';
         return;
     }
     empty.style.display = 'none';
-    tbody.innerHTML = items.map(function(c, i) {
+    var totalPages = Math.ceil(items.length / PER_PAGE);
+    if (candCurrentPage > totalPages) candCurrentPage = totalPages;
+    var start = (candCurrentPage - 1) * PER_PAGE;
+    var page = items.slice(start, start + PER_PAGE);
+    tbody.innerHTML = page.map(function(c, i) {
         return '<tr class="clickable" onclick="openSkuModal(\'' + escJs(c.sku) + '\')">' +
-            '<td>' + (c.rank || i + 1) + '</td>' +
+            '<td>' + (start + i + 1) + '</td>' +
             '<td><strong>' + esc(c.sku) + '</strong></td>' +
             '<td>' + esc(c.vendor) + '</td>' +
             '<td>' + esc((c.title || '').slice(0, 50)) + '</td>' +
@@ -519,6 +551,16 @@ function renderCandidateTable(items) {
             '<td>' + trendArrow(c.trend) + '</td>' +
             '</tr>';
     }).join('');
+    pag.style.display = items.length > PER_PAGE ? 'flex' : 'none';
+    document.getElementById('candidates-page-info').textContent =
+        'Showing ' + (start + 1) + '-' + Math.min(start + PER_PAGE, items.length) + ' of ' + items.length;
+    document.getElementById('cand-prev').disabled = candCurrentPage <= 1;
+    document.getElementById('cand-next').disabled = candCurrentPage >= totalPages;
+}
+
+function candidatesPage(dir) {
+    candCurrentPage += dir;
+    renderCandidatePage();
 }
 
 function applyFilters() {
@@ -530,8 +572,6 @@ function applyFilters() {
         if (vendor && c.vendor.toUpperCase() !== vendor.toUpperCase()) return false;
         return true;
     });
-    // Re-rank filtered results
-    filtered.forEach(function(c, i) { c.rank = i + 1; });
     renderCandidateTable(filtered);
 }
 
@@ -559,15 +599,28 @@ function renderDestockKPIs(k) {
 }
 
 function renderDestockTable(items) {
+    destFilteredItems = items || [];
+    destCurrentPage = 1;
+    renderDestockPage();
+}
+
+function renderDestockPage() {
     var tbody = document.getElementById('destock-tbody');
     var empty = document.getElementById('destock-empty');
+    var pag = document.getElementById('destock-pagination');
+    var items = destFilteredItems;
     if (!items || items.length === 0) {
         tbody.innerHTML = '';
         empty.style.display = 'block';
+        pag.style.display = 'none';
         return;
     }
     empty.style.display = 'none';
-    tbody.innerHTML = items.map(function(d) {
+    var totalPages = Math.ceil(items.length / PER_PAGE);
+    if (destCurrentPage > totalPages) destCurrentPage = totalPages;
+    var start = (destCurrentPage - 1) * PER_PAGE;
+    var page = items.slice(start, start + PER_PAGE);
+    tbody.innerHTML = page.map(function(d) {
         return '<tr class="clickable" onclick="openSkuModal(\'' + escJs(d.sku) + '\')">' +
             '<td><strong>' + esc(d.sku) + '</strong></td>' +
             '<td>' + esc(d.brand) + '</td>' +
@@ -580,6 +633,16 @@ function renderDestockTable(items) {
             '<td class="num">' + fmt$(d.value_tied_up) + '</td>' +
             '</tr>';
     }).join('');
+    pag.style.display = items.length > PER_PAGE ? 'flex' : 'none';
+    document.getElementById('destock-page-info').textContent =
+        'Showing ' + (start + 1) + '-' + Math.min(start + PER_PAGE, items.length) + ' of ' + items.length;
+    document.getElementById('dest-prev').disabled = destCurrentPage <= 1;
+    document.getElementById('dest-next').disabled = destCurrentPage >= totalPages;
+}
+
+function destockPage(dir) {
+    destCurrentPage += dir;
+    renderDestockPage();
 }
 
 /* ── SKU detail modal ── */
