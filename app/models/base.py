@@ -1,6 +1,7 @@
 """
 Base database model and session management
 """
+import os
 from sqlalchemy import create_engine
 from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.declarative import declarative_base
@@ -9,11 +10,17 @@ from app.config import get_settings
 
 settings = get_settings()
 
+# Resolve relative SQLite paths to absolute so cwd changes can't break it
+_db_url = settings.database_url
+if _db_url.startswith("sqlite:///") and not _db_url.startswith("sqlite:////"):
+    rel_path = _db_url[len("sqlite:///"):]
+    _db_url = "sqlite:///" + os.path.abspath(rel_path)
+
 # Create database engine
-if settings.database_url.startswith("sqlite"):
+if _db_url.startswith("sqlite"):
     # SQLite works best with a single connection in this app's workload.
     engine = create_engine(
-        settings.database_url,
+        _db_url,
         connect_args={"check_same_thread": False, "timeout": 60},
         poolclass=NullPool,
         pool_pre_ping=True
