@@ -195,8 +195,8 @@ async def get_inventory_dashboard(
 
 @router.get("/inventory-reorder-queue")
 async def get_inventory_reorder_queue(
-    page: int = Query(1, description="Page number"),
-    per_page: int = Query(25, description="Items per page"),
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(25, ge=1, le=200, description="Items per page"),
     brand: Optional[str] = Query(None, description="Filter by brand"),
     db: Session = Depends(get_db),
 ):
@@ -245,7 +245,7 @@ async def get_inventory_sku_detail(
 @router.get("/inventory-sku-search")
 async def search_inventory_skus(
     q: str = Query(..., description="Search query"),
-    limit: int = Query(20, description="Max results"),
+    limit: int = Query(20, ge=1, le=200, description="Max results"),
     db: Session = Depends(get_db),
 ):
     """Search SKUs by partial match on sku, brand, or title."""

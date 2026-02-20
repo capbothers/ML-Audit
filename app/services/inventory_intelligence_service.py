@@ -654,8 +654,8 @@ class InventoryIntelligenceService:
             # Total count for pagination
             total_count = base.count()
 
-            # KPIs (no joins needed — from MLInventorySuggestion only)
-            kpi_rows = (
+            # KPIs — apply same brand filter so cards match the table
+            kpi_base = (
                 self.db.query(
                     func.sum(
                         case(
@@ -686,13 +686,17 @@ class InventoryIntelligenceService:
                 .filter(
                     MLInventorySuggestion.suggestion.in_(["reorder_now", "reorder_soon"])
                 )
-                .first()
             )
+            if brand:
+                kpi_base = kpi_base.filter(
+                    func.upper(MLInventorySuggestion.brand) == brand.upper()
+                )
+            kpi_rows = kpi_base.first()
 
             # Estimated reorder cost using deduplicated cost subqueries
             pc_cost2, inv_cost2 = self._cost_subqueries()
             effective_cost2 = func.coalesce(pc_cost2.c.cost, inv_cost2.c.cost)
-            est_cost_row = (
+            est_cost_q = (
                 self.db.query(
                     func.sum(
                         MLInventorySuggestion.reorder_quantity * effective_cost2
@@ -705,8 +709,12 @@ class InventoryIntelligenceService:
                     MLInventorySuggestion.reorder_quantity.isnot(None),
                     effective_cost2.isnot(None),
                 )
-                .first()
             )
+            if brand:
+                est_cost_q = est_cost_q.filter(
+                    func.upper(MLInventorySuggestion.brand) == brand.upper()
+                )
+            est_cost_row = est_cost_q.first()
 
             # Paginated items
             items = (

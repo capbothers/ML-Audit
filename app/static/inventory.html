@@ -494,7 +494,7 @@
                             </tr>
                         </thead>
                         <tbody id="reorder-table">
-                            <tr><td colspan="10">Select this tab to load…</td></tr>
+                            <tr><td colspan="11">Select this tab to load…</td></tr>
                         </tbody>
                     </table>
                     <div class="pagination" id="reorder-pagination"></div>
@@ -723,11 +723,10 @@
             // Populate reorder brand filter
             const brands = dashData.brand_summary.map(b => b.brand).filter(Boolean).sort();
             const sel = document.getElementById('reorder-brand-filter');
-            sel.innerHTML = '<option value="">All Brands</option>' + brands.map(b => `<option value="${b}">${b}</option>`).join('');
+            sel.innerHTML = '<option value="">All Brands</option>' + brands.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
             sel.onchange = () => { reorderBrand = sel.value; reorderPage = 1; loadReorderQueue(); };
 
-            // Load all items for CSV
-            loadAllItemsForCsv();
+            // CSV data loaded lazily on first export click
         } catch (e) {
             console.error('Dashboard load error:', e);
         }
@@ -860,7 +859,7 @@
         container.innerHTML = brands.map(b => {
             const pct = maxVal > 0 ? (b.value / maxVal * 100) : 0;
             return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-                <div style="width:100px;font-size:12px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${b.brand}">${b.brand}</div>
+                <div style="width:100px;font-size:12px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(b.brand)}">${esc(b.brand)}</div>
                 <div style="flex:1;height:20px;background:rgba(0,0,0,0.04);border-radius:4px;overflow:hidden;">
                     <div style="height:100%;width:${pct}%;background:var(--cass-teal);border-radius:4px;transition:width 0.4s;"></div>
                 </div>
@@ -898,7 +897,7 @@
         if (!brands || !brands.length) { tbody.innerHTML = '<tr><td colspan="8">No brand data</td></tr>'; return; }
         tbody.innerHTML = brands.map(b =>
             `<tr>
-                <td><strong>${b.brand || '-'}</strong></td>
+                <td><strong>${esc(b.brand || '-')}</strong></td>
                 <td class="num">${b.sku_count}</td>
                 <td class="num">${b.total_units.toLocaleString()}</td>
                 <td class="num">${b.avg_velocity.toFixed(2)}</td>
@@ -956,7 +955,7 @@
             if (r.oversold) flagsHtml += '<span class="badge critical" style="margin-right:4px;">OVERSOLD</span>';
             if (r.cost_missing) flagsHtml += '<span class="badge warning" style="margin-right:4px;">No Cost</span>';
             if ((r.offline_units_30d || 0) > 0) flagsHtml += `<span class="badge info" title="Est. offline sales">${r.offline_units_30d} offline</span>`;
-            return `<tr class="clickable" onclick="openSkuModal('${esc(r.sku)}')">
+            return `<tr class="clickable" onclick="openSkuModal('${escJs(r.sku)}')">
                 <td><strong>${esc(r.sku)}</strong></td>
                 <td>${esc(r.brand || '-')}</td>
                 <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.title || '')}">${esc(r.title || '-')}</td>
@@ -1043,7 +1042,7 @@
         section.style.display = 'block';
         countEl.textContent = items.length + ' items';
         tbody.innerHTML = items.map(r =>
-            `<tr class="clickable" onclick="openSkuModal('${esc(r.sku)}')">
+            `<tr class="clickable" onclick="openSkuModal('${escJs(r.sku)}')">
                 <td><strong>${esc(r.sku)}</strong></td>
                 <td>${esc(r.brand || '-')}</td>
                 <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.title || '')}">${esc(r.title || '-')}</td>
@@ -1077,7 +1076,7 @@
         document.getElementById('overstock-count').textContent = (items || []).length + ' items';
         if (!items || !items.length) { tbody.innerHTML = '<tr><td colspan="8">No overstock items</td></tr>'; return; }
         tbody.innerHTML = items.slice(0, 50).map(r =>
-            `<tr class="clickable" onclick="openSkuModal('${esc(r.sku)}')">
+            `<tr class="clickable" onclick="openSkuModal('${escJs(r.sku)}')">
                 <td><strong>${esc(r.sku)}</strong></td>
                 <td>${esc(r.brand || '-')}</td>
                 <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.title || '')}">${esc(r.title || '-')}</td>
@@ -1095,7 +1094,7 @@
         document.getElementById('nosales-count').textContent = (items || []).length + ' items';
         if (!items || !items.length) { tbody.innerHTML = '<tr><td colspan="6">No dead stock items</td></tr>'; return; }
         tbody.innerHTML = items.slice(0, 50).map(r =>
-            `<tr class="clickable" onclick="openSkuModal('${esc(r.sku)}')">
+            `<tr class="clickable" onclick="openSkuModal('${escJs(r.sku)}')">
                 <td><strong>${esc(r.sku)}</strong></td>
                 <td>${esc(r.brand || '-')}</td>
                 <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.title || '')}">${esc(r.title || '-')}</td>
@@ -1151,7 +1150,7 @@
             const tbody = document.getElementById('search-table');
             if (!items.length) { tbody.innerHTML = '<tr><td colspan="8">No results found</td></tr>'; return; }
             tbody.innerHTML = items.map(r =>
-                `<tr class="clickable" onclick="openSkuModal('${esc(r.sku)}')">
+                `<tr class="clickable" onclick="openSkuModal('${escJs(r.sku)}')">
                     <td><strong>${esc(r.sku)}</strong></td>
                     <td>${esc(r.brand || '-')}</td>
                     <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(r.title || '')}">${esc(r.title || '-')}</td>
@@ -1310,6 +1309,11 @@
         return d.innerHTML;
     }
 
+    function escJs(s) {
+        if (s == null) return '';
+        return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/</g, '\\x3c');
+    }
+
     function renderSparklineSVG(data, width, height) {
         if (!data || !data.length) return '';
         const max = Math.max(...data, 1);
@@ -1328,7 +1332,12 @@
     /* ──────────────────────────────────────────
        CSV EXPORT
     ────────────────────────────────────────── */
-    function exportCsv() {
+    async function exportCsv() {
+        if (!allItems.length) {
+            try {
+                await loadAllItemsForCsv();
+            } catch(e) { /* logged inside */ }
+        }
         if (!allItems.length) { alert('No data to export'); return; }
         const rows = [['SKU','Brand','Title','On Hand','Velocity','Trend','Days Cover','Suggestion','Reorder Qty','Urgency']];
         allItems.forEach(item => {
