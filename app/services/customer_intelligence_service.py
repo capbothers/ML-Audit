@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, case, distinct, and_, or_, desc, asc
 
 from app.models.shopify import ShopifyCustomer, ShopifyOrder, ShopifyOrderItem, ShopifyRefund
+from app.utils.cache import get_cached, set_cached, _MISS
 
 logger = logging.getLogger(__name__)
 
@@ -189,10 +190,10 @@ class CustomerIntelligenceService:
             return "Loyal"
         if r >= 3 and f >= 2 and m >= 2:
             return "Potential Loyalist"
-        if r >= 4 and f <= 2:
-            return "Promising"
         if r >= 4 and f == 1:
             return "New Customers"
+        if r >= 4 and f <= 2:
+            return "Promising"
         if r >= 2 and r <= 3 and f >= 2 and m >= 2:
             return "Need Attention"
         if r >= 2 and r <= 3 and f <= 2:
@@ -501,7 +502,7 @@ class CustomerIntelligenceService:
         in month+0, month+1, ..., month+11.
         """
         try:
-            # Get first order month per customer
+            # Get first valid (paid, non-cancelled) order month per customer
             first_order_sub = (
                 self.db.query(
                     ShopifyOrder.customer_email,
@@ -509,6 +510,8 @@ class CustomerIntelligenceService:
                 )
                 .filter(ShopifyOrder.customer_email.isnot(None))
                 .filter(ShopifyOrder.customer_email != "")
+                .filter(ShopifyOrder.cancelled_at.is_(None))
+                .filter(ShopifyOrder.financial_status.in_(["paid", "partially_refunded"]))
                 .group_by(ShopifyOrder.customer_email)
                 .subquery()
             )
@@ -921,11 +924,15 @@ class CustomerIntelligenceService:
             if not customer:
                 return None
 
-            # RFM scores for this customer
-            rfm_data = self._compute_rfm_scores()
+            # RFM scores — cached to avoid full recompute on every modal open
+            cache_key = "ci_rfm_scores"
+            rfm_data = get_cached(cache_key)
+            if rfm_data is _MISS:
+                rfm_data = self._compute_rfm_scores()
+                set_cached(cache_key, rfm_data, 300)
             cust_rfm = next((c for c in rfm_data if c["email"] == email), None)
 
-            # Recent orders
+            # Recent orders (paid, non-cancelled — consistent with summary metrics)
             orders = (
                 self.db.query(
                     ShopifyOrder.order_number,
@@ -934,7 +941,11 @@ class CustomerIntelligenceService:
                     ShopifyOrder.financial_status,
                     ShopifyOrder.fulfillment_status,
                 )
-                .filter(ShopifyOrder.customer_email == email)
+                .filter(
+                    ShopifyOrder.customer_email == email,
+                    ShopifyOrder.cancelled_at.is_(None),
+                    ShopifyOrder.financial_status.in_(["paid", "partially_refunded"]),
+                )
                 .order_by(desc(ShopifyOrder.created_at))
                 .limit(10)
                 .all()
