@@ -430,6 +430,7 @@ function switchTab(tab) {
 async function loadDashboard() {
     try {
         var res = await fetch('/stock-worthiness/dashboard');
+        if (!res.ok) throw new Error('Server returned ' + res.status + ' ' + res.statusText);
         var json = await res.json();
         if (!json.success) throw new Error(json.detail || 'API error');
         dashData = json.data;
@@ -581,6 +582,7 @@ function applyFilters() {
 async function loadDestock() {
     try {
         var res = await fetch('/stock-worthiness/destock-review');
+        if (!res.ok) throw new Error('Server returned ' + res.status + ' ' + res.statusText);
         var json = await res.json();
         if (!json.success) throw new Error(json.detail || 'API error');
         destockData = json.data;
@@ -655,6 +657,7 @@ async function openSkuModal(sku) {
         '<div style="text-align:center;padding:40px;color:var(--slate)">Loading...</div>';
     try {
         var res = await fetch('/stock-worthiness/sku-detail?sku=' + encodeURIComponent(sku));
+        if (!res.ok) throw new Error('Server returned ' + res.status + ' ' + res.statusText);
         var json = await res.json();
         if (!json.success) throw new Error(json.detail || 'API error');
         renderModal(json.data);
