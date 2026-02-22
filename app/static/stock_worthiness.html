@@ -683,7 +683,7 @@ function renderModal(d) {
     // Key metrics
     html += '<div class="modal-stats">';
     html += statCard('Velocity/day', d.velocity_30d.toFixed(2), d.trend === 'increasing' ? 'Trending up' : d.trend === 'decreasing' ? 'Trending down' : 'Stable');
-    html += statCard('Units (30d)', d.units_sold_30d);
+    html += statCard('Units (30d)', d.units_sold_30d, d.offline_units_30d > 0 ? 'Incl. ' + Number(d.offline_units_30d).toFixed(0) + ' offline' : 'Online only');
     html += statCard('Offline Units (30d)', Number(d.offline_units_30d || 0).toFixed(1), d.offline_data_available ? 'Inferred from stock depletion' : 'Insufficient snapshot history');
     html += statCard('Revenue (30d)', fmt$(d.revenue_30d));
     html += statCard('Orders (30d)', d.order_count_30d);
@@ -698,7 +698,7 @@ function renderModal(d) {
 
     // Sparkline
     html += '<div class="modal-section">';
-    html += '<h3>30-Day Sales</h3>';
+    html += '<h3>30-Day Online Orders</h3>';
     html += '<div style="position:relative;height:120px;"><canvas id="modal-spark"></canvas></div>';
     html += '</div>';
 

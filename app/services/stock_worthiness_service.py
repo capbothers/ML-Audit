@@ -67,7 +67,12 @@ class StockWorthinessService:
         return snapshot_day_count >= 2
 
     def _compute_offline_units_map(self, skus_upper: List[str], days: int = 30) -> Dict[str, float]:
-        """Infer offline units from inventory depletion that exceeds online sales."""
+        """Infer offline units from inventory depletion that exceeds online sales.
+
+        Compares inventory drop between consecutive snapshots to total online
+        sales across the full gap (prev_date, snapshot_date], so multi-day gaps
+        between snapshots are handled correctly.
+        """
         if not skus_upper:
             return {}
 
@@ -108,7 +113,7 @@ class StockWorthinessService:
             .group_by(func.upper(ShopifyOrderItem.sku), func.date(ShopifyOrderItem.order_date))
             .all()
         )
-        online_by_day = {
+        online_by_day: Dict[tuple, float] = {
             (r.sku_upper, r.order_day): float(r.qty or 0)
             for r in online_rows
         }
@@ -120,7 +125,14 @@ class StockWorthinessService:
             if prev is not None:
                 inventory_delta = int(prev.quantity or 0) - int(row.quantity or 0)
                 if inventory_delta > 0:
-                    online_sold = online_by_day.get((row.sku_upper, row.snapshot_date), 0.0)
+                    # Sum online sales across the full gap (prev_date, snapshot_date]
+                    prev_date = prev.snapshot_date
+                    cur_date = row.snapshot_date
+                    online_sold = 0.0
+                    d = prev_date + timedelta(days=1)
+                    while d <= cur_date:
+                        online_sold += online_by_day.get((row.sku_upper, d), 0.0)
+                        d += timedelta(days=1)
                     if inventory_delta > online_sold:
                         offline_map[row.sku_upper] += inventory_delta - online_sold
             prev_by_sku[row.sku_upper] = row
@@ -425,6 +437,7 @@ class StockWorthinessService:
 
         return {
             "kpis": kpis,
+            "kpis_scope": "global",  # KPIs/distribution cover all candidates, unaffected by min_score/vendor filters
             "candidates": candidates,
             "score_distribution": dist,
             "vendors": vendors,
@@ -480,11 +493,13 @@ class StockWorthinessService:
         for r in rows:
             sku_upper = r.sku.strip().upper() if r.sku else ""
             offline_units_30d = float(offline_30_map.get(sku_upper, 0.0)) if offline_data_available else 0.0
-            if offline_units_30d > 0:
+            on_hand = int(r.units_on_hand or 0)
+            # Only exclude if offline movement covers >10% of on-hand stock
+            # (trivial movement like 1 unit vs 300 on hand should still flag)
+            if offline_units_30d > 0 and on_hand > 0 and (offline_units_30d / on_hand) > 0.10:
                 excluded_offline_active += 1
                 continue
             uc = float(r.unit_cost or 0)
-            on_hand = int(r.units_on_hand or 0)
             value = round(on_hand * uc, 2)
             total_capital += value
             doc = float(r.days_of_cover or 0)
