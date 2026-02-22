@@ -287,6 +287,7 @@
                                     <th class="num">Velocity/day</th>
                                     <th class="num">Margin %</th>
                                     <th class="num">Orders (30d)</th>
+                                    <th class="num">Offline (30d)</th>
                                     <th class="num">Revenue (30d)</th>
                                     <th class="num">Capital (30d)</th>
                                     <th>Trend</th>
@@ -331,6 +332,7 @@
                                     <th class="num">Velocity/day</th>
                                     <th class="num">Days Cover</th>
                                     <th>Status</th>
+                                    <th class="num">Offline (30d)</th>
                                     <th class="num">Unit Cost</th>
                                     <th class="num">Value Tied Up</th>
                                 </tr>
@@ -439,7 +441,7 @@ async function loadDashboard() {
     } catch (err) {
         console.error('Dashboard load error:', err);
         document.getElementById('candidates-tbody').innerHTML =
-            '<tr><td colspan="11" style="text-align:center;color:var(--red);padding:30px;">Error loading data: ' + esc(err.message) + '</td></tr>';
+            '<tr><td colspan="12" style="text-align:center;color:var(--red);padding:30px;">Error loading data: ' + esc(err.message) + '</td></tr>';
     }
 }
 
@@ -545,6 +547,7 @@ function renderCandidatePage() {
             '<td class="num">' + c.velocity_30d.toFixed(2) + '</td>' +
             '<td class="num">' + fmtPct(c.margin_pct) + '</td>' +
             '<td class="num">' + c.order_count_30d + '</td>' +
+            '<td class="num">' + Number(c.offline_units_30d || 0).toFixed(1) + '</td>' +
             '<td class="num">' + fmt$(c.revenue_30d) + '</td>' +
             '<td class="num">' + fmt$(c.capital_30d) + '</td>' +
             '<td>' + trendArrow(c.trend) + '</td>' +
@@ -587,7 +590,7 @@ async function loadDestock() {
     } catch (err) {
         console.error('Destock load error:', err);
         document.getElementById('destock-tbody').innerHTML =
-            '<tr><td colspan="9" style="text-align:center;color:var(--red);padding:30px;">Error: ' + esc(err.message) + '</td></tr>';
+            '<tr><td colspan="10" style="text-align:center;color:var(--red);padding:30px;">Error: ' + esc(err.message) + '</td></tr>';
     }
 }
 
@@ -628,6 +631,7 @@ function renderDestockPage() {
             '<td class="num">' + d.velocity.toFixed(2) + '</td>' +
             '<td class="num">' + (d.days_cover > 9999 ? '9999+' : d.days_cover.toFixed(0)) + '</td>' +
             '<td>' + suggestionBadge(d.suggestion) + '</td>' +
+            '<td class="num">' + Number(d.offline_units_30d || 0).toFixed(1) + '</td>' +
             '<td class="num">' + fmt$(d.unit_cost) + '</td>' +
             '<td class="num">' + fmt$(d.value_tied_up) + '</td>' +
             '</tr>';
@@ -677,6 +681,7 @@ function renderModal(d) {
     html += '<div class="modal-stats">';
     html += statCard('Velocity/day', d.velocity_30d.toFixed(2), d.trend === 'increasing' ? 'Trending up' : d.trend === 'decreasing' ? 'Trending down' : 'Stable');
     html += statCard('Units (30d)', d.units_sold_30d);
+    html += statCard('Offline Units (30d)', Number(d.offline_units_30d || 0).toFixed(1), d.offline_data_available ? 'Inferred from stock depletion' : 'Insufficient snapshot history');
     html += statCard('Revenue (30d)', fmt$(d.revenue_30d));
     html += statCard('Orders (30d)', d.order_count_30d);
     html += statCard('Margin', d.margin_pct != null ? d.margin_pct.toFixed(1) + '%' : 'N/A', d.cost_missing ? 'Cost missing' : '');
@@ -755,13 +760,14 @@ function renderSparkline(data) {
 /* ── CSV export ── */
 function exportCsv() {
     if (!dashData || !dashData.candidates) return;
-    var rows = [['Rank','SKU','Brand','Title','Score','Bucket','Velocity/day','Margin %','Orders 30d','Revenue 30d','Capital 30d','Trend']];
+    var rows = [['Rank','SKU','Brand','Title','Score','Bucket','Velocity/day','Margin %','Orders 30d','Offline Units 30d','Revenue 30d','Capital 30d','Trend']];
     dashData.candidates.forEach(function(c, i) {
         rows.push([
             c.rank || i + 1, c.sku, c.vendor, (c.title||'').replace(/"/g,'""'),
             c.score.toFixed(1), c.bucket, c.velocity_30d.toFixed(2),
             c.margin_pct != null ? c.margin_pct.toFixed(1) : '',
-            c.order_count_30d, c.revenue_30d.toFixed(2), c.capital_30d.toFixed(2), c.trend
+            c.order_count_30d, Number(c.offline_units_30d || 0).toFixed(1),
+            c.revenue_30d.toFixed(2), c.capital_30d.toFixed(2), c.trend
         ]);
     });
     var csv = rows.map(function(r) { return r.map(function(v) { return '"' + String(v).replace(/"/g,'""') + '"'; }).join(','); }).join('\n');

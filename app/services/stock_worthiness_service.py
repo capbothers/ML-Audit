@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.models.shopify import (
     ShopifyInventory, ShopifyOrderItem, ShopifyOrder, ShopifyProduct,
 )
-from app.models.ml_intelligence import MLInventorySuggestion
+from app.models.ml_intelligence import MLInventorySuggestion, InventoryDailySnapshot
 from app.models.product_cost import ProductCost
 
 logger = logging.getLogger(__name__)
@@ -58,6 +58,75 @@ class StockWorthinessService:
         )
         return pc_cost, inv_cost
 
+    def _has_offline_snapshot_data(self) -> bool:
+        """Offline inference requires at least two distinct snapshot days."""
+        snapshot_day_count = (
+            self.db.query(func.count(func.distinct(InventoryDailySnapshot.snapshot_date)))
+            .scalar()
+        ) or 0
+        return snapshot_day_count >= 2
+
+    def _compute_offline_units_map(self, skus_upper: List[str], days: int = 30) -> Dict[str, float]:
+        """Infer offline units from inventory depletion that exceeds online sales."""
+        if not skus_upper:
+            return {}
+
+        cutoff = date.today() - timedelta(days=days)
+        sku_set = sorted({s.strip().upper() for s in skus_upper if s and s.strip()})
+        if not sku_set:
+            return {}
+
+        snapshots = (
+            self.db.query(
+                func.upper(InventoryDailySnapshot.sku).label("sku_upper"),
+                InventoryDailySnapshot.snapshot_date,
+                InventoryDailySnapshot.quantity,
+            )
+            .filter(
+                func.upper(InventoryDailySnapshot.sku).in_(sku_set),
+                InventoryDailySnapshot.snapshot_date >= cutoff,
+            )
+            .order_by(func.upper(InventoryDailySnapshot.sku), InventoryDailySnapshot.snapshot_date)
+            .all()
+        )
+        if not snapshots:
+            return {sku: 0.0 for sku in sku_set}
+
+        online_rows = (
+            self.db.query(
+                func.upper(ShopifyOrderItem.sku).label("sku_upper"),
+                func.date(ShopifyOrderItem.order_date).label("order_day"),
+                func.sum(ShopifyOrderItem.quantity).label("qty"),
+            )
+            .join(ShopifyOrder, ShopifyOrderItem.shopify_order_id == ShopifyOrder.shopify_order_id)
+            .filter(
+                func.upper(ShopifyOrderItem.sku).in_(sku_set),
+                ShopifyOrderItem.order_date >= cutoff,
+                ShopifyOrder.cancelled_at.is_(None),
+                ShopifyOrder.financial_status.in_(["paid", "partially_refunded"]),
+            )
+            .group_by(func.upper(ShopifyOrderItem.sku), func.date(ShopifyOrderItem.order_date))
+            .all()
+        )
+        online_by_day = {
+            (r.sku_upper, r.order_day): float(r.qty or 0)
+            for r in online_rows
+        }
+
+        offline_map: Dict[str, float] = {sku: 0.0 for sku in sku_set}
+        prev_by_sku: Dict[str, Any] = {}
+        for row in snapshots:
+            prev = prev_by_sku.get(row.sku_upper)
+            if prev is not None:
+                inventory_delta = int(prev.quantity or 0) - int(row.quantity or 0)
+                if inventory_delta > 0:
+                    online_sold = online_by_day.get((row.sku_upper, row.snapshot_date), 0.0)
+                    if inventory_delta > online_sold:
+                        offline_map[row.sku_upper] += inventory_delta - online_sold
+            prev_by_sku[row.sku_upper] = row
+
+        return {sku: round(units, 1) for sku, units in offline_map.items()}
+
     @staticmethod
     def _p90(values: List[float]) -> float:
         """Return the 90th-percentile value (or 1.0 to avoid division by zero)."""
@@ -96,23 +165,6 @@ class StockWorthinessService:
     # ── main dashboard ───────────────────────────────
 
     def get_dashboard(
-        self,
-        min_score: int = 0,
-        vendor: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        try:
-            return self._get_dashboard_impl(min_score, vendor)
-        except Exception as exc:
-            logger.exception("stock_worthiness.get_dashboard failed")
-            return {
-                "kpis": {},
-                "candidates": [],
-                "score_distribution": {},
-                "vendors": [],
-                "error": str(exc),
-            }
-
-    def _get_dashboard_impl(
         self,
         min_score: int = 0,
         vendor: Optional[str] = None,
@@ -160,7 +212,7 @@ class StockWorthinessService:
                 "vendors": [],
             }
 
-        # 3. 30-day sales per SKU
+        # 3. 30-day online sales per SKU
         cutoff_30d = date.today() - timedelta(days=30)
         sales_30d = (
             self.db.query(
@@ -183,7 +235,7 @@ class StockWorthinessService:
         )
         sales_map = {r.sku_upper: r for r in sales_30d}
 
-        # 4. 7-day sales per SKU (for velocity trend)
+        # 4. 7-day online sales per SKU (for velocity trend)
         cutoff_7d = date.today() - timedelta(days=7)
         sales_7d = (
             self.db.query(
@@ -202,6 +254,15 @@ class StockWorthinessService:
             .all()
         )
         vel7_map = {r.sku_upper: float(r.units_sold_7d or 0) / 7.0 for r in sales_7d}
+
+        # 4b. Offline movement inferred from snapshot depletion (showrooms/counter)
+        offline_data_available = self._has_offline_snapshot_data()
+        offline_30_map: Dict[str, float] = {}
+        offline_7_map: Dict[str, float] = {}
+        if offline_data_available:
+            sku_keys = list(oi_map.keys())
+            offline_30_map = self._compute_offline_units_map(sku_keys, days=30)
+            offline_7_map = self._compute_offline_units_map(sku_keys, days=7)
 
         # 5. Cost lookup
         cost_rows = (
@@ -234,18 +295,22 @@ class StockWorthinessService:
             if r.sku_upper not in cost_map and r.cost:
                 cost_map[r.sku_upper] = float(r.cost)
 
-        # 6. Build raw candidate list (only order-in SKUs with sales)
+        # 6. Build raw candidate list (order-in SKUs with online and/or inferred offline demand)
         raw: List[Dict] = []
         for sku_upper, info in oi_map.items():
             s = sales_map.get(sku_upper)
-            if not s or not s.units_sold or float(s.units_sold) <= 0:
+            online_units = float(s.units_sold or 0) if s else 0.0
+            offline_units = float(offline_30_map.get(sku_upper, 0.0)) if offline_data_available else 0.0
+            total_units = online_units + offline_units
+            if total_units <= 0:
                 continue
-            units = float(s.units_sold or 0)
-            revenue = float(s.revenue or 0)
-            orders = int(s.order_count or 0)
-            avg_price = float(s.avg_price or 0)
-            vel_30 = units / 30.0
-            vel_7 = vel7_map.get(sku_upper, 0.0)
+            revenue = float(s.revenue or 0) if s else 0.0
+            orders = int(s.order_count or 0) if s else 0
+            avg_price = float(s.avg_price or 0) if s else 0.0
+            vel_30 = total_units / 30.0
+            vel_7_online = vel7_map.get(sku_upper, 0.0)
+            vel_7_offline = (float(offline_7_map.get(sku_upper, 0.0)) / 7.0) if offline_data_available else 0.0
+            vel_7 = vel_7_online + vel_7_offline
             trend = self._trend_label(vel_7, vel_30)
             unit_cost = cost_map.get(sku_upper, 0)
             cost_missing = unit_cost <= 0
@@ -256,9 +321,11 @@ class StockWorthinessService:
                 "sku": info["sku"],
                 "vendor": info["vendor"],
                 "title": info["title"],
+                "online_units_30d": int(online_units),
+                "offline_units_30d": round(offline_units, 1),
                 "velocity_30d": round(vel_30, 3),
                 "velocity_7d": round(vel_7, 3),
-                "units_sold_30d": int(units),
+                "units_sold_30d": int(round(total_units)),
                 "revenue_30d": round(revenue, 2),
                 "order_count_30d": orders,
                 "avg_price": round(avg_price, 2),
@@ -324,7 +391,9 @@ class StockWorthinessService:
             }
             c["bucket"] = self._bucket(pts)
 
-        # 9. Filter
+        # 9. Filter — KPIs and score_distribution are intentionally computed
+        # from the full unfiltered `raw` list so they represent global context.
+        # Only the `candidates` list respects min_score/vendor filters.
         candidates = [c for c in raw if c["score"] >= min_score]
         if vendor:
             v_upper = vendor.upper()
@@ -336,7 +405,7 @@ class StockWorthinessService:
         for i, c in enumerate(candidates, 1):
             c["rank"] = i
 
-        # 10. KPIs + distribution (across ALL raw, before vendor filter)
+        # 10. KPIs + distribution (global scope — across ALL raw, before filters)
         dist = {"strong": 0, "consider": 0, "marginal": 0, "not_recommended": 0}
         for c in raw:
             dist[c["bucket"]] += 1
@@ -359,23 +428,17 @@ class StockWorthinessService:
             "candidates": candidates,
             "score_distribution": dist,
             "vendors": vendors,
+            "offline_data_available": offline_data_available,
         }
 
     # ── destock review ───────────────────────────────
 
     def get_destock_review(self) -> Dict[str, Any]:
         """Stocked items that should be reconsidered (no sales / extreme overstock)."""
-        try:
-            return self._get_destock_impl()
-        except Exception as exc:
-            logger.exception("stock_worthiness.get_destock_review failed")
-            return {"kpis": {}, "items": [], "error": str(exc)}
-
-    def _get_destock_impl(self) -> Dict[str, Any]:
         pc_cost, inv_cost = self._cost_subqueries()
         effective_cost = func.coalesce(pc_cost.c.cost, inv_cost.c.cost)
 
-        rows = (
+        base_q = (
             self.db.query(
                 MLInventorySuggestion.sku,
                 MLInventorySuggestion.brand,
@@ -396,14 +459,30 @@ class StockWorthinessService:
                 func.coalesce(MLInventorySuggestion.units_on_hand, 0)
                 * func.coalesce(effective_cost, 0)
             ))
-            .limit(200)
-            .all()
         )
 
+        # Fetch ALL rows for accurate KPI aggregation
+        rows = base_q.all()
+
+        offline_data_available = self._has_offline_snapshot_data()
+        offline_30_map: Dict[str, float] = {}
+        if offline_data_available:
+            offline_30_map = self._compute_offline_units_map(
+                [r.sku.strip().upper() for r in rows if r.sku],
+                days=30,
+            )
+
+        # Build full items list + compute KPIs from complete dataset
         items = []
         total_capital = 0.0
         total_doc = 0.0
+        excluded_offline_active = 0
         for r in rows:
+            sku_upper = r.sku.strip().upper() if r.sku else ""
+            offline_units_30d = float(offline_30_map.get(sku_upper, 0.0)) if offline_data_available else 0.0
+            if offline_units_30d > 0:
+                excluded_offline_active += 1
+                continue
             uc = float(r.unit_cost or 0)
             on_hand = int(r.units_on_hand or 0)
             value = round(on_hand * uc, 2)
@@ -418,14 +497,18 @@ class StockWorthinessService:
                 "velocity": round(float(r.daily_sales_velocity or 0), 3),
                 "days_cover": round(doc, 1),
                 "suggestion": r.suggestion,
+                "offline_units_30d": round(offline_units_30d, 1),
                 "unit_cost": round(uc, 2),
                 "value_tied_up": value,
             })
 
+        # KPIs reflect the full dataset (not capped)
         kpis = {
             "destock_candidates": len(items),
             "capital_locked": round(total_capital, 2),
             "avg_days_cover": round(total_doc / len(items), 1) if items else 0,
+            "excluded_offline_active": excluded_offline_active,
+            "offline_data_available": offline_data_available,
         }
 
         return {"kpis": kpis, "items": items}
@@ -434,13 +517,6 @@ class StockWorthinessService:
 
     def get_sku_detail(self, sku: str) -> Dict[str, Any]:
         """Deep-dive on a single SKU for the modal."""
-        try:
-            return self._get_sku_detail_impl(sku)
-        except Exception as exc:
-            logger.exception(f"stock_worthiness.get_sku_detail failed for {sku}")
-            return {"error": str(exc)}
-
-    def _get_sku_detail_impl(self, sku: str) -> Dict[str, Any]:
         sku_upper = sku.strip().upper()
 
         # Inventory info
@@ -488,11 +564,20 @@ class StockWorthinessService:
             entry = spark_map.get(d, {"units": 0, "revenue": 0})
             sparkline.append({"date": d, **entry})
 
+        # Offline movement inferred from inventory snapshots
+        offline_data_available = self._has_offline_snapshot_data()
+        offline_30 = 0.0
+        offline_7 = 0.0
+        if offline_data_available:
+            offline_30 = float(self._compute_offline_units_map([sku_upper], days=30).get(sku_upper, 0.0))
+            offline_7 = float(self._compute_offline_units_map([sku_upper], days=7).get(sku_upper, 0.0))
+
         # Aggregates
         total_units = sum(d["units"] for d in sparkline)
         total_revenue = sum(d["revenue"] for d in sparkline)
-        vel_30 = total_units / 30.0
-        vel_7 = sum(d["units"] for d in sparkline[-7:]) / 7.0
+        total_units_all_channels = total_units + offline_30
+        vel_30 = total_units_all_channels / 30.0
+        vel_7 = (sum(d["units"] for d in sparkline[-7:]) + offline_7) / 7.0
         avg_price = total_revenue / total_units if total_units > 0 else 0
         margin_pct = ((avg_price - unit_cost) / avg_price * 100) if avg_price > 0 and unit_cost > 0 else None
         capital_30d = unit_cost * vel_30 * 30 if unit_cost > 0 else 0
@@ -511,7 +596,7 @@ class StockWorthinessService:
             .scalar()
         ) or 0
 
-        # Recent orders (last 10)
+        # Recent orders (last 10, paid only — consistent with 30d metrics)
         recent = (
             self.db.query(
                 ShopifyOrderItem.order_date,
@@ -524,6 +609,7 @@ class StockWorthinessService:
             .filter(
                 func.upper(ShopifyOrderItem.sku) == sku_upper,
                 ShopifyOrder.cancelled_at.is_(None),
+                ShopifyOrder.financial_status.in_(["paid", "partially_refunded"]),
             )
             .order_by(desc(ShopifyOrderItem.order_date))
             .limit(10)
@@ -533,7 +619,11 @@ class StockWorthinessService:
         # Build recommendation text
         rec_parts = []
         if vel_30 > 0:
-            rec_parts.append(f"Sells {vel_30:.1f} units/day ({total_units} in 30 days).")
+            rec_parts.append(
+                f"Sells {vel_30:.1f} units/day ({int(round(total_units_all_channels))} in 30 days across channels)."
+            )
+        if offline_data_available and offline_30 > 0:
+            rec_parts.append(f"Estimated {offline_30:.0f} units sold offline (showrooms/counter) in 30 days.")
         if margin_pct is not None:
             rec_parts.append(f"Gross margin {margin_pct:.0f}%.")
         if capital_30d > 0:
@@ -557,7 +647,10 @@ class StockWorthinessService:
             "velocity_30d": round(vel_30, 3),
             "velocity_7d": round(vel_7, 3),
             "trend": trend,
-            "units_sold_30d": total_units,
+            "units_sold_30d": int(round(total_units_all_channels)),
+            "online_units_30d": int(total_units),
+            "offline_units_30d": round(offline_30, 1),
+            "offline_data_available": offline_data_available,
             "revenue_30d": round(total_revenue, 2),
             "order_count_30d": order_count,
             "capital_30d": round(capital_30d, 2),

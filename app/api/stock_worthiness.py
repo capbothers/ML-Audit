@@ -66,11 +66,7 @@ async def get_sku_detail(
     try:
         svc = StockWorthinessService(db)
         data = svc.get_sku_detail(sku)
-        if "error" in data:
-            raise HTTPException(status_code=500, detail=data["error"])
         return {"success": True, "data": data}
-    except HTTPException:
-        raise
     except Exception as e:
         log.error(f"Error in /stock-worthiness/sku-detail: {e}")
         raise HTTPException(status_code=500, detail=str(e))
