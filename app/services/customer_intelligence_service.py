@@ -513,7 +513,8 @@ class CustomerIntelligenceService:
                 .subquery()
             )
 
-            # Get all orders with cohort month info
+            # Get all orders with cohort month info (exclude cancelled/unpaid
+            # for consistency with other customer metrics)
             rows = (
                 self.db.query(
                     func.strftime("%Y-%m", first_order_sub.c.first_order).label("cohort"),
@@ -523,6 +524,8 @@ class CustomerIntelligenceService:
                 .join(first_order_sub, ShopifyOrder.customer_email == first_order_sub.c.customer_email)
                 .filter(ShopifyOrder.customer_email.isnot(None))
                 .filter(ShopifyOrder.customer_email != "")
+                .filter(ShopifyOrder.cancelled_at.is_(None))
+                .filter(ShopifyOrder.financial_status.in_(["paid", "partially_refunded"]))
                 .all()
             )
 
@@ -701,14 +704,27 @@ class CustomerIntelligenceService:
         Plus repeat-purchase rate for those customers.
         """
         try:
-            # Find first order per customer
+            # Find first order per customer (by date, not ID — IDs may
+            # be non-chronological after imports/backfills)
+            first_date_sub = (
+                self.db.query(
+                    ShopifyOrder.customer_email,
+                    func.min(ShopifyOrder.created_at).label("first_date"),
+                )
+                .filter(ShopifyOrder.customer_email.isnot(None))
+                .filter(ShopifyOrder.customer_email != "")
+                .group_by(ShopifyOrder.customer_email)
+                .subquery()
+            )
             first_order_sub = (
                 self.db.query(
                     ShopifyOrder.customer_email,
                     func.min(ShopifyOrder.shopify_order_id).label("first_order_id"),
                 )
-                .filter(ShopifyOrder.customer_email.isnot(None))
-                .filter(ShopifyOrder.customer_email != "")
+                .join(first_date_sub, and_(
+                    ShopifyOrder.customer_email == first_date_sub.c.customer_email,
+                    ShopifyOrder.created_at == first_date_sub.c.first_date,
+                ))
                 .group_by(ShopifyOrder.customer_email)
                 .subquery()
             )
@@ -944,10 +960,30 @@ class CustomerIntelligenceService:
             orders_count = int(customer.orders_count or 0)
             aov = round(total_spent / orders_count, 2) if orders_count > 0 else 0
 
+            # Compute dates from orders (not ShopifyCustomer fields which
+            # may not be populated reliably)
+            order_dates = (
+                self.db.query(
+                    func.min(ShopifyOrder.created_at).label("first"),
+                    func.max(ShopifyOrder.created_at).label("last"),
+                )
+                .filter(
+                    ShopifyOrder.customer_email == email,
+                    ShopifyOrder.cancelled_at.is_(None),
+                    ShopifyOrder.financial_status.in_(["paid", "partially_refunded"]),
+                )
+                .first()
+            )
+            first_order_dt = order_dates.first if order_dates else None
+            last_order_dt = order_dates.last if order_dates else None
+
+            days_since = 0
+            if last_order_dt:
+                days_since = (datetime.utcnow() - last_order_dt).days
+
             months_since = 0
-            if customer.created_at:
-                delta = datetime.utcnow() - customer.created_at
-                months_since = max(1, delta.days // 30)
+            if first_order_dt:
+                months_since = max(1, (datetime.utcnow() - first_order_dt).days // 30)
 
             return {
                 "email": customer.email,
@@ -959,9 +995,9 @@ class CustomerIntelligenceService:
                 "total_orders": orders_count,
                 "total_spent": total_spent,
                 "avg_order_value": aov,
-                "days_since_last_order": int(customer.days_since_last_order or 0),
-                "first_order_date": str(customer.created_at)[:10] if customer.created_at else None,
-                "last_order_date": str(customer.last_order_date)[:10] if customer.last_order_date else None,
+                "days_since_last_order": days_since,
+                "first_order_date": str(first_order_dt)[:10] if first_order_dt else None,
+                "last_order_date": str(last_order_dt)[:10] if last_order_dt else None,
                 "customer_since_months": months_since,
                 "city": customer.default_address_city or "",
                 "state": customer.default_address_province or "",

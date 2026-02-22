@@ -54,7 +54,7 @@ async def get_customer_detail(
 @router.get("/search")
 async def search_customers(
     q: str = Query(..., description="Search query"),
-    limit: int = Query(20, description="Max results"),
+    limit: int = Query(20, ge=1, le=100, description="Max results (1-100)"),
     db: Session = Depends(get_db),
 ):
     """Search customers by name or email."""

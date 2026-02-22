@@ -609,7 +609,7 @@ function renderTopCustomers() {
     const custs = D.top_customers || [];
     const tbody = document.querySelector('#topCustomersTable tbody');
     tbody.innerHTML = custs.map(c =>
-        `<tr onclick="openCustomerModal('${esc(c.email)}')">
+        `<tr onclick="openCustomerModal('${escJs(c.email)}')">
             <td>${esc(c.name)}</td>
             <td style="color:var(--slate)">${esc(c.email)}</td>
             <td class="num">${c.orders}</td>
@@ -889,6 +889,7 @@ function closeModal() {
 function fmt(n) { return (n || 0).toLocaleString('en-AU'); }
 function fmtD(n) { return (n || 0).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 2 }); }
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function escJs(s) { return (s || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/</g, '\\x3c'); }
 function segBadge(seg) {
     const cls = 'badge-' + (seg || '').toLowerCase().replace(/\s+/g, '-');
     return `<span class="badge ${cls}">${seg}</span>`;
