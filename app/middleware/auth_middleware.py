@@ -16,6 +16,7 @@ PUBLIC_PREFIXES = (
     "/openapi.json",
     "/redoc",
     "/site-health/track",   # RUM telemetry from Shopify storefront (no cookie)
+    "/sync",                # Sync endpoints — protected by Basic Auth only
 )
 
 # Dashboard (HTML) paths — unauthenticated users get redirected to login
