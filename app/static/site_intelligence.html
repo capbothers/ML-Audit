@@ -258,6 +258,30 @@
         .kpi-issues .kpi-value { color: var(--ink); }
         .kpi-new .kpi-value { color: var(--cass-gold); }
 
+        /* Ingestion Health */
+        .ingestion-panel {
+            background: var(--card); border-radius: 16px; padding: 14px 18px;
+            border: 1px solid var(--line); box-shadow: var(--shadow);
+            display: none; margin-bottom: 18px;
+        }
+        .ingestion-head {
+            display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;
+        }
+        .ingestion-title { font-size: 14px; font-weight: 600; font-family: "Space Grotesk", sans-serif; }
+        .ingestion-status { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+        .ingestion-status.good { background: var(--green-bg); color: var(--green); }
+        .ingestion-status.warn { background: var(--amber-bg); color: var(--amber); }
+        .ingestion-status.bad { background: var(--red-bg); color: var(--red); }
+        .ingestion-grid {
+            display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;
+        }
+        .ingestion-item {
+            padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--pearl);
+        }
+        .ingestion-label { font-size: 11px; color: var(--slate); text-transform: uppercase; letter-spacing: 0.4px; }
+        .ingestion-value { font-size: 16px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+        .ingestion-note { font-size: 12px; color: var(--slate); margin-top: 10px; }
+
         /* Priorities Panel */
         .priorities-panel {
             background: var(--card); border-radius: 16px; padding: 18px 22px;
@@ -343,6 +367,7 @@
         @media (max-width: 1200px) {
             .sections-grid { grid-template-columns: 1fr; }
             .health-breakdown { grid-template-columns: repeat(2, 1fr); }
+            .ingestion-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
 
         @media (max-width: 900px) {
@@ -705,6 +730,32 @@
                     <div class="kpi-label">New Since Last Visit</div>
                     <div class="kpi-value" id="kpi-new-issues">--</div>
                 </div>
+            </div>
+
+            <div class="ingestion-panel" id="ingestion-panel">
+                <div class="ingestion-head">
+                    <div class="ingestion-title">Telemetry Ingestion Health</div>
+                    <span class="ingestion-status" id="ingestion-status">Checking</span>
+                </div>
+                <div class="ingestion-grid">
+                    <div class="ingestion-item">
+                        <div class="ingestion-label">Events 24h</div>
+                        <div class="ingestion-value" id="ingestion-24h">--</div>
+                    </div>
+                    <div class="ingestion-item">
+                        <div class="ingestion-label">Events 7d</div>
+                        <div class="ingestion-value" id="ingestion-7d">--</div>
+                    </div>
+                    <div class="ingestion-item">
+                        <div class="ingestion-label">Pages 7d</div>
+                        <div class="ingestion-value" id="ingestion-pages">--</div>
+                    </div>
+                    <div class="ingestion-item">
+                        <div class="ingestion-label">Sessions 7d</div>
+                        <div class="ingestion-value" id="ingestion-sessions">--</div>
+                    </div>
+                </div>
+                <div class="ingestion-note" id="ingestion-note">Checking recent telemetry flow...</div>
             </div>
 
             <!-- Top 3 Priorities -->
@@ -2500,6 +2551,48 @@
             }));
         }
 
+        function fmtRelative(iso) {
+            if (!iso) return 'Never';
+            const then = new Date(iso);
+            if (isNaN(then.getTime())) return 'Unknown';
+            const diffH = (Date.now() - then.getTime()) / 3600000;
+            if (diffH < 1) return 'Just now';
+            if (diffH < 24) return Math.round(diffH) + 'h ago';
+            return Math.round(diffH / 24) + 'd ago';
+        }
+
+        async function loadIngestionHealth() {
+            const panel = document.getElementById('ingestion-panel');
+            const status = document.getElementById('ingestion-status');
+            const note = document.getElementById('ingestion-note');
+            try {
+                const res = await fetch('/site-health/ingestion-health');
+                const data = await res.json();
+                const d = data.data || data;
+                panel.style.display = '';
+                document.getElementById('ingestion-24h').textContent = (d.events_24h || 0).toLocaleString();
+                document.getElementById('ingestion-7d').textContent = (d.events_7d || 0).toLocaleString();
+                document.getElementById('ingestion-pages').textContent = (d.distinct_pages_7d || 0).toLocaleString();
+                document.getElementById('ingestion-sessions').textContent = (d.distinct_sessions_7d || 0).toLocaleString();
+                if (d.status === 'critical') {
+                    status.textContent = 'No Recent Data';
+                    status.className = 'ingestion-status bad';
+                } else if (d.status === 'warning') {
+                    status.textContent = 'Low Flow';
+                    status.className = 'ingestion-status warn';
+                } else {
+                    status.textContent = 'Healthy';
+                    status.className = 'ingestion-status good';
+                }
+                note.textContent = 'Last event: ' + fmtRelative(d.last_event_created_at) + (d.last_event_created_at ? ' (' + new Date(d.last_event_created_at).toLocaleString() + ')' : '');
+            } catch (e) {
+                panel.style.display = '';
+                status.textContent = 'Error';
+                status.className = 'ingestion-status bad';
+                note.textContent = 'Could not load ingestion health.';
+            }
+        }
+
         let executiveMode = false;
 
         function toggleExecutiveView() {
@@ -2674,6 +2767,7 @@
                 loadCodeHealth(),
                 loadRedirectHealth()
             ]);
+            await loadIngestionHealth();
 
             // Calculate overall score
             const scores = [dqScore, spScore, chScore, rhScore].filter(s => s !== null);

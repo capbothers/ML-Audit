@@ -143,6 +143,67 @@ async def track_events(body: TrackRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/ingestion-health")
+async def get_ingestion_health(db: Session = Depends(get_db)):
+    """
+    Telemetry ingestion health for Site Intelligence.
+
+    Returns volume in the last 24h/7d, latest event timestamps, and basic coverage.
+    """
+    try:
+        now = datetime.utcnow()
+        cutoff_24h = now - timedelta(hours=24)
+        cutoff_7d = now - timedelta(days=7)
+
+        events_24h = db.query(func.count(SiteHealthEvent.id)).filter(
+            SiteHealthEvent.created_at >= cutoff_24h
+        ).scalar() or 0
+        events_7d = db.query(func.count(SiteHealthEvent.id)).filter(
+            SiteHealthEvent.created_at >= cutoff_7d
+        ).scalar() or 0
+        total_events = db.query(func.count(SiteHealthEvent.id)).scalar() or 0
+
+        last_created_at = db.query(func.max(SiteHealthEvent.created_at)).scalar()
+        last_client_timestamp = db.query(func.max(SiteHealthEvent.client_timestamp)).scalar()
+        distinct_pages_7d = db.query(func.count(func.distinct(SiteHealthEvent.page_path))).filter(
+            SiteHealthEvent.created_at >= cutoff_7d
+        ).scalar() or 0
+        distinct_sessions_7d = db.query(func.count(func.distinct(SiteHealthEvent.session_id))).filter(
+            SiteHealthEvent.created_at >= cutoff_7d
+        ).scalar() or 0
+        event_mix_7d = dict(
+            db.query(
+                SiteHealthEvent.event_type,
+                func.count(SiteHealthEvent.id),
+            )
+            .filter(SiteHealthEvent.created_at >= cutoff_7d)
+            .group_by(SiteHealthEvent.event_type)
+            .all()
+        )
+
+        status = "healthy"
+        if events_24h == 0 and events_7d == 0:
+            status = "critical"
+        elif events_24h == 0:
+            status = "warning"
+
+        return {
+            "timestamp": now.isoformat(),
+            "status": status,
+            "events_24h": events_24h,
+            "events_7d": events_7d,
+            "total_events": total_events,
+            "last_event_created_at": last_created_at.isoformat() if last_created_at else None,
+            "last_event_client_timestamp": last_client_timestamp.isoformat() if last_client_timestamp else None,
+            "distinct_pages_7d": distinct_pages_7d,
+            "distinct_sessions_7d": distinct_sessions_7d,
+            "event_mix_7d": event_mix_7d,
+        }
+    except Exception as e:
+        log.error(f"Site-health ingestion health error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/summary")
 async def get_summary(
     hours: int = Query(24, ge=1, le=720, description="Look-back window in hours"),
