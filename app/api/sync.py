@@ -514,7 +514,18 @@ async def diagnose_connectors():
             return "(empty)"
         return val[:4] + "****" if len(val) > 4 else "****"
 
-    # 1. Shopify
+    # Raw-test helper: bypass connector's internal try/except to get real errors
+    async def _raw_test(name, test_fn):
+        """Run test_fn and return (success, error_detail)."""
+        try:
+            result = await test_fn() if asyncio.iscoroutinefunction(test_fn) else test_fn()
+            return True, None
+        except Exception as e:
+            return False, f"{type(e).__name__}: {str(e)}"
+
+    import asyncio, aiohttp, shopify as shopify_lib
+
+    # 1. Shopify — call the API directly to see the real error
     try:
         results["shopify"] = {
             "shop_url": settings.shopify_shop_url or "(empty)",
@@ -522,32 +533,47 @@ async def diagnose_connectors():
             "access_token": _mask(settings.shopify_access_token),
             "api_key": _mask(settings.shopify_api_key),
         }
-        from app.connectors.shopify_connector import ShopifyConnector
-        conn = ShopifyConnector()
+        session = shopify_lib.Session(
+            settings.shopify_shop_url,
+            settings.shopify_api_version,
+            settings.shopify_access_token,
+        )
+        shopify_lib.ShopifyResource.activate_session(session)
         try:
-            valid = await conn.validate_connection()
-            results["shopify"]["connection_valid"] = valid
+            shop = shopify_lib.Shop.current()
+            results["shopify"]["connection_valid"] = shop is not None
+            if shop:
+                results["shopify"]["shop_name"] = shop.name
         except Exception as e:
+            results["shopify"]["connection_valid"] = False
             results["shopify"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
     except Exception as e:
         results["shopify"] = {"init_error": f"{type(e).__name__}: {str(e)}"}
 
-    # 2. Klaviyo
+    # 2. Klaviyo — hit the accounts endpoint directly
     try:
         results["klaviyo"] = {
             "api_key": _mask(settings.klaviyo_api_key),
         }
-        from app.connectors.klaviyo_connector import KlaviyoConnector
-        conn = KlaviyoConnector()
-        try:
-            valid = await conn.validate_connection()
-            results["klaviyo"]["connection_valid"] = valid
-        except Exception as e:
-            results["klaviyo"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
+        async with aiohttp.ClientSession() as http:
+            async with http.get(
+                "https://a.klaviyo.com/api/accounts/",
+                headers={
+                    "Authorization": f"Klaviyo-API-Key {settings.klaviyo_api_key}",
+                    "revision": "2024-02-15",
+                    "Accept": "application/json",
+                },
+            ) as resp:
+                results["klaviyo"]["http_status"] = resp.status
+                results["klaviyo"]["connection_valid"] = resp.status == 200
+                if resp.status != 200:
+                    body = await resp.text()
+                    results["klaviyo"]["connection_error"] = body[:500]
     except Exception as e:
-        results["klaviyo"] = {"init_error": f"{type(e).__name__}: {str(e)}"}
+        results["klaviyo"]["connection_valid"] = False
+        results["klaviyo"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
 
-    # 3. GA4
+    # 3. GA4 — load credentials and make a test request
     try:
         cred_path = settings.ga4_credentials_path
         results["ga4"] = {
@@ -555,15 +581,23 @@ async def diagnose_connectors():
             "credentials_path": cred_path,
             "credentials_file_exists": os.path.exists(cred_path),
         }
-        from app.connectors.ga4_connector import GA4Connector
-        conn = GA4Connector()
-        try:
-            valid = await conn.validate_connection()
-            results["ga4"]["connection_valid"] = valid
-        except Exception as e:
-            results["ga4"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
+        from google.analytics.data_v1beta import BetaAnalyticsDataClient
+        from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric
+        from google.oauth2 import service_account
+        creds = service_account.Credentials.from_service_account_file(
+            cred_path, scopes=["https://www.googleapis.com/auth/analytics.readonly"]
+        )
+        client = BetaAnalyticsDataClient(credentials=creds)
+        request = RunReportRequest(
+            property=f"properties/{settings.ga4_property_id}",
+            date_ranges=[DateRange(start_date="7daysAgo", end_date="today")],
+            metrics=[Metric(name="activeUsers")],
+        )
+        client.run_report(request)
+        results["ga4"]["connection_valid"] = True
     except Exception as e:
-        results["ga4"] = {"init_error": f"{type(e).__name__}: {str(e)}"}
+        results["ga4"]["connection_valid"] = False
+        results["ga4"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
 
     # 4. Google Ads
     try:
@@ -575,13 +609,13 @@ async def diagnose_connectors():
         }
         from app.connectors.google_ads_connector import GoogleAdsConnector
         conn = GoogleAdsConnector()
-        try:
-            valid = await conn.validate_connection()
-            results["google_ads"]["connection_valid"] = valid
-        except Exception as e:
-            results["google_ads"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
+        await conn.connect()
+        ga_svc = conn.client.get_service("GoogleAdsService")
+        ga_svc.search(customer_id=settings.google_ads_customer_id, query="SELECT customer.id FROM customer LIMIT 1")
+        results["google_ads"]["connection_valid"] = True
     except Exception as e:
-        results["google_ads"] = {"init_error": f"{type(e).__name__}: {str(e)}"}
+        results["google_ads"]["connection_valid"] = False
+        results["google_ads"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
 
     # 5. Merchant Center
     try:
@@ -591,15 +625,21 @@ async def diagnose_connectors():
             "credentials_path": mc_cred_path,
             "credentials_file_exists": os.path.exists(mc_cred_path),
         }
-        from app.connectors.merchant_center_connector import MerchantCenterConnector
-        conn = MerchantCenterConnector()
-        try:
-            valid = await conn.validate_connection()
-            results["merchant_center"]["connection_valid"] = valid
-        except Exception as e:
-            results["merchant_center"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
+        from google.oauth2 import service_account as mc_sa
+        from googleapiclient.discovery import build as mc_build
+        mc_creds = mc_sa.Credentials.from_service_account_file(
+            mc_cred_path, scopes=["https://www.googleapis.com/auth/content"]
+        )
+        mc_svc = mc_build("content", "v2.1", credentials=mc_creds)
+        mc_result = mc_svc.accounts().get(
+            merchantId=settings.merchant_center_id,
+            accountId=settings.merchant_center_id,
+        ).execute()
+        results["merchant_center"]["connection_valid"] = True
+        results["merchant_center"]["account_name"] = mc_result.get("name", "?")
     except Exception as e:
-        results["merchant_center"] = {"init_error": f"{type(e).__name__}: {str(e)}"}
+        results["merchant_center"]["connection_valid"] = False
+        results["merchant_center"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
 
     # 6. Credential files check
     cred_dir = "./credentials"
