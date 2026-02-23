@@ -494,6 +494,131 @@ async def daily_sync_search_console(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/diagnose")
+async def diagnose_connectors():
+    """
+    Diagnose connector configuration — checks env vars, credential files,
+    and attempts validation for each source.  Returns details to help
+    identify why syncs fail.
+    """
+    import os
+    import traceback
+    from app.config import get_settings
+
+    settings = get_settings()
+    results = {}
+
+    # Helper: mask a value (show first 4 chars)
+    def _mask(val: str) -> str:
+        if not val:
+            return "(empty)"
+        return val[:4] + "****" if len(val) > 4 else "****"
+
+    # 1. Shopify
+    try:
+        results["shopify"] = {
+            "shop_url": settings.shopify_shop_url or "(empty)",
+            "api_version": settings.shopify_api_version,
+            "access_token": _mask(settings.shopify_access_token),
+            "api_key": _mask(settings.shopify_api_key),
+        }
+        from app.connectors.shopify_connector import ShopifyConnector
+        conn = ShopifyConnector()
+        try:
+            valid = await conn.validate_connection()
+            results["shopify"]["connection_valid"] = valid
+        except Exception as e:
+            results["shopify"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
+    except Exception as e:
+        results["shopify"] = {"init_error": f"{type(e).__name__}: {str(e)}"}
+
+    # 2. Klaviyo
+    try:
+        results["klaviyo"] = {
+            "api_key": _mask(settings.klaviyo_api_key),
+        }
+        from app.connectors.klaviyo_connector import KlaviyoConnector
+        conn = KlaviyoConnector()
+        try:
+            valid = await conn.validate_connection()
+            results["klaviyo"]["connection_valid"] = valid
+        except Exception as e:
+            results["klaviyo"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
+    except Exception as e:
+        results["klaviyo"] = {"init_error": f"{type(e).__name__}: {str(e)}"}
+
+    # 3. GA4
+    try:
+        cred_path = settings.ga4_credentials_path
+        results["ga4"] = {
+            "property_id": settings.ga4_property_id or "(empty)",
+            "credentials_path": cred_path,
+            "credentials_file_exists": os.path.exists(cred_path),
+        }
+        from app.connectors.ga4_connector import GA4Connector
+        conn = GA4Connector()
+        try:
+            valid = await conn.validate_connection()
+            results["ga4"]["connection_valid"] = valid
+        except Exception as e:
+            results["ga4"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
+    except Exception as e:
+        results["ga4"] = {"init_error": f"{type(e).__name__}: {str(e)}"}
+
+    # 4. Google Ads
+    try:
+        results["google_ads"] = {
+            "customer_id": _mask(settings.google_ads_customer_id),
+            "developer_token": _mask(settings.google_ads_developer_token),
+            "client_id": _mask(settings.google_ads_client_id),
+            "refresh_token": _mask(settings.google_ads_refresh_token),
+        }
+        from app.connectors.google_ads_connector import GoogleAdsConnector
+        conn = GoogleAdsConnector()
+        try:
+            valid = await conn.validate_connection()
+            results["google_ads"]["connection_valid"] = valid
+        except Exception as e:
+            results["google_ads"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
+    except Exception as e:
+        results["google_ads"] = {"init_error": f"{type(e).__name__}: {str(e)}"}
+
+    # 5. Merchant Center
+    try:
+        mc_cred_path = settings.merchant_center_credentials_path
+        results["merchant_center"] = {
+            "merchant_id": settings.merchant_center_id or "(empty)",
+            "credentials_path": mc_cred_path,
+            "credentials_file_exists": os.path.exists(mc_cred_path),
+        }
+        from app.connectors.merchant_center_connector import MerchantCenterConnector
+        conn = MerchantCenterConnector()
+        try:
+            valid = await conn.validate_connection()
+            results["merchant_center"]["connection_valid"] = valid
+        except Exception as e:
+            results["merchant_center"]["connection_error"] = f"{type(e).__name__}: {str(e)}"
+    except Exception as e:
+        results["merchant_center"] = {"init_error": f"{type(e).__name__}: {str(e)}"}
+
+    # 6. Credential files check
+    cred_dir = "./credentials"
+    results["credential_files"] = {
+        "directory_exists": os.path.isdir(cred_dir),
+        "files": os.listdir(cred_dir) if os.path.isdir(cred_dir) else [],
+    }
+
+    # 7. GOOGLE_SA_JSON env var check
+    sa_val = os.environ.get("GOOGLE_SA_JSON", "")
+    results["google_sa_json_env"] = {
+        "is_set": bool(sa_val),
+        "looks_like_json": sa_val.strip().startswith("{") if sa_val else False,
+        "length": len(sa_val),
+    }
+
+    return results
+
+
 @router.get("/status")
 async def get_sync_status():
     """
