@@ -1,7 +1,7 @@
 """
 Data synchronization endpoints
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from typing import Optional, List
 from datetime import datetime, timedelta
 from app.models.base import SessionLocal
@@ -13,6 +13,19 @@ from app.utils.cache import clear_cache, clear_for_source
 from app.utils.response_cache import response_cache
 
 router = APIRouter(prefix="/sync", tags=["sync"])
+
+# In-memory sync status for background tasks
+_sync_status = {}
+
+
+def _update_sync_status(source: str, status: str, result=None, error=None):
+    _sync_status[source] = {
+        "status": status,
+        "started_at": _sync_status.get(source, {}).get("started_at", datetime.utcnow().isoformat()),
+        "updated_at": datetime.utcnow().isoformat(),
+        "result": result,
+        "error": error,
+    }
 
 # Lazy-init to avoid loading heavy connectors (shopify/GA4) at startup
 _data_sync = None
@@ -26,19 +39,37 @@ def _get_data_sync():
 
 
 
-@router.post("/all")
-async def sync_all_sources(days: int = Query(30, description="Number of days to sync")):
-    """
-    Sync data from all sources
-    """
+async def _run_sync_all(days: int):
+    """Background task: sync all sources."""
+    _update_sync_status("all", "running")
     try:
         result = await _get_data_sync().sync_all(days=days)
         clear_cache()
         response_cache.clear()
-        return result
+        _update_sync_status("all", "completed", result=result)
+        log.info(f"Background sync_all completed: {result.get('sources_synced', '?')}/{result.get('total_sources', '?')} sources")
     except Exception as e:
-        log.error(f"Sync all error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        log.error(f"Background sync_all error: {str(e)}")
+        _update_sync_status("all", "failed", error=str(e))
+
+
+@router.post("/all")
+async def sync_all_sources(
+    background_tasks: BackgroundTasks,
+    days: int = Query(30, description="Number of days to sync"),
+):
+    """
+    Sync data from all sources (runs in background to avoid timeout).
+    Check progress at GET /sync/progress
+    """
+    _update_sync_status("all", "started")
+    background_tasks.add_task(_run_sync_all, days)
+    return {
+        "message": "Sync started in background",
+        "sources": ["shopify", "klaviyo", "ga4", "search_console", "merchant_center"],
+        "days": days,
+        "check_progress": "/sync/progress",
+    }
 
 
 @router.get("/costs/test")
@@ -95,26 +126,35 @@ async def sync_cost_sheet():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/shopify")
-async def sync_shopify(
-    days: int = Query(30, description="Number of days to sync"),
-    include_products: bool = Query(True, description="Include products (set to false for faster sync)")
-):
-    """
-    Sync Shopify data
-
-    Set include_products=false for faster orders-only sync (~5 sec vs ~2 min)
-    """
+async def _run_sync_shopify(days: int, include_products: bool):
+    """Background task: sync Shopify."""
+    _update_sync_status("shopify", "running")
     try:
         result = await _get_data_sync().sync_shopify(days=days, include_products=include_products)
         clear_for_source("shopify")
         response_cache.invalidate("profitability:")
         response_cache.invalidate("customers:")
         response_cache.invalidate("monitor:")
-        return result
+        _update_sync_status("shopify", "completed", result=result)
+        log.info(f"Background sync_shopify completed")
     except Exception as e:
-        log.error(f"Shopify sync error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        log.error(f"Background sync_shopify error: {str(e)}")
+        _update_sync_status("shopify", "failed", error=str(e))
+
+
+@router.post("/shopify")
+async def sync_shopify(
+    background_tasks: BackgroundTasks,
+    days: int = Query(30, description="Number of days to sync"),
+    include_products: bool = Query(True, description="Include products (set to false for faster sync)")
+):
+    """
+    Sync Shopify data (runs in background).
+    Check progress at GET /sync/progress
+    """
+    _update_sync_status("shopify", "started")
+    background_tasks.add_task(_run_sync_shopify, days, include_products)
+    return {"message": "Shopify sync started in background", "days": days, "check_progress": "/sync/progress"}
 
 
 @router.post("/shopify/quick")
@@ -132,32 +172,26 @@ async def sync_shopify_quick(days: int = Query(0, description="Number of days to
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/shopify/backfill")
-async def backfill_shopify(
-    days: int = Query(365, description="Days of history to backfill (default 365)", ge=1, le=730)
-):
-    """
-    Backfill Shopify historical data.
-
-    Fetches and saves:
-    - Products with full variant details (including SKU, vendor)
-    - Customers (all)
-    - Orders (within date range)
-    - Refunds (for refunded/partially_refunded orders)
-    - Inventory snapshot (current quantities)
-
-    Creates DataSyncLog entry for tracking.
-
-    - **days**: How far back to backfill orders (max 730 = 2 years)
-
-    Example: POST /sync/shopify/backfill?days=365
-    """
+async def _run_backfill_shopify(days: int):
+    _update_sync_status("shopify_backfill", "running")
     try:
         result = await _get_data_sync().backfill_shopify(days=days)
-        return result
+        clear_for_source("shopify")
+        _update_sync_status("shopify_backfill", "completed", result=result)
     except Exception as e:
-        log.error(f"Shopify backfill error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        log.error(f"Background shopify backfill error: {str(e)}")
+        _update_sync_status("shopify_backfill", "failed", error=str(e))
+
+
+@router.post("/shopify/backfill")
+async def backfill_shopify(
+    background_tasks: BackgroundTasks,
+    days: int = Query(365, description="Days of history to backfill (default 365)", ge=1, le=730)
+):
+    """Backfill Shopify history (background). Check GET /sync/progress"""
+    _update_sync_status("shopify_backfill", "started")
+    background_tasks.add_task(_run_backfill_shopify, days)
+    return {"message": f"Shopify backfill started in background ({days} days)", "check_progress": "/sync/progress"}
 
 
 @router.post("/shopify/inventory")
@@ -270,32 +304,42 @@ async def get_shopify_stats():
         db.close()
 
 
-@router.post("/klaviyo")
-async def sync_klaviyo(days: int = Query(30, description="Number of days to sync")):
-    """
-    Sync Klaviyo data
-    """
+async def _run_sync_klaviyo(days: int):
+    _update_sync_status("klaviyo", "running")
     try:
         result = await _get_data_sync().sync_klaviyo(days=days)
-        return result
+        _update_sync_status("klaviyo", "completed", result=result)
     except Exception as e:
-        log.error(f"Klaviyo sync error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        log.error(f"Background sync_klaviyo error: {str(e)}")
+        _update_sync_status("klaviyo", "failed", error=str(e))
 
 
-@router.post("/ga4")
-async def sync_ga4(days: int = Query(30, description="Number of days to sync")):
-    """
-    Sync Google Analytics 4 data
-    """
+@router.post("/klaviyo")
+async def sync_klaviyo(background_tasks: BackgroundTasks, days: int = Query(30, description="Number of days to sync")):
+    """Sync Klaviyo data (background). Check GET /sync/progress"""
+    _update_sync_status("klaviyo", "started")
+    background_tasks.add_task(_run_sync_klaviyo, days)
+    return {"message": "Klaviyo sync started in background", "check_progress": "/sync/progress"}
+
+
+async def _run_sync_ga4(days: int):
+    _update_sync_status("ga4", "running")
     try:
         result = await _get_data_sync().sync_ga4(days=days)
         clear_for_source("ga4")
         response_cache.invalidate("monitor:")
-        return result
+        _update_sync_status("ga4", "completed", result=result)
     except Exception as e:
-        log.error(f"GA4 sync error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        log.error(f"Background sync_ga4 error: {str(e)}")
+        _update_sync_status("ga4", "failed", error=str(e))
+
+
+@router.post("/ga4")
+async def sync_ga4(background_tasks: BackgroundTasks, days: int = Query(30, description="Number of days to sync")):
+    """Sync GA4 data (background). Check GET /sync/progress"""
+    _update_sync_status("ga4", "started")
+    background_tasks.add_task(_run_sync_ga4, days)
+    return {"message": "GA4 sync started in background", "check_progress": "/sync/progress"}
 
 
 @router.post("/google-ads")
@@ -311,20 +355,22 @@ async def sync_google_ads(days: int = Query(30, description="Number of days to s
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/merchant-center")
-async def sync_merchant_center(quick: bool = Query(False, description="Quick mode - skip full product list")):
-    """
-    Sync Google Merchant Center data
-
-    - Full sync: Gets all products, statuses, and account info
-    - Quick mode (quick=true): Skip full product list, just statuses and summary
-    """
+async def _run_sync_merchant_center(quick: bool):
+    _update_sync_status("merchant_center", "running")
     try:
         result = await _get_data_sync().sync_merchant_center(quick=quick)
-        return result
+        _update_sync_status("merchant_center", "completed", result=result)
     except Exception as e:
-        log.error(f"Merchant Center sync error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        log.error(f"Background sync_merchant_center error: {str(e)}")
+        _update_sync_status("merchant_center", "failed", error=str(e))
+
+
+@router.post("/merchant-center")
+async def sync_merchant_center(background_tasks: BackgroundTasks, quick: bool = Query(False, description="Quick mode - skip full product list")):
+    """Sync Merchant Center data (background). Check GET /sync/progress"""
+    _update_sync_status("merchant_center", "started")
+    background_tasks.add_task(_run_sync_merchant_center, quick)
+    return {"message": "Merchant Center sync started in background", "check_progress": "/sync/progress"}
 
 
 @router.post("/merchant-center/quick")
@@ -406,25 +452,28 @@ async def sync_github_quick():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.post("/search-console")
-async def sync_search_console(
-    days: int = Query(480, description="Days to sync (max 480 = 16 months)"),
-    quick: bool = Query(False, description="Quick mode - last 7 days only")
-):
-    """
-    Sync Google Search Console data
-
-    - Full sync: Gets queries, pages, devices, countries (up to 16 months)
-    - Quick mode (quick=true): Last 7 days summary only
-    """
+async def _run_sync_search_console(days: int, quick: bool):
+    _update_sync_status("search_console", "running")
     try:
         result = await _get_data_sync().sync_search_console(days=days, quick=quick)
         clear_for_source("search_console")
         response_cache.invalidate("monitor:")
-        return result
+        _update_sync_status("search_console", "completed", result=result)
     except Exception as e:
-        log.error(f"Search Console sync error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        log.error(f"Background sync_search_console error: {str(e)}")
+        _update_sync_status("search_console", "failed", error=str(e))
+
+
+@router.post("/search-console")
+async def sync_search_console(
+    background_tasks: BackgroundTasks,
+    days: int = Query(480, description="Days to sync (max 480 = 16 months)"),
+    quick: bool = Query(False, description="Quick mode - last 7 days only")
+):
+    """Sync Search Console data (background). Check GET /sync/progress"""
+    _update_sync_status("search_console", "started")
+    background_tasks.add_task(_run_sync_search_console, days, quick)
+    return {"message": "Search Console sync started in background", "check_progress": "/sync/progress"}
 
 
 @router.post("/search-console/quick")
@@ -657,6 +706,12 @@ async def diagnose_connectors():
     }
 
     return results
+
+
+@router.get("/progress")
+async def get_sync_progress():
+    """Get progress of background sync tasks."""
+    return _sync_status or {"message": "No syncs have been started yet"}
 
 
 @router.get("/status")
