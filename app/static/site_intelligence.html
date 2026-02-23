@@ -989,10 +989,11 @@
                     // 404/redirect issues: URL path is the stable identity
                     stable = issue.requested_url || issue.url_path || '';
                 } else if (issue.file_path && issue.category) {
-                    // Code health: file + category (stable across re-scans)
-                    stable = issue.file_path + '|' + issue.category;
+                    // Code health: file + category + title (title needed to distinguish
+                    // multiple findings in the same file/category)
+                    stable = issue.file_path + '|' + issue.category + '|' + (issue.title || '').replace(/[\d,.]+/g, '#');
                 } else if (issue.file_path) {
-                    stable = issue.file_path;
+                    stable = issue.file_path + '|' + (issue.title || '').replace(/[\d,.]+/g, '#');
                 } else if (issue._stableKey) {
                     // Explicitly assigned stable key (CWV metrics, data quality checks)
                     stable = issue._stableKey;
@@ -1780,7 +1781,11 @@
                 const freshness = d.freshness || {};
                 const sources = freshness.sources || {};
                 let sourceKey = null;
-                Object.keys(sources).forEach(k => { if ((issue.title || '').toLowerCase().includes(k.replace(/_/g, ' '))) sourceKey = k; });
+                const titleLower = (issue.title || '').toLowerCase();
+                Object.keys(sources).forEach(k => {
+                    // Match both underscored form (search_console) and spaced form (search console)
+                    if (titleLower.includes(k.toLowerCase()) || titleLower.includes(k.replace(/_/g, ' '))) sourceKey = k;
+                });
                 const src = sourceKey ? sources[sourceKey] : null;
                 const isFresh = src && !src.stale && !src.is_stale;
                 if (store) issueTracker.setVerification(store.source, issue, { passed: isFresh, details: sourceKey ? (isFresh ? sourceKey + ' is now fresh' : sourceKey + ' still stale (' + (src.lag_hours || '?') + 'h)') : 'Source not identified' });
@@ -2386,6 +2391,8 @@
 
         // Track revenue at risk from redirects
         let totalRevenueAtRisk = 0;
+        // Previous visit snapshot — captured in renderKPIs before overwrite
+        let prevVisitSnapshot = null;
 
         function renderFreshness(freshness) {
             const panel = document.getElementById('freshness-panel');
@@ -2472,6 +2479,8 @@
             // Change tracking via localStorage (window-scoped)
             const storageKey = 'site_intel_snapshot_' + currentTimeWindow;
             const prev = JSON.parse(localStorage.getItem(storageKey) || 'null');
+            // Capture previous snapshot BEFORE overwriting so Executive View can use it
+            prevVisitSnapshot = prev;
             const newEl = document.getElementById('kpi-new-issues');
 
             if (prev && prev.totalIssues !== undefined) {
@@ -2484,7 +2493,7 @@
                 newEl.style.color = 'var(--slate)';
             }
 
-            // Save current snapshot
+            // Save current snapshot (overwrites previous — executive view uses prevVisitSnapshot)
             localStorage.setItem(storageKey, JSON.stringify({
                 totalIssues: totalIssues,
                 revenue: totalRevenueAtRisk,
@@ -2523,11 +2532,10 @@
                 scoreCard = '<div class="exec-card"><div class="exec-card-label">Health Score Change</div><div class="exec-card-value" style="color:' + clr + '">' + (avg > 0 ? '+' : '') + avg + ' pts</div><div class="exec-card-detail">vs ' + history.length + ' days ago</div></div>';
             }
 
-            // 2. Revenue at risk
+            // 2. Revenue at risk (use prevVisitSnapshot captured before renderKPIs overwrote localStorage)
             let revCard = '<div class="exec-card"><div class="exec-card-label">Revenue at Risk</div><div class="exec-card-value" style="color:var(--red)">$' + Math.round(totalRevenueAtRisk).toLocaleString() + '/mo</div>';
-            const prev = JSON.parse(localStorage.getItem('site_intel_snapshot_' + currentTimeWindow) || 'null');
-            if (prev && prev.revenue !== undefined) {
-                const diff = totalRevenueAtRisk - prev.revenue;
+            if (prevVisitSnapshot && prevVisitSnapshot.revenue !== undefined) {
+                const diff = totalRevenueAtRisk - prevVisitSnapshot.revenue;
                 const clr = diff > 0 ? 'var(--red)' : diff < 0 ? 'var(--green)' : 'var(--slate)';
                 revCard += '<div class="exec-card-detail" style="color:' + clr + '">' + (diff > 0 ? '+' : '') + '$' + Math.round(Math.abs(diff)).toLocaleString() + ' vs last visit</div>';
             }
