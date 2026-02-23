@@ -50,6 +50,12 @@ class StrategicBrief(Base):
     whats_working = Column(JSON, nullable=True)
     watch_list = Column(JSON, nullable=True)
 
+    # Quick wins (persisted so they reload from DB)
+    quick_wins = Column(JSON, nullable=True)
+
+    # LLM-generated issue triage markdown
+    issue_command_center_triage = Column(Text, nullable=True)
+
     # Revenue impact totals
     total_opportunity_value = Column(Numeric(12, 2), default=0)
     total_issues_identified = Column(Integer, default=0)

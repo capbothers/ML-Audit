@@ -726,9 +726,11 @@ function delta(curr, prev) {
     return `<span class="kpi-delta ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</span>`;
 }
 
-// Simple markdown renderer
+// Simple markdown renderer — escapes HTML first to prevent XSS from LLM output
 function renderMd(md) {
     if (!md) return '<p style="color:var(--slate);">No analysis available.</p>';
+    // Escape HTML entities before applying markdown transforms
+    md = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     return md
         .replace(/^### (.+)$/gm, '<h3>$1</h3>')
         .replace(/^## (.+)$/gm, '<h2>$1</h2>')
@@ -938,9 +940,9 @@ function renderDaily() {
     // Decisions (Req 1 — action-first cards, enriched in backend)
     const priorities = d.todays_priorities || [];
     document.getElementById('priorityCount').textContent = priorities.length + (priorities.length === 1 ? ' decision' : ' decisions');
-    if (priorities.length) {
-        document.getElementById('priorityList').innerHTML = priorities.map((p, i) => renderDecisionCard(p, i)).join('');
-    }
+    document.getElementById('priorityList').innerHTML = priorities.length
+        ? priorities.map((p, i) => renderDecisionCard(p, i)).join('')
+        : '<div style="color:var(--slate);text-align:center;padding:20px;">No decisions yet. Generate a daily brief to get AI-powered recommendations.</div>';
 
     // What's Working
     renderList('whatsWorking', d.whats_working, 'positive');
@@ -976,9 +978,9 @@ function renderWeekly() {
     // Decisions (Req 1 — action-first cards, enriched in backend)
     const priorities = d.todays_priorities || [];
     document.getElementById('weeklyPriorityCount').textContent = priorities.length + (priorities.length === 1 ? ' decision' : ' decisions');
-    if (priorities.length) {
-        document.getElementById('weeklyPriorityList').innerHTML = priorities.map((p, i) => renderDecisionCard(p, i)).join('');
-    }
+    document.getElementById('weeklyPriorityList').innerHTML = priorities.length
+        ? priorities.map((p, i) => renderDecisionCard(p, i)).join('')
+        : '<div style="color:var(--slate);text-align:center;padding:20px;">Generate a weekly brief to see strategic decisions.</div>';
 
     // Correlations
     renderCorrelations('weeklyCorrelations', d.cross_module_correlations);
@@ -1035,8 +1037,8 @@ function updateSharedSections() {
 
     // Quick Wins
     const qw = d.quick_wins || [];
-    if (qw.length) {
-        document.getElementById('quickWinsList').innerHTML = qw.map(q => `
+    document.getElementById('quickWinsList').innerHTML = qw.length
+        ? qw.map(q => `
             <div style="padding:10px 0;border-bottom:1px solid var(--line);">
                 <div style="font-weight:600;font-size:13px;margin-bottom:3px;">${esc(q.title)}</div>
                 <div style="font-size:12px;color:var(--ink-soft);">${esc(q.suggested_action || '')}</div>
@@ -1046,8 +1048,8 @@ function updateSharedSections() {
                     &middot; ${esc(q.source_module || '')}
                 </div>
             </div>
-        `).join('');
-    }
+        `).join('')
+        : '<div style="font-size:13px;color:var(--slate);">No quick wins identified.</div>';
 
     // Issues tab
     const issues = d.issue_command_center || [];
@@ -1058,13 +1060,15 @@ function updateSharedSections() {
     document.getElementById('issTotalOpp').textContent = fmtD(d.total_opportunity_value);
     document.getElementById('issueCount').textContent = issues.length + ' issues';
 
-    // Issue triage content (LLM)
-    const triageData = DAILY || WEEKLY;
-    if (triageData) {
-        // Try to get the LLM-generated triage from the daily brief first
-        const triage = (DAILY && DAILY.issue_command_center_triage) || null;
-        // The issue triage is stored in the brief generation
-        // We need to fetch it from the issues endpoint or use what we have
+    // Issue triage content (LLM markdown)
+    const triageMd = d.issue_command_center_triage || null;
+    if (triageMd) {
+        document.getElementById('issueTriageContent').innerHTML = renderMd(triageMd);
+    } else if (issues.length) {
+        // Fallback: build structured summary from issues
+        _renderIssueSummaryFallback(issues);
+    } else {
+        document.getElementById('issueTriageContent').innerHTML = '<p style="color:var(--slate);">Generate a brief to see the AI-powered issue triage.</p>';
     }
 
     if (issues.length) {
@@ -1086,6 +1090,8 @@ function updateSharedSections() {
                 </div>
             `;
         }).join('');
+    } else {
+        document.getElementById('issueList').innerHTML = '<div style="color:var(--slate);text-align:center;padding:20px;font-size:13px;">No issues detected.</div>';
     }
 
     // AI Insights tab
@@ -1127,36 +1133,25 @@ function updateSharedSections() {
         ${freshnessHtml}
     `;
 
-    // Issue triage (LLM markdown)
-    // The LLM issue triage is generated during brief creation but stored differently
-    // Let's fetch it from the issues endpoint
-    fetchIssueTriage();
 }
 
-async function fetchIssueTriage() {
-    // The issue triage LLM content is embedded in the brief generation
-    // We render the structured issues above; the LLM triage is in the CRO-like markdown
-    // For now, show a note
-    const d = DAILY || WEEKLY;
-    if (d && d.issue_command_center && d.issue_command_center.length > 0) {
-        // Build a summary from the issues
-        const issues = d.issue_command_center;
-        const critical = issues.filter(i => i.urgency === 'immediate');
-        const high = issues.filter(i => i.urgency === 'this_week');
-        let html = '<h2>Issue Overview</h2>';
-        html += `<p><strong>${issues.length}</strong> issues detected across <strong>${[...new Set(issues.map(i => i.source_module))].length}</strong> modules.</p>`;
-        if (critical.length) {
-            html += '<h3>Critical (Fix Today)</h3><ul>';
-            critical.forEach(c => { html += `<li><strong>${esc(c.title)}</strong> — ${esc(c.suggested_action || c.description)}</li>`; });
-            html += '</ul>';
-        }
-        if (high.length) {
-            html += '<h3>High Priority (Fix This Week)</h3><ul>';
-            high.slice(0, 5).forEach(h => { html += `<li><strong>${esc(h.title)}</strong> — ${esc(h.suggested_action || h.description)}</li>`; });
-            html += '</ul>';
-        }
-        document.getElementById('issueTriageContent').innerHTML = html;
+function _renderIssueSummaryFallback(issues) {
+    // Structured fallback when no LLM triage markdown is available
+    const critical = issues.filter(i => i.urgency === 'immediate');
+    const high = issues.filter(i => i.urgency === 'this_week');
+    let html = '<h2>Issue Overview</h2>';
+    html += `<p><strong>${issues.length}</strong> issues detected across <strong>${[...new Set(issues.map(i => i.source_module))].length}</strong> modules.</p>`;
+    if (critical.length) {
+        html += '<h3>Critical (Fix Today)</h3><ul>';
+        critical.forEach(c => { html += `<li><strong>${esc(c.title)}</strong> — ${esc(c.suggested_action || c.description)}</li>`; });
+        html += '</ul>';
     }
+    if (high.length) {
+        html += '<h3>High Priority (Fix This Week)</h3><ul>';
+        high.slice(0, 5).forEach(h => { html += `<li><strong>${esc(h.title)}</strong> — ${esc(h.suggested_action || h.description)}</li>`; });
+        html += '</ul>';
+    }
+    document.getElementById('issueTriageContent').innerHTML = html;
 }
 
 // ── Render: Helpers ──

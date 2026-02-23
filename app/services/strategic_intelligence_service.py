@@ -183,6 +183,7 @@ class StrategicIntelligenceService:
             'growth_playbook': None,
             'cross_module_correlations': correlations,
             'issue_command_center': issue_items[:30],
+            'issue_command_center_triage': issues_result,
             'ai_strategic_insights': insights_result,
             'whats_working': whats_working,
             'watch_list': watch_items,
@@ -282,6 +283,7 @@ class StrategicIntelligenceService:
             'growth_playbook': growth_result,
             'cross_module_correlations': correlations,
             'issue_command_center': issue_items[:30],
+            'issue_command_center_triage': issues_result,
             'ai_strategic_insights': insights_result,
             'whats_working': whats_working,
             'watch_list': watch_items,
@@ -2058,6 +2060,8 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
                 ai_strategic_insights=data.get('ai_strategic_insights'),
                 whats_working=data.get('whats_working'),
                 watch_list=data.get('watch_list'),
+                quick_wins=data.get('quick_wins'),
+                issue_command_center_triage=data.get('issue_command_center_triage'),
                 total_opportunity_value=data.get('total_opportunity_value', 0),
                 total_issues_identified=data.get('total_issues_identified', 0),
                 total_quick_wins=data.get('total_quick_wins', 0),
@@ -2079,7 +2083,7 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
 
             # Hard cap to 3 decisions (LLM sometimes returns more)
             raw_priorities = (data.get('todays_priorities') or [])[:3]
-            enriched_priorities = []
+            rec_enriched_pairs = []
 
             for p in raw_priorities:
                 if isinstance(p, dict):
@@ -2176,7 +2180,16 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
                         'target_metric_value': target_val,
                         'status': 'new',
                     })
-                    enriched_priorities.append(enriched)
+                    rec_enriched_pairs.append((rec, enriched))
+
+            # Flush to assign DB IDs to recommendations
+            self.db.flush()
+
+            # Inject rec.id into enriched dicts so frontend status <select> works
+            enriched_priorities = []
+            for rec, enriched in rec_enriched_pairs:
+                enriched['id'] = rec.id
+                enriched_priorities.append(enriched)
 
             # Sort by priority_score desc, then overwrite on brief
             enriched_priorities.sort(key=lambda x: x.get('priority_score', 0), reverse=True)
@@ -2215,6 +2228,17 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
             BriefCorrelation.brief_id == brief.id
         ).all()
 
+        # Merge rec.id into todays_priorities for older briefs that lack it
+        priorities = brief.todays_priorities or []
+        if priorities and recs:
+            rec_by_rank = {r.priority_rank: r for r in recs}
+            for p in priorities:
+                if isinstance(p, dict) and not p.get('id'):
+                    rank = p.get('rank', 0)
+                    matched_rec = rec_by_rank.get(rank)
+                    if matched_rec:
+                        p['id'] = matched_rec.id
+
         return {
             'id': brief.id,
             'cadence': brief.cadence,
@@ -2228,7 +2252,7 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
             'kpi_snapshot': brief.kpi_snapshot,
             'executive_pulse': brief.executive_pulse,
             'health_status': brief.health_status,
-            'todays_priorities': brief.todays_priorities,
+            'todays_priorities': priorities,
             'conversion_analysis': brief.conversion_analysis,
             'growth_playbook': brief.growth_playbook,
             'cross_module_correlations': [self._corr_to_dict(c) for c in corrs],
@@ -2236,6 +2260,8 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
             'ai_strategic_insights': brief.ai_strategic_insights,
             'whats_working': brief.whats_working,
             'watch_list': brief.watch_list,
+            'quick_wins': brief.quick_wins,
+            'issue_command_center_triage': brief.issue_command_center_triage,
             'total_opportunity_value': _dec(brief.total_opportunity_value),
             'total_issues_identified': brief.total_issues_identified,
             'total_quick_wins': brief.total_quick_wins,
