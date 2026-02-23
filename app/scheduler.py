@@ -594,6 +594,12 @@ def setup_scheduler():
     - Caprice Pricing:    Daily 1:00pm  (pricing file import)
     """
 
+    # misfire_grace_time: when the app wakes from Render free-tier sleep,
+    # any job whose scheduled time was missed within this window will fire
+    # immediately instead of being skipped.
+    CRON_GRACE = 6 * 3600       # 6 hours — covers overnight sleep
+    INTERVAL_GRACE = 4 * 3600   # 4 hours — generous for interval jobs
+
     # ── Shopify ──────────────────────────────────────────
     # Orders only - every 2 hours
     scheduler.add_job(
@@ -602,7 +608,8 @@ def setup_scheduler():
         id='shopify_sync',
         name='Shopify Orders & Items Sync',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=INTERVAL_GRACE,
     )
     # Full sync (with products) - daily at 1am AEST
     scheduler.add_job(
@@ -611,7 +618,8 @@ def setup_scheduler():
         id='shopify_full_sync',
         name='Shopify Full Sync (with products)',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Google Ads ───────────────────────────────────────
@@ -622,7 +630,8 @@ def setup_scheduler():
         id='google_ads_sheet_sync',
         name='Google Ads Sheet Daily Import',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Cost Sheet (NETT Master) ─────────────────────────
@@ -633,7 +642,8 @@ def setup_scheduler():
         id='cost_sheet_sync',
         name='Cost Sheet Daily Sync',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── GA4 ──────────────────────────────────────────────
@@ -644,7 +654,8 @@ def setup_scheduler():
         id='ga4_sync_morning',
         name='GA4 Morning Sync',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
     scheduler.add_job(
         sync_ga4,
@@ -652,7 +663,8 @@ def setup_scheduler():
         id='ga4_sync_afternoon',
         name='GA4 Afternoon Sync',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Search Console ───────────────────────────────────
@@ -663,7 +675,8 @@ def setup_scheduler():
         id='search_console_sync',
         name='Search Console Daily Sync',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Merchant Center ──────────────────────────────────
@@ -674,7 +687,8 @@ def setup_scheduler():
         id='merchant_center_sync',
         name='Merchant Center Daily Sync',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Klaviyo ──────────────────────────────────────────
@@ -685,7 +699,8 @@ def setup_scheduler():
         id='klaviyo_sync',
         name='Klaviyo Hourly Sync',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=INTERVAL_GRACE,
     )
 
     # ── Hotjar/Clarity ───────────────────────────────────
@@ -696,7 +711,8 @@ def setup_scheduler():
         id='hotjar_sync',
         name='Hotjar/Clarity Daily Sync',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── GitHub ───────────────────────────────────────────
@@ -707,7 +723,8 @@ def setup_scheduler():
         id='github_sync',
         name='GitHub Daily Sync',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── ML Intelligence ──────────────────────────────────
@@ -718,7 +735,8 @@ def setup_scheduler():
         id='ml_intelligence',
         name='ML Intelligence Daily Pipeline',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Caprice Pricing ──────────────────────────────────
@@ -729,7 +747,8 @@ def setup_scheduler():
         id='caprice_pricing_import',
         name='Caprice Pricing Daily Import',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Shippit ────────────────────────────────────────────
@@ -741,7 +760,8 @@ def setup_scheduler():
             id='shippit_sync',
             name='Shippit Shipping Cost Sync',
             replace_existing=True,
-            max_instances=1
+            max_instances=1,
+            misfire_grace_time=INTERVAL_GRACE,
         )
 
     # ── Competitor Blogs ─────────────────────────────────
@@ -752,7 +772,8 @@ def setup_scheduler():
         id='competitor_blogs_sync',
         name='Competitor Blog Daily Scrape',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Decision Outcome Scoring ──────────────────────────
@@ -763,7 +784,8 @@ def setup_scheduler():
         id='decision_outcomes_7d',
         name='Score 7-Day Decision Outcomes',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
     # Daily at 4:15am AEST: score 30-day outcomes
     scheduler.add_job(
@@ -772,7 +794,8 @@ def setup_scheduler():
         id='decision_outcomes_30d',
         name='Score 30-Day Decision Outcomes',
         replace_existing=True,
-        max_instances=1
+        max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     log.info("Scheduler configured with all sync jobs (timezone: Australia/Sydney)")
