@@ -2261,7 +2261,7 @@
                 }
 
                 if (score !== null) score = Math.max(0, Math.min(100, score));
-                setScore('sp-score', noData ? '--' : score);
+                setScore('sp-score', noData ? null : score);
                 if (noData) {
                     const statusEl = document.getElementById('sp-status');
                     if (statusEl) { statusEl.textContent = 'No Data'; statusEl.className = 'hi-status status-nodata'; }
@@ -2335,7 +2335,6 @@
                         const cause = e.likely_cause || (e.requested_url && e.requested_url.includes('/products/') ? 'deleted_product' : 'unknown');
                         const sev = hits > 100 ? 'critical' : hits > 20 ? 'warning' : 'info';
                         issues.push({ severity: sev, title: '404: ' + (e.requested_url || e.url_path || e.url), description: hits + ' hits' + (revenue ? ' / ~$' + Math.round(revenue) + '/mo lost' : ''), revenue_impact: revenue, confidence_level: confidence, likely_cause: cause, traffic_hits: hits, recommendation: (e.recommended_redirect || {}).action || e.recommended_action || 'Create redirect or restore page' });
-                        totalRevenueAtRisk += revenue;
                         if (sev === 'critical') { allCriticalIssues.push({ source: 'Redirects', title: '404 with ' + hits + ' hits: ' + (e.requested_url || e.url), revenue: revenue }); score -= 15; }
                         else if (sev === 'warning') score -= 5;
                     });
@@ -2389,7 +2388,7 @@
             }
         }
 
-        // Track revenue at risk from redirects
+        // Track revenue at risk across all issue sources
         let totalRevenueAtRisk = 0;
         // Previous visit snapshot — captured in renderKPIs before overwrite
         let prevVisitSnapshot = null;
@@ -2663,7 +2662,6 @@
             btn.disabled = true;
             btn.textContent = 'Loading...';
             allCriticalIssues = [];
-            totalRevenueAtRisk = 0;
 
             // Cleanup stale localStorage entries (>90 days)
             issueTracker.cleanup();
@@ -2717,6 +2715,14 @@
             const totalIssues = ['dq-issues', 'sp-issues', 'ch-issues', 'rh-issues']
                 .map(id => parseInt(document.getElementById(id).textContent) || 0)
                 .reduce((a, b) => a + b, 0);
+
+            // Aggregate revenue at risk from ALL issue sources (not just redirects)
+            totalRevenueAtRisk = 0;
+            Object.values(issueStore).forEach(store => {
+                (store.issues || []).forEach(issue => {
+                    totalRevenueAtRisk += issue.dollarImpact || 0;
+                });
+            });
 
             // Render new panels
             renderKPIs(totalIssues);
