@@ -18,7 +18,7 @@ prophet==1.1.5
 # Data Connectors & APIs
 requests==2.31.0
 aiohttp==3.9.1
-ShopifyAPI==12.3.0
+ShopifyAPI==12.7.0
 klaviyo-api==8.0.0
 google-analytics-data==0.17.1
 google-ads==23.1.0
