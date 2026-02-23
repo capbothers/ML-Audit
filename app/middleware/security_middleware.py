@@ -9,7 +9,7 @@ from starlette.responses import Response
 from app.config import get_settings
 
 # Paths exempt from Basic Auth
-OPEN_PATHS = ("/health", "/robots.txt", "/site-health/track")
+OPEN_PATHS = ("/health", "/robots.txt", "/site-health/track", "/sync")
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
