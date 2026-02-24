@@ -1001,7 +1001,7 @@ class MLIntelligenceService:
         snapshots = (
             self.db.query(InventoryDailySnapshot)
             .filter(
-                InventoryDailySnapshot.sku == sku,
+                func.upper(InventoryDailySnapshot.sku) == sku.upper(),
                 InventoryDailySnapshot.snapshot_date >= cutoff,
             )
             .order_by(InventoryDailySnapshot.snapshot_date)
@@ -1136,7 +1136,7 @@ class MLIntelligenceService:
             .group_by(ShopifyOrderItem.sku)
             .all()
         )
-        velocity_7d = {r.sku: float(r.units_sold_7d or 0) for r in velocity_7d_rows}
+        velocity_7d = {r.sku.upper(): float(r.units_sold_7d or 0) for r in velocity_7d_rows}
 
         # Current inventory by SKU (active products only)
         active_pids = self.db.query(ShopifyProduct.shopify_product_id).filter(
@@ -1158,7 +1158,7 @@ class MLIntelligenceService:
             .all()
         )
         inventory_by_sku = {
-            r.sku: {
+            r.sku.upper(): {
                 "on_hand": int(r.on_hand or 0),
                 "vendor": r.vendor,
                 "title": r.title,
@@ -1178,7 +1178,7 @@ class MLIntelligenceService:
 
         suggestions = []
         for row in velocity_30d:
-            sku = row.sku
+            sku = row.sku.upper() if row.sku else row.sku
             if not sku:
                 continue
 
@@ -1268,6 +1268,50 @@ class MLIntelligenceService:
                 )
             )
 
+        # --- Dead stock: inventory SKUs with zero 30d sales ---
+        processed_skus = {s.sku for s in suggestions}
+
+        for inv_sku, inv_data in inventory_by_sku.items():
+            if inv_sku in processed_skus or not inv_sku:
+                continue
+
+            units_on_hand = inv_data["on_hand"]
+            if units_on_hand == 0:
+                continue  # zero stock + zero sales = not actionable
+
+            inv_oversold = units_on_hand < 0
+            inv_cost_missing = (inv_sku not in cost_map)
+
+            if inv_oversold:
+                ds_doc = 0.0
+                ds_suggestion = "reorder_now"
+                ds_urgency = "critical"
+                ds_reorder_qty = 1
+            else:
+                ds_doc = 999.0
+                ds_suggestion = "no_sales"
+                ds_urgency = "ok"
+                ds_reorder_qty = None
+
+            suggestions.append(
+                MLInventorySuggestion(
+                    sku=inv_sku,
+                    brand=inv_data["vendor"],
+                    title=inv_data["title"],
+                    units_on_hand=units_on_hand,
+                    daily_sales_velocity=0.0,
+                    velocity_trend="none",
+                    days_of_cover=ds_doc,
+                    suggestion=ds_suggestion,
+                    reorder_quantity=ds_reorder_qty,
+                    urgency=ds_urgency,
+                    oversold=inv_oversold,
+                    cost_missing=inv_cost_missing,
+                    offline_units_30d=0.0,
+                    generated_at=now,
+                )
+            )
+
         self.db.add_all(suggestions)
         self.db.commit()
 
@@ -1289,8 +1333,11 @@ class MLIntelligenceService:
         urgency: Optional[str] = None,
         suggestion: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Retrieve inventory suggestions from DB."""
+        """Retrieve inventory suggestions from DB (scoped to latest run)."""
+        latest_gen = self.db.query(func.max(MLInventorySuggestion.generated_at)).scalar()
         query = self.db.query(MLInventorySuggestion)
+        if latest_gen:
+            query = query.filter(MLInventorySuggestion.generated_at == latest_gen)
 
         if brand:
             query = query.filter(

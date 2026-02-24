@@ -1043,9 +1043,9 @@ class DataSyncService:
         Save Shopify inventory snapshot to database.
 
         Returns:
-            Dict with keys: processed, created, updated, failed
+            Dict with keys: processed, created, updated, failed, stale_removed
         """
-        result = {'processed': 0, 'created': 0, 'updated': 0, 'failed': 0}
+        result = {'processed': 0, 'created': 0, 'updated': 0, 'failed': 0, 'stale_removed': 0}
         inventory_data = data.get('inventory', {})
         items = inventory_data.get('items', []) if isinstance(inventory_data, dict) else inventory_data
         if not items:
@@ -1101,6 +1101,27 @@ class DataSyncService:
                     log.warning(f"Failed to save inventory {inv_item_id}: {e}")
                     result['failed'] += 1
                     continue
+
+            # Remove inventory rows for items no longer in Shopify
+            processed_inv_ids = set()
+            for item_data in items:
+                iid = item_data.get('inventory_item_id')
+                if iid:
+                    processed_inv_ids.add(iid)
+
+            if processed_inv_ids:
+                stale_deleted = (
+                    db.query(ShopifyInventory)
+                    .filter(
+                        ShopifyInventory.shopify_inventory_item_id.notin_(
+                            list(processed_inv_ids)
+                        )
+                    )
+                    .delete(synchronize_session='fetch')
+                )
+                if stale_deleted:
+                    log.info(f"Removed {stale_deleted} stale inventory records")
+                result['stale_removed'] = stale_deleted
 
             db.commit()
             log.info(f"Saved {result['created']} new, updated {result['updated']} Shopify inventory records")

@@ -17,7 +17,7 @@ from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Any
 from decimal import Decimal
 
-from sqlalchemy import func, desc, asc, and_, case
+from sqlalchemy import func, desc, asc, and_, or_, case
 from sqlalchemy.orm import Session
 
 from app.models.ml_intelligence import MLInventorySuggestion, InventoryDailySnapshot
@@ -53,6 +53,15 @@ class InventoryIntelligenceService:
         )
         return pc_cost, inv_cost
 
+    def _latest_gen_filter(self):
+        """Filter clause scoping queries to the latest ML suggestion run."""
+        latest_gen = self.db.query(
+            func.max(MLInventorySuggestion.generated_at)
+        ).scalar()
+        if latest_gen:
+            return MLInventorySuggestion.generated_at == latest_gen
+        return MLInventorySuggestion.id > 0
+
     # ─────────────────────────────────────────────
     # TAB 1: INVENTORY PULSE
     # ─────────────────────────────────────────────
@@ -79,6 +88,8 @@ class InventoryIntelligenceService:
     def get_executive_snapshot(self) -> Dict[str, Any]:
         """KPI calculations for the executive overview."""
         try:
+            gen_filter = self._latest_gen_filter()
+
             # Counts by suggestion category
             cat_counts = (
                 self.db.query(
@@ -86,6 +97,7 @@ class InventoryIntelligenceService:
                     func.count().label("cnt"),
                     func.sum(MLInventorySuggestion.units_on_hand).label("units"),
                 )
+                .filter(gen_filter)
                 .group_by(MLInventorySuggestion.suggestion)
                 .all()
             )
@@ -104,6 +116,7 @@ class InventoryIntelligenceService:
                     MLInventorySuggestion.urgency,
                     func.count().label("cnt"),
                 )
+                .filter(gen_filter)
                 .group_by(MLInventorySuggestion.urgency)
                 .all()
             )
@@ -115,6 +128,7 @@ class InventoryIntelligenceService:
                     MLInventorySuggestion.velocity_trend,
                     func.count().label("cnt"),
                 )
+                .filter(gen_filter)
                 .group_by(MLInventorySuggestion.velocity_trend)
                 .all()
             )
@@ -126,6 +140,7 @@ class InventoryIntelligenceService:
                     func.avg(MLInventorySuggestion.days_of_cover).label("avg_doc"),
                 )
                 .filter(
+                    gen_filter,
                     MLInventorySuggestion.days_of_cover < 999,
                     MLInventorySuggestion.daily_sales_velocity > 0,
                 )
@@ -138,7 +153,7 @@ class InventoryIntelligenceService:
                     func.sum(MLInventorySuggestion.reorder_quantity).label("total_qty"),
                     func.count().label("cnt"),
                 )
-                .filter(MLInventorySuggestion.suggestion.in_(["reorder_now", "reorder_soon"]))
+                .filter(gen_filter, MLInventorySuggestion.suggestion.in_(["reorder_now", "reorder_soon"]))
                 .first()
             )
 
@@ -146,7 +161,7 @@ class InventoryIntelligenceService:
             oversold_count = (
                 self.db.query(func.count())
                 .select_from(MLInventorySuggestion)
-                .filter(MLInventorySuggestion.oversold == True)
+                .filter(gen_filter, MLInventorySuggestion.oversold == True)
                 .scalar()
             ) or 0
 
@@ -155,6 +170,7 @@ class InventoryIntelligenceService:
                 self.db.query(func.count())
                 .select_from(MLInventorySuggestion)
                 .filter(
+                    gen_filter,
                     MLInventorySuggestion.cost_missing == True,
                     MLInventorySuggestion.suggestion.in_(["reorder_now", "reorder_soon"]),
                 )
@@ -164,6 +180,7 @@ class InventoryIntelligenceService:
             # Total offline units estimated
             offline_total = (
                 self.db.query(func.sum(MLInventorySuggestion.offline_units_30d))
+                .filter(gen_filter)
                 .scalar()
             ) or 0
 
@@ -201,13 +218,20 @@ class InventoryIntelligenceService:
                 .scalar()
             ) or 0
 
-            # Not stocked: active product variants with no inventory record or quantity = 0
+            # Not stocked: active products with no inventory record or quantity = 0
             not_stocked_count = (
-                self.db.query(func.count())
-                .select_from(ShopifyInventory)
+                self.db.query(func.count(ShopifyProduct.shopify_product_id))
+                .select_from(ShopifyProduct)
+                .outerjoin(
+                    ShopifyInventory,
+                    ShopifyProduct.shopify_product_id == ShopifyInventory.shopify_product_id,
+                )
                 .filter(
-                    ShopifyInventory.shopify_product_id.in_(active_pids),
-                    ShopifyInventory.inventory_quantity == 0,
+                    ShopifyProduct.status == 'active',
+                    or_(
+                        ShopifyInventory.id.is_(None),
+                        ShopifyInventory.inventory_quantity == 0,
+                    ),
                 )
                 .scalar()
             ) or 0
@@ -304,10 +328,26 @@ class InventoryIntelligenceService:
             return {"total_value": 0, "coverage_pct": 0}
 
     def _calculate_turnover_rate(self, days: int = 30) -> float:
-        """Inventory turnover: units sold in period / current inventory."""
+        """Inventory turnover: units sold (active-product SKUs) / current inventory."""
         try:
             cutoff = date.today() - timedelta(days=days)
 
+            active_pids = self.db.query(ShopifyProduct.shopify_product_id).filter(
+                ShopifyProduct.status == 'active'
+            ).subquery()
+
+            # Active SKUs (upper-cased for matching)
+            active_skus = (
+                self.db.query(func.upper(ShopifyInventory.sku))
+                .filter(
+                    ShopifyInventory.shopify_product_id.in_(active_pids),
+                    ShopifyInventory.sku.isnot(None),
+                    ShopifyInventory.sku != "",
+                )
+                .subquery()
+            )
+
+            # Numerator: units sold for active-product SKUs only
             sold = (
                 self.db.query(func.sum(ShopifyOrderItem.quantity))
                 .join(
@@ -318,13 +358,12 @@ class InventoryIntelligenceService:
                     ShopifyOrderItem.order_date >= cutoff,
                     ShopifyOrder.cancelled_at.is_(None),
                     ShopifyOrder.financial_status.in_(["paid", "partially_refunded"]),
+                    func.upper(ShopifyOrderItem.sku).in_(active_skus),
                 )
                 .scalar()
             ) or 0
 
-            active_pids = self.db.query(ShopifyProduct.shopify_product_id).filter(
-                ShopifyProduct.status == 'active'
-            ).subquery()
+            # Denominator: current inventory for active products
             inventory = (
                 self.db.query(func.sum(ShopifyInventory.inventory_quantity))
                 .filter(
@@ -619,6 +658,7 @@ class InventoryIntelligenceService:
     ) -> Dict[str, Any]:
         """Paginated reorder queue with cost estimates."""
         try:
+            gen_filter = self._latest_gen_filter()
             pc_cost, inv_cost = self._cost_subqueries()
             effective_cost = func.coalesce(pc_cost.c.cost, inv_cost.c.cost)
 
@@ -642,7 +682,8 @@ class InventoryIntelligenceService:
                 .outerjoin(pc_cost, func.upper(MLInventorySuggestion.sku) == pc_cost.c.sku)
                 .outerjoin(inv_cost, func.upper(MLInventorySuggestion.sku) == inv_cost.c.sku)
                 .filter(
-                    MLInventorySuggestion.suggestion.in_(["reorder_now", "reorder_soon"])
+                    gen_filter,
+                    MLInventorySuggestion.suggestion.in_(["reorder_now", "reorder_soon"]),
                 )
             )
 
@@ -684,7 +725,8 @@ class InventoryIntelligenceService:
                     ).label("cost_missing_count"),
                 )
                 .filter(
-                    MLInventorySuggestion.suggestion.in_(["reorder_now", "reorder_soon"])
+                    gen_filter,
+                    MLInventorySuggestion.suggestion.in_(["reorder_now", "reorder_soon"]),
                 )
             )
             if brand:
@@ -705,6 +747,7 @@ class InventoryIntelligenceService:
                 .outerjoin(pc_cost2, func.upper(MLInventorySuggestion.sku) == pc_cost2.c.sku)
                 .outerjoin(inv_cost2, func.upper(MLInventorySuggestion.sku) == inv_cost2.c.sku)
                 .filter(
+                    gen_filter,
                     MLInventorySuggestion.suggestion.in_(["reorder_now", "reorder_soon"]),
                     MLInventorySuggestion.reorder_quantity.isnot(None),
                     effective_cost2.isnot(None),
@@ -813,6 +856,7 @@ class InventoryIntelligenceService:
     def get_stock_health(self) -> Dict[str, Any]:
         """Overstock, dead stock, and brand health analysis."""
         try:
+            gen_filter = self._latest_gen_filter()
             pc_cost, inv_cost = self._cost_subqueries()
             effective_cost = func.coalesce(pc_cost.c.cost, inv_cost.c.cost)
 
@@ -829,7 +873,7 @@ class InventoryIntelligenceService:
                 )
                 .outerjoin(pc_cost, func.upper(MLInventorySuggestion.sku) == pc_cost.c.sku)
                 .outerjoin(inv_cost, func.upper(MLInventorySuggestion.sku) == inv_cost.c.sku)
-                .filter(MLInventorySuggestion.suggestion == "overstock")
+                .filter(gen_filter, MLInventorySuggestion.suggestion == "overstock")
                 .order_by(desc(MLInventorySuggestion.days_of_cover))
                 .limit(100)
                 .all()
@@ -849,7 +893,7 @@ class InventoryIntelligenceService:
                 )
                 .outerjoin(pc_cost2, func.upper(MLInventorySuggestion.sku) == pc_cost2.c.sku)
                 .outerjoin(inv_cost2, func.upper(MLInventorySuggestion.sku) == inv_cost2.c.sku)
-                .filter(MLInventorySuggestion.suggestion == "no_sales")
+                .filter(gen_filter, MLInventorySuggestion.suggestion == "no_sales")
                 .order_by(desc(MLInventorySuggestion.units_on_hand))
                 .limit(100)
                 .all()
@@ -867,6 +911,7 @@ class InventoryIntelligenceService:
                     MLInventorySuggestion.urgency,
                 )
                 .filter(
+                    gen_filter,
                     MLInventorySuggestion.oversold == True,
                     MLInventorySuggestion.units_on_hand < 0,
                 )
@@ -894,7 +939,7 @@ class InventoryIntelligenceService:
                     func.sum(case((MLInventorySuggestion.suggestion == "overstock", 1), else_=0)).label("overstock"),
                     func.sum(case((MLInventorySuggestion.suggestion == "no_sales", 1), else_=0)).label("no_sales"),
                 )
-                .filter(MLInventorySuggestion.brand.isnot(None))
+                .filter(gen_filter, MLInventorySuggestion.brand.isnot(None))
                 .group_by(MLInventorySuggestion.brand)
                 .order_by(desc("total"))
                 .limit(20)
@@ -915,21 +960,29 @@ class InventoryIntelligenceService:
                     d["days_of_cover"] = round(float(r.days_of_cover or 0), 1)
                 return d
 
-            # ----- All-inventory: Not Stocked products (active, quantity = 0) -----
+            # ----- All-inventory: Not Stocked products (active, no record or quantity = 0) -----
             active_pids = self.db.query(ShopifyProduct.shopify_product_id).filter(
                 ShopifyProduct.status == 'active'
             ).subquery()
             not_stocked_items = (
                 self.db.query(
-                    ShopifyInventory.sku,
-                    ShopifyInventory.vendor,
-                    ShopifyInventory.title,
+                    func.coalesce(ShopifyInventory.sku, '').label('sku'),
+                    func.coalesce(ShopifyInventory.vendor, ShopifyProduct.vendor).label('vendor'),
+                    func.coalesce(ShopifyInventory.title, ShopifyProduct.title).label('title'),
+                )
+                .select_from(ShopifyProduct)
+                .outerjoin(
+                    ShopifyInventory,
+                    ShopifyProduct.shopify_product_id == ShopifyInventory.shopify_product_id,
                 )
                 .filter(
-                    ShopifyInventory.shopify_product_id.in_(active_pids),
-                    ShopifyInventory.inventory_quantity == 0,
+                    ShopifyProduct.status == 'active',
+                    or_(
+                        ShopifyInventory.id.is_(None),
+                        ShopifyInventory.inventory_quantity == 0,
+                    ),
                 )
-                .order_by(ShopifyInventory.title)
+                .order_by(func.coalesce(ShopifyInventory.title, ShopifyProduct.title))
                 .limit(20)
                 .all()
             )
@@ -946,11 +999,18 @@ class InventoryIntelligenceService:
             ) or 0
 
             not_stocked_count = (
-                self.db.query(func.count())
-                .select_from(ShopifyInventory)
+                self.db.query(func.count(ShopifyProduct.shopify_product_id))
+                .select_from(ShopifyProduct)
+                .outerjoin(
+                    ShopifyInventory,
+                    ShopifyProduct.shopify_product_id == ShopifyInventory.shopify_product_id,
+                )
                 .filter(
-                    ShopifyInventory.shopify_product_id.in_(active_pids),
-                    ShopifyInventory.inventory_quantity == 0,
+                    ShopifyProduct.status == 'active',
+                    or_(
+                        ShopifyInventory.id.is_(None),
+                        ShopifyInventory.inventory_quantity == 0,
+                    ),
                 )
                 .scalar()
             ) or 0
@@ -1043,9 +1103,15 @@ class InventoryIntelligenceService:
                     ShopifyOrderItem.total_price,
                     ShopifyOrderItem.order_number,
                 )
+                .join(
+                    ShopifyOrder,
+                    ShopifyOrderItem.shopify_order_id == ShopifyOrder.shopify_order_id,
+                )
                 .filter(
                     func.upper(ShopifyOrderItem.sku) == sku.upper(),
                     ShopifyOrderItem.order_date >= cutoff_90d,
+                    ShopifyOrder.cancelled_at.is_(None),
+                    ShopifyOrder.financial_status.in_(["paid", "partially_refunded"]),
                 )
                 .order_by(desc(ShopifyOrderItem.order_date))
                 .limit(10)

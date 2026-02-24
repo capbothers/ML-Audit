@@ -826,7 +826,7 @@
             { label: 'Total SKUs', value: snap.total_skus.toLocaleString(), sub: '' },
             { label: 'Units on Hand', value: snap.total_units.toLocaleString(), sub: '' },
             { label: 'Inventory Value', value: '$' + Math.round(snap.inventory_value).toLocaleString(), sub: snap.inventory_value_coverage_pct + '% cost coverage' },
-            { label: 'Avg Days Cover' + tip('How many days current stock will last at current sales velocity. Under 14 = critical. Over 90 = potential overstock.'), value: snap.avg_days_of_cover.toFixed(0), sub: 'active SKUs' },
+            { label: 'Avg Days Cover' + tip('How many days current stock will last at current sales velocity. Under 14 = critical. Over 60 = potential overstock.'), value: snap.avg_days_of_cover.toFixed(0), sub: 'active SKUs' },
             { label: 'Reorder Now', value: snap.reorder_now, sub: 'critical', cls: snap.reorder_now > 0 ? 'color:var(--red)' : '' },
             { label: 'Reorder Soon', value: snap.reorder_soon, sub: 'warning', cls: snap.reorder_soon > 0 ? 'color:var(--amber)' : '' },
             { label: 'Oversold SKUs' + tip('Products with negative inventory (sold more than stocked). Customers may have ordered items you cannot fulfil.'), value: snap.oversold_count || 0, sub: 'ML tracked · negative inv', cls: (snap.oversold_count || 0) > 0 ? 'color:var(--red)' : '' },
