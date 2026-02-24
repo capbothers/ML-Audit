@@ -924,6 +924,7 @@
                 <button class="tab-btn" data-tab="detail" onclick="switchTab('detail')">Brand Detail</button>
                 <button class="tab-btn" data-tab="compare" onclick="switchTab('compare')">Compare</button>
                 <button class="tab-btn" data-tab="executive" onclick="switchTab('executive')">Executive</button>
+                <button class="tab-btn" data-tab="portfolio" onclick="switchTab('portfolio')">Portfolio</button>
             </div>
 
             <!-- Overview tab -->
@@ -991,6 +992,12 @@
             <div class="tab-panel" id="tab-executive">
                 <div id="executive-content">
                     <div class="loading-text">Loading executive view...</div>
+                </div>
+            </div>
+
+            <div class="tab-panel" id="tab-portfolio">
+                <div id="portfolio-content">
+                    <div class="loading-text">Loading portfolio report...</div>
                 </div>
             </div>
         </section>
@@ -1122,6 +1129,7 @@
             document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.toggle('active', b.dataset.tab === tab); });
             document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.toggle('active', p.id === 'tab-' + tab); });
             if (tab === 'executive') loadExecutive();
+            if (tab === 'portfolio') loadPortfolio();
         }
 
         function getSelectedCompareBrands() {
@@ -1139,6 +1147,7 @@
         async function changePeriod(days) {
             periodDays = parseInt(days);
             execLoaded = false;
+            portfolioLoaded = false;
             var activeTab = document.querySelector('.tab-btn.active');
             var activeTabName = activeTab ? activeTab.dataset.tab : 'overview';
             var selectedCompareBrands = activeTabName === 'compare' ? getSelectedCompareBrands() : [];
@@ -1159,6 +1168,7 @@
             }
 
             if (activeTabName === 'executive') loadExecutive();
+            if (activeTabName === 'portfolio') loadPortfolio();
         }
 
         // ── Load dashboard ───────────────────────────────────────
@@ -2521,6 +2531,115 @@
 
             html += '</tbody></table></div>';
             return html;
+        }
+
+        // ── Portfolio Report ──────────────────────────────────────
+
+        var portfolioLoaded = false;
+
+        async function loadPortfolio() {
+            if (portfolioLoaded) return;
+            var el = document.getElementById('portfolio-content');
+            el.innerHTML = '<div class="loading-text">Loading portfolio report...</div>';
+
+            try {
+                var res = await fetch('/brands/portfolio?days=' + periodDays);
+                var json = await res.json();
+                if (!json.success) throw new Error(json.detail || 'API error');
+                renderPortfolio(json.data);
+                portfolioLoaded = true;
+            } catch (err) {
+                console.error(err);
+                el.innerHTML = '<div class="loading-text">Error: ' + err.message + '</div>';
+            }
+        }
+
+        function renderPortfolio(data) {
+            var k = data.kpis;
+            var html = '<div class="kpi-grid">';
+            html += kpiCard('Brands', k.total_brands, '');
+            html += kpiCard('Working', k.working_count, '<span class="yoy-up">' + k.working_revenue_pct.toFixed(1) + '% of revenue</span>');
+            html += kpiCard('Watch', k.watch_count, '');
+            html += kpiCard('Not Working', k.not_working_count, '<span class="yoy-down">' + k.not_working_revenue_pct.toFixed(1) + '% of revenue</span>');
+            html += kpiCard('Stock Value', fmt$(k.total_stock_value), '');
+            html += kpiCard('Dead Stock SKUs', fmtNum(k.total_dead_stock_skus), '');
+            html += '</div>';
+
+            // Verdict filter pills
+            html += '<div style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap">'
+                + '<button class="filter-pill active" onclick="filterPortfolio(\'all\', this)" style="padding:6px 14px;border-radius:20px;border:1px solid rgba(27,27,27,0.15);background:#1b1b1b;color:#f7f1e8;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">All (' + data.brands.length + ')</button>'
+                + '<button class="filter-pill" onclick="filterPortfolio(\'Working\', this)" style="padding:6px 14px;border-radius:20px;border:1px solid #16a34a;background:transparent;color:#16a34a;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">Working (' + k.working_count + ')</button>'
+                + '<button class="filter-pill" onclick="filterPortfolio(\'Watch\', this)" style="padding:6px 14px;border-radius:20px;border:1px solid #d97706;background:transparent;color:#d97706;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">Watch (' + k.watch_count + ')</button>'
+                + '<button class="filter-pill" onclick="filterPortfolio(\'Not Working\', this)" style="padding:6px 14px;border-radius:20px;border:1px solid #dc2626;background:transparent;color:#dc2626;font-size:13px;cursor:pointer;font-family:\'IBM Plex Sans\',sans-serif">Not Working (' + k.not_working_count + ')</button>'
+                + '</div>';
+
+            // Main table
+            html += '<div class="card"><div class="card-title">Brand Portfolio</div>';
+            html += '<div style="overflow-x:auto"><table class="scorecard-table">';
+            html += '<thead><tr>'
+                + '<th>Brand</th>'
+                + '<th>Verdict</th>'
+                + '<th class="num">Net Sales</th>'
+                + '<th class="num">YoY %</th>'
+                + '<th class="num">Margin %</th>'
+                + '<th class="num">Health</th>'
+                + '<th class="num">DIOH</th>'
+                + '<th class="num">Dead Stock</th>'
+                + '<th class="num">Stock Value</th>'
+                + '<th class="num">Buyers</th>'
+                + '<th class="num">Repeat %</th>'
+                + '<th>Momentum</th>'
+                + '<th>Reasons</th>'
+                + '</tr></thead><tbody id="portfolio-body">';
+
+            for (var i = 0; i < data.brands.length; i++) {
+                html += portfolioRow(data.brands[i]);
+            }
+
+            html += '</tbody></table></div></div>';
+
+            document.getElementById('portfolio-content').innerHTML = html;
+        }
+
+        function portfolioRow(b) {
+            var verdictBg = b.verdict_color === 'green' ? 'background:#dcfce7;color:#16a34a'
+                          : b.verdict_color === 'red' ? 'background:#fef2f2;color:#dc2626'
+                          : 'background:#fef3c7;color:#d97706';
+            var momHtml = b.momentum === 'accelerating' ? '<span class="yoy-up">Accelerating</span>'
+                        : b.momentum === 'decelerating' ? '<span class="yoy-down">Decelerating</span>'
+                        : '<span style="color:#6b6670">Steady</span>';
+
+            return '<tr data-verdict="' + b.verdict + '" style="cursor:pointer" onclick="openBrandDetail(\'' + escJsStr(b.brand) + '\')">'
+                + '<td><strong>' + escHtml(b.brand) + '</strong></td>'
+                + '<td><span style="' + verdictBg + ';padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600">' + b.verdict + '</span></td>'
+                + '<td class="num">' + fmt$(b.revenue) + '</td>'
+                + '<td class="num"><span class="' + yoyClass(b.revenue_yoy_pct) + '">' + fmtPct(b.revenue_yoy_pct) + '</span></td>'
+                + '<td class="num">' + fmtMargin(b) + '</td>'
+                + '<td class="num">' + healthBadge(b.health_score, b.health_grade) + '</td>'
+                + '<td class="num">' + (b.dioh != null ? Math.round(b.dioh) + 'd' : '--') + '</td>'
+                + '<td class="num">' + fmtNum(b.dead_stock_count) + '</td>'
+                + '<td class="num">' + fmt$(b.stock_value) + '</td>'
+                + '<td class="num">' + fmtNum(b.unique_buyers) + '</td>'
+                + '<td class="num">' + (b.repeat_purchase_rate != null ? b.repeat_purchase_rate.toFixed(1) + '%' : '--') + '</td>'
+                + '<td>' + momHtml + '</td>'
+                + '<td style="font-size:11px;max-width:260px;line-height:1.3">' + escHtml(b.verdict_reasons.join('; ')) + '</td>'
+                + '</tr>';
+        }
+
+        function filterPortfolio(verdict, btn) {
+            document.querySelectorAll('#portfolio-content .filter-pill').forEach(function(p) {
+                p.style.background = 'transparent';
+                p.style.color = p.style.borderColor || '#1b1b1b';
+                p.classList.remove('active');
+            });
+            btn.classList.add('active');
+            btn.style.background = '#1b1b1b';
+            btn.style.color = '#f7f1e8';
+
+            var rows = document.querySelectorAll('#portfolio-body tr');
+            rows.forEach(function(r) {
+                r.style.display = (verdict === 'all' || r.dataset.verdict === verdict) ? '' : 'none';
+            });
         }
 
         // ── Init ─────────────────────────────────────────────────

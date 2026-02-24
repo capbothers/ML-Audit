@@ -3909,6 +3909,456 @@ class BrandIntelligenceService:
             return f"{brand} revenue up {yoy:.0f}% YoY — invest to sustain growth"
         return f"Growth opportunity identified for {brand}"
 
+    # ── Portfolio Report ────────────────────────────────────────────
+
+    def get_portfolio_report(self, period_days: int = 30) -> Dict:
+        """Comprehensive brand portfolio: what's working and what's not."""
+        from app.utils.cache import get_cached as _gc, set_cached as _sc, _MISS as _M
+        _ck = f"brand_portfolio_svc|{period_days}"
+        _cv = _gc(_ck)
+        if _cv is not _M:
+            return _cv
+        result = self._get_portfolio_report_impl(period_days)
+        _sc(_ck, result, 300)
+        return result
+
+    def _get_portfolio_report_impl(self, period_days: int = 30) -> Dict:
+        now = self._anchored_now()
+        cur_start = now - timedelta(days=period_days)
+        cur_end = now
+        yoy_start = cur_start - timedelta(days=365)
+        yoy_end = cur_end - timedelta(days=365)
+
+        # Reuse existing aggregations
+        current = self._brand_aggregates(cur_start, cur_end)
+        previous = self._brand_aggregates(yoy_start, yoy_end)
+        prev_map = {b["brand"]: b for b in previous}
+
+        ads_product = self._get_ads_product_summary(cur_start, cur_end)
+        ads_campaign_rows = self._get_ads_campaign_rows(cur_start, cur_end)
+
+        # New metrics
+        inv_health = self._inventory_health_by_vendor()
+        cust_metrics = self._customer_metrics_by_vendor(cur_start, cur_end)
+        velocity = self._velocity_trends_by_vendor(now)
+
+        brands = []
+        for b in current:
+            name = b["brand"]
+            p = prev_map.get(name, {})
+
+            rev_prev = p.get("revenue", 0)
+            units_prev = p.get("units", 0)
+            yoy_rev = _pct_change(b["revenue"], rev_prev)
+            yoy_units = _pct_change(b["units"], units_prev)
+
+            # Ads (same logic as get_dashboard)
+            ads = ads_product.get(name, {})
+            ads_m = self._get_ads_campaign_metrics(name, ads_campaign_rows)
+            spend = max(ads_m.get("spend", 0), ads.get("spend", 0))
+            roas = ads.get("roas") if ads.get("spend") else ads_m.get("roas")
+
+            row = {
+                "brand": name,
+                "revenue": b["revenue"],
+                "refunds": b.get("refunds", 0),
+                "revenue_prev": rev_prev,
+                "revenue_yoy_pct": yoy_rev,
+                "units": b["units"],
+                "units_prev": units_prev,
+                "units_yoy_pct": yoy_units,
+                "orders": b["orders"],
+                "product_count": b["product_count"],
+                "gross_margin_pct": b["gross_margin_pct"],
+                "estimated_margin_pct": b.get("estimated_margin_pct"),
+                "cost_coverage_pct": b.get("cost_coverage_pct", 0),
+                "has_cost_data": b.get("has_cost_data", False),
+                "total_cogs": b.get("total_cogs", 0),
+                "avg_selling_price": b["avg_selling_price"],
+                "ads_spend": spend,
+                "ads_roas": roas,
+            }
+
+            # Health score
+            health = self._compute_brand_health(row)
+            row["health_score"] = health["score"]
+            row["health_grade"] = health["grade"]
+
+            # Inventory health
+            inv = inv_health.get(name, {})
+            row["total_skus_inv"] = inv.get("total_skus", 0)
+            row["stock_units"] = inv.get("total_units", 0)
+            row["stock_value"] = inv.get("stock_value", 0)
+            row["oos_count"] = inv.get("oos_count", 0)
+            row["dead_stock_count"] = inv.get("dead_stock_count", 0)
+            total_skus = inv.get("total_skus", 0)
+            row["dead_stock_pct"] = (
+                round(inv.get("dead_stock_count", 0) / total_skus * 100, 1)
+                if total_skus > 0 else 0
+            )
+            row["dioh"] = inv.get("dioh")
+            row["turnover_rate"] = inv.get("turnover_rate", 0)
+
+            # Customer metrics
+            cm = cust_metrics.get(name, {})
+            row["unique_buyers"] = cm.get("unique_buyers", 0)
+            row["repeat_buyers"] = cm.get("repeat_buyers", 0)
+            row["repeat_purchase_rate"] = cm.get("repeat_purchase_rate", 0)
+
+            # Velocity trends
+            vel = velocity.get(name, {})
+            row["rev_7d"] = vel.get("rev_7d", 0)
+            row["rev_30d"] = vel.get("rev_30d", 0)
+            row["rev_90d"] = vel.get("rev_90d", 0)
+            row["daily_7d"] = vel.get("daily_7d", 0)
+            row["daily_30d"] = vel.get("daily_30d", 0)
+            row["momentum"] = vel.get("momentum", "no_data")
+
+            # Verdict
+            verdict = self._classify_verdict(row)
+            row["verdict"] = verdict["verdict"]
+            row["verdict_reasons"] = verdict["reasons"]
+            row["verdict_color"] = verdict["verdict_color"]
+
+            brands.append(row)
+
+        brands.sort(key=lambda x: x["revenue"], reverse=True)
+
+        # Portfolio KPIs
+        verdict_counts = {"Working": 0, "Watch": 0, "Not Working": 0}
+        for b in brands:
+            verdict_counts[b["verdict"]] = verdict_counts.get(b["verdict"], 0) + 1
+
+        total_rev = sum(b["revenue"] for b in brands)
+        working_rev = sum(b["revenue"] for b in brands if b["verdict"] == "Working")
+        not_working_rev = sum(b["revenue"] for b in brands if b["verdict"] == "Not Working")
+        total_stock_value = sum(b["stock_value"] for b in brands)
+        total_dead_stock = sum(b["dead_stock_count"] for b in brands)
+
+        return {
+            "period_days": period_days,
+            "current_start": cur_start.isoformat(),
+            "current_end": cur_end.isoformat(),
+            "kpis": {
+                "total_brands": len(brands),
+                "total_revenue": round(total_rev, 2),
+                "working_count": verdict_counts.get("Working", 0),
+                "watch_count": verdict_counts.get("Watch", 0),
+                "not_working_count": verdict_counts.get("Not Working", 0),
+                "working_revenue_pct": round(working_rev / total_rev * 100, 1) if total_rev else 0,
+                "not_working_revenue_pct": round(not_working_rev / total_rev * 100, 1) if total_rev else 0,
+                "total_stock_value": round(total_stock_value, 2),
+                "total_dead_stock_skus": total_dead_stock,
+            },
+            "brands": brands,
+            "verdict_counts": verdict_counts,
+        }
+
+    # ── Portfolio helpers ───────────────────────────────────────────
+
+    def _inventory_health_by_vendor(self) -> Dict[str, Dict]:
+        """Inventory health metrics grouped by vendor: DIOH, turnover, dead stock."""
+        # Step 1: Current inventory snapshot per vendor
+        inv_q = (
+            self.db.query(
+                ShopifyInventory.vendor,
+                func.count().label("total_skus"),
+                func.sum(ShopifyInventory.inventory_quantity).label("total_units"),
+                func.sum(
+                    case(
+                        (ShopifyInventory.cost.isnot(None),
+                         ShopifyInventory.inventory_quantity * ShopifyInventory.cost),
+                        else_=literal_column("0"),
+                    )
+                ).label("stock_value"),
+                func.sum(
+                    case(
+                        (ShopifyInventory.inventory_quantity == 0, 1),
+                        else_=0,
+                    )
+                ).label("oos_count"),
+            )
+            .filter(
+                ShopifyInventory.vendor.isnot(None),
+                ShopifyInventory.vendor != "",
+                ShopifyInventory.inventory_quantity.isnot(None),
+            )
+            .group_by(ShopifyInventory.vendor)
+            .all()
+        )
+
+        inv_map: Dict[str, Dict] = {}
+        for r in inv_q:
+            inv_map[r.vendor] = {
+                "total_skus": r.total_skus or 0,
+                "total_units": int(r.total_units or 0),
+                "stock_value": round(float(r.stock_value or 0), 2),
+                "oos_count": int(r.oos_count or 0),
+            }
+
+        # Step 2: Dead stock — SKUs with inventory > 0 but zero sales in 90 days
+        cutoff_90d = self._anchored_now() - timedelta(days=90)
+        sold_skus_sub = (
+            self.db.query(func.upper(ShopifyOrderItem.sku))
+            .filter(
+                ShopifyOrderItem.order_date >= cutoff_90d,
+                ShopifyOrderItem.sku.isnot(None),
+                ShopifyOrderItem.financial_status.notin_(["voided"]),
+            )
+            .distinct()
+            .subquery()
+        )
+
+        dead_q = (
+            self.db.query(
+                ShopifyInventory.vendor,
+                func.count().label("dead_count"),
+            )
+            .filter(
+                ShopifyInventory.vendor.isnot(None),
+                ShopifyInventory.vendor != "",
+                ShopifyInventory.inventory_quantity > 0,
+                ShopifyInventory.sku.isnot(None),
+                ~func.upper(ShopifyInventory.sku).in_(sold_skus_sub),
+            )
+            .group_by(ShopifyInventory.vendor)
+            .all()
+        )
+
+        for r in dead_q:
+            if r.vendor in inv_map:
+                inv_map[r.vendor]["dead_stock_count"] = r.dead_count or 0
+
+        # Step 3: 30-day sales velocity per vendor for turnover/DIOH
+        cutoff_30d = self._anchored_now() - timedelta(days=30)
+        sold_30d = (
+            self.db.query(
+                ShopifyOrderItem.vendor,
+                func.sum(ShopifyOrderItem.quantity).label("units_sold_30d"),
+            )
+            .filter(
+                ShopifyOrderItem.order_date >= cutoff_30d,
+                ShopifyOrderItem.vendor.isnot(None),
+                ShopifyOrderItem.financial_status.notin_(["voided"]),
+            )
+            .group_by(ShopifyOrderItem.vendor)
+            .all()
+        )
+
+        for r in sold_30d:
+            if r.vendor in inv_map:
+                units_sold = int(r.units_sold_30d or 0)
+                total_inv = inv_map[r.vendor]["total_units"]
+                daily_velocity = units_sold / 30.0
+                inv_map[r.vendor]["units_sold_30d"] = units_sold
+                inv_map[r.vendor]["daily_velocity"] = round(daily_velocity, 2)
+                inv_map[r.vendor]["dioh"] = (
+                    round(total_inv / daily_velocity, 1)
+                    if daily_velocity > 0 else None
+                )
+                inv_map[r.vendor]["turnover_rate"] = (
+                    round(units_sold / total_inv, 3)
+                    if total_inv > 0 else 0
+                )
+
+        # Fill defaults
+        for v in inv_map:
+            inv_map[v].setdefault("dead_stock_count", 0)
+            inv_map[v].setdefault("units_sold_30d", 0)
+            inv_map[v].setdefault("daily_velocity", 0)
+            inv_map[v].setdefault("dioh", None)
+            inv_map[v].setdefault("turnover_rate", 0)
+
+        return inv_map
+
+    def _customer_metrics_by_vendor(self, start, end) -> Dict[str, Dict]:
+        """Unique buyers and repeat purchase rate per vendor."""
+        # Subquery: per (vendor, customer_email), count distinct orders
+        order_counts_sub = (
+            self.db.query(
+                ShopifyOrderItem.vendor,
+                ShopifyOrder.customer_email,
+                func.count(func.distinct(ShopifyOrderItem.shopify_order_id)).label("order_count"),
+            )
+            .join(
+                ShopifyOrder,
+                ShopifyOrderItem.shopify_order_id == ShopifyOrder.shopify_order_id,
+            )
+            .filter(
+                ShopifyOrderItem.order_date >= start,
+                ShopifyOrderItem.order_date < end,
+                ShopifyOrderItem.vendor.isnot(None),
+                ShopifyOrderItem.vendor != "",
+                ShopifyOrder.customer_email.isnot(None),
+                ShopifyOrder.customer_email != "",
+                ShopifyOrderItem.financial_status.notin_(["voided"]),
+            )
+            .group_by(ShopifyOrderItem.vendor, ShopifyOrder.customer_email)
+            .subquery()
+        )
+
+        results = (
+            self.db.query(
+                order_counts_sub.c.vendor,
+                func.count().label("unique_buyers"),
+                func.sum(
+                    case(
+                        (order_counts_sub.c.order_count >= 2, 1),
+                        else_=0,
+                    )
+                ).label("repeat_buyers"),
+            )
+            .group_by(order_counts_sub.c.vendor)
+            .all()
+        )
+
+        cust_map: Dict[str, Dict] = {}
+        for r in results:
+            unique = int(r.unique_buyers or 0)
+            repeat = int(r.repeat_buyers or 0)
+            cust_map[r.vendor] = {
+                "unique_buyers": unique,
+                "repeat_buyers": repeat,
+                "repeat_purchase_rate": round(repeat / unique * 100, 1) if unique > 0 else 0,
+            }
+        return cust_map
+
+    def _velocity_trends_by_vendor(self, now) -> Dict[str, Dict]:
+        """Revenue over 7d/30d/90d windows per vendor + momentum signal."""
+        windows = {
+            "rev_7d": (now - timedelta(days=7), 7),
+            "rev_30d": (now - timedelta(days=30), 30),
+            "rev_90d": (now - timedelta(days=90), 90),
+        }
+
+        vel_map: Dict[str, Dict] = defaultdict(dict)
+
+        for label, (start, _days) in windows.items():
+            rows = (
+                self.db.query(
+                    ShopifyOrderItem.vendor,
+                    func.sum(ShopifyOrderItem.total_price).label("revenue"),
+                )
+                .filter(
+                    ShopifyOrderItem.order_date >= start,
+                    ShopifyOrderItem.order_date < now,
+                    ShopifyOrderItem.vendor.isnot(None),
+                    ShopifyOrderItem.vendor != "",
+                    ShopifyOrderItem.financial_status.notin_(["voided"]),
+                )
+                .group_by(ShopifyOrderItem.vendor)
+                .all()
+            )
+            for r in rows:
+                vel_map[r.vendor][label] = round(float(r.revenue or 0), 2)
+
+        # Compute daily rates and momentum
+        for vendor, data in vel_map.items():
+            r7 = data.get("rev_7d", 0)
+            r30 = data.get("rev_30d", 0)
+            r90 = data.get("rev_90d", 0)
+            daily_7 = r7 / 7.0 if r7 else 0
+            daily_30 = r30 / 30.0 if r30 else 0
+
+            if daily_30 > 0:
+                ratio = daily_7 / daily_30
+                if ratio > 1.15:
+                    momentum = "accelerating"
+                elif ratio < 0.85:
+                    momentum = "decelerating"
+                else:
+                    momentum = "steady"
+            else:
+                momentum = "accelerating" if daily_7 > 0 else "no_sales"
+
+            data["daily_7d"] = round(daily_7, 2)
+            data["daily_30d"] = round(daily_30, 2)
+            data["daily_90d"] = round(r90 / 90.0, 2) if r90 else 0
+            data["momentum"] = momentum
+
+        return dict(vel_map)
+
+    def _classify_verdict(self, brand_row: Dict) -> Dict:
+        """Classify brand: Working / Watch / Not Working, with reasons."""
+        reasons: List[str] = []
+        health = brand_row.get("health_score", 50)
+        yoy = brand_row.get("revenue_yoy_pct")
+        margin = brand_row.get("gross_margin_pct", 0)
+        momentum = brand_row.get("momentum", "steady")
+        dioh = brand_row.get("dioh")
+        dead_pct = brand_row.get("dead_stock_pct", 0)
+        revenue = brand_row.get("revenue", 0)
+        repeat_rate = brand_row.get("repeat_purchase_rate", 0)
+
+        # ── NOT WORKING (any one triggers) ──
+        not_working = False
+
+        if health < 35:
+            not_working = True
+            reasons.append(f"Health score critically low ({health:.0f}/100)")
+
+        if yoy is not None and yoy < -25 and revenue > 1000:
+            not_working = True
+            reasons.append(f"Revenue down {abs(yoy):.0f}% YoY")
+
+        if margin < 0:
+            not_working = True
+            reasons.append("Negative margin — selling at a loss")
+
+        if dioh is None and yoy is not None and yoy < -10:
+            not_working = True
+            reasons.append("Zero sales velocity + declining revenue")
+
+        if dead_pct > 50:
+            not_working = True
+            reasons.append(f"{dead_pct:.0f}% of SKUs are dead stock")
+
+        if not_working:
+            return {"verdict": "Not Working", "reasons": reasons, "verdict_color": "red"}
+
+        # ── WORKING (all must hold) ──
+        health_ok = health >= 65
+        growth_ok = yoy is not None and yoy > 10 and margin > 15
+        momentum_ok = momentum != "decelerating"
+        inv_ok = dioh is not None or revenue < 500
+        dead_ok = dead_pct < 30
+
+        if (health_ok or growth_ok) and momentum_ok and inv_ok and dead_ok:
+            working_reasons: List[str] = []
+            if health_ok:
+                working_reasons.append(f"Strong health ({health:.0f}/100)")
+            if yoy is not None and yoy > 10:
+                working_reasons.append(f"Revenue up {yoy:.0f}% YoY")
+            if margin > 20:
+                working_reasons.append(f"Healthy margin ({margin:.0f}%)")
+            if repeat_rate > 15:
+                working_reasons.append(f"Good repeat rate ({repeat_rate:.0f}%)")
+            if momentum == "accelerating":
+                working_reasons.append("Sales accelerating")
+            return {
+                "verdict": "Working",
+                "reasons": working_reasons or ["Meets all key benchmarks"],
+                "verdict_color": "green",
+            }
+
+        # ── WATCH (default) ──
+        watch_reasons: List[str] = []
+        if yoy is not None and yoy < 0:
+            watch_reasons.append(f"Revenue declining ({yoy:.0f}% YoY)")
+        if momentum == "decelerating":
+            watch_reasons.append("Sales momentum slowing")
+        if dead_pct > 20:
+            watch_reasons.append(f"{dead_pct:.0f}% dead stock SKUs")
+        if 0 <= margin < 10:
+            watch_reasons.append(f"Thin margins ({margin:.0f}%)")
+        if dioh is not None and dioh > 180:
+            watch_reasons.append(f"High DIOH ({dioh:.0f} days)")
+        if repeat_rate < 5 and revenue > 5000:
+            watch_reasons.append(f"Low repeat rate ({repeat_rate:.0f}%)")
+        if not watch_reasons:
+            watch_reasons.append("Mixed signals — monitor closely")
+        return {"verdict": "Watch", "reasons": watch_reasons, "verdict_color": "amber"}
+
 
 def _month_name(mo: str) -> str:
     names = {

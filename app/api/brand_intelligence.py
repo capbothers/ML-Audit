@@ -135,6 +135,28 @@ async def get_executive_summary(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/portfolio")
+async def get_portfolio_report(
+    days: int = Query(30, ge=1, le=730, description="Period in days"),
+    db: Session = Depends(get_db),
+):
+    """Brand Portfolio Report — unified view of what's working and what's not."""
+    cache_key = f"brand_portfolio|{days}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
+
+    try:
+        service = BrandIntelligenceService(db)
+        data = service.get_portfolio_report(period_days=days)
+        result = {"success": True, "data": data}
+        set_cached(cache_key, result, 300)
+        return result
+    except Exception as e:
+        log.error(f"Error in /brands/portfolio: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/opportunities")
 async def get_opportunities(
     days: int = Query(30, ge=1, le=730, description="Period in days"),
