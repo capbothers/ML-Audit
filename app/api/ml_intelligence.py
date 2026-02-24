@@ -257,6 +257,19 @@ async def search_inventory_skus(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/inventory-data-quality")
+async def get_inventory_data_quality(
+    db: Session = Depends(get_db),
+):
+    """Inventory data quality metrics: confidence distribution, data-issue rates, qty drift."""
+    try:
+        service = InventoryIntelligenceService(db)
+        data = service.get_data_quality_metrics()
+        return {"success": True, "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/run")
 async def run_ml_pipeline(
     db: Session = Depends(get_db),

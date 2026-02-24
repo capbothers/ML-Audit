@@ -8,8 +8,11 @@ Lightweight, explainable ML baselines:
 4. Tracking Health (GA4 vs Shopify Gap)
 5. Inventory Suggestions (Sales Velocity + Days of Cover)
 """
+import json
 import math
+import statistics
 import logging
+from collections import defaultdict
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Any, Tuple
 from decimal import Decimal
@@ -24,6 +27,34 @@ from app.models.shopify import ShopifyOrder, ShopifyOrderItem, ShopifyInventory,
 from app.models.product_cost import ProductCost
 
 logger = logging.getLogger(__name__)
+
+# ── Inventory reorder-point constants ──
+DEFAULT_LEAD_TIME = 14       # days
+DEFAULT_SERVICE_LEVEL = 0.95
+DEFAULT_MOQ = 1
+DEFAULT_CASE_PACK = 1
+
+_Z_SCORE_TABLE = {
+    0.80: 0.84, 0.85: 1.04, 0.90: 1.28, 0.95: 1.65,
+    0.97: 1.88, 0.98: 2.05, 0.99: 2.33,
+}
+
+
+def _z_score(service_level: float) -> float:
+    """Approximate z-score for a given service level via interpolation."""
+    if service_level in _Z_SCORE_TABLE:
+        return _Z_SCORE_TABLE[service_level]
+    levels = sorted(_Z_SCORE_TABLE.keys())
+    if service_level <= levels[0]:
+        return _Z_SCORE_TABLE[levels[0]]
+    if service_level >= levels[-1]:
+        return _Z_SCORE_TABLE[levels[-1]]
+    for i, lvl in enumerate(levels):
+        if service_level <= lvl:
+            lo, hi = levels[i - 1], lvl
+            t = (service_level - lo) / (hi - lo)
+            return _Z_SCORE_TABLE[lo] + t * (_Z_SCORE_TABLE[hi] - _Z_SCORE_TABLE[lo])
+    return _Z_SCORE_TABLE[levels[-1]]
 
 
 def _ensure_date(val) -> date:
@@ -1176,6 +1207,132 @@ class MLIntelligenceService:
         ) or 0
         offline_data_available = snapshot_day_count >= 2
 
+        # ── New batch queries for reorder-point science ──
+
+        # 1) Daily demand stats (std_dev, CV, sales_days) per SKU
+        daily_units_rows = (
+            self.db.query(
+                func.upper(ShopifyOrderItem.sku).label("sku"),
+                func.date(ShopifyOrderItem.order_date).label("day"),
+                func.sum(ShopifyOrderItem.quantity).label("units"),
+            )
+            .join(
+                ShopifyOrder,
+                ShopifyOrderItem.shopify_order_id == ShopifyOrder.shopify_order_id,
+            )
+            .filter(
+                ShopifyOrderItem.order_date >= cutoff_30d,
+                ShopifyOrder.cancelled_at.is_(None),
+                ShopifyOrder.financial_status.in_(["paid", "partially_refunded"]),
+                ShopifyOrderItem.sku.isnot(None),
+                ShopifyOrderItem.sku != "",
+            )
+            .group_by(func.upper(ShopifyOrderItem.sku), func.date(ShopifyOrderItem.order_date))
+            .all()
+        )
+
+        _daily_by_sku = defaultdict(list)
+        for r in daily_units_rows:
+            _daily_by_sku[r.sku].append(float(r.units or 0))
+
+        demand_stats = {}
+        for _dsku, _dvals in _daily_by_sku.items():
+            # Pad missing days with 0 (up to 30)
+            while len(_dvals) < 30:
+                _dvals.append(0.0)
+            _mean = statistics.mean(_dvals)
+            _sd = statistics.stdev(_dvals) if len(_dvals) > 1 else 0.0
+            demand_stats[_dsku] = {
+                "std_dev": _sd,
+                "cv": _sd / _mean if _mean > 0 else 0.0,
+                "sales_days": sum(1 for v in _dvals if v > 0),
+            }
+
+        # 2) Supply chain params from ProductCost
+        sc_rows = (
+            self.db.query(
+                func.upper(ProductCost.vendor_sku).label("sku"),
+                ProductCost.lead_time_days,
+                ProductCost.service_level,
+                ProductCost.moq,
+                ProductCost.case_pack,
+            )
+            .filter(ProductCost.vendor_sku.isnot(None), ProductCost.vendor_sku != "")
+            .all()
+        )
+        _sc_defaults = {
+            "lt": DEFAULT_LEAD_TIME,
+            "sl": DEFAULT_SERVICE_LEVEL,
+            "moq": DEFAULT_MOQ,
+            "cp": DEFAULT_CASE_PACK,
+        }
+        supply_chain = {
+            r.sku: {
+                "lt": r.lead_time_days or DEFAULT_LEAD_TIME,
+                "sl": float(r.service_level or DEFAULT_SERVICE_LEVEL),
+                "moq": r.moq or DEFAULT_MOQ,
+                "cp": r.case_pack or DEFAULT_CASE_PACK,
+            }
+            for r in sc_rows
+        }
+
+        # 3) Seasonality — same calendar month last year vs 12-month average
+        current_month = date.today().month
+        try:
+            ly_start = date(date.today().year - 1, current_month, 1)
+            if current_month == 12:
+                ly_end = date(date.today().year - 1, 12, 31)
+            else:
+                ly_end = date(date.today().year - 1, current_month + 1, 1) - timedelta(days=1)
+        except ValueError:
+            ly_start = ly_end = date.today()  # fallback
+
+        same_month_ly = (
+            self.db.query(
+                func.upper(ShopifyOrderItem.sku).label("sku"),
+                func.sum(ShopifyOrderItem.quantity).label("units"),
+            )
+            .join(ShopifyOrder, ShopifyOrderItem.shopify_order_id == ShopifyOrder.shopify_order_id)
+            .filter(
+                ShopifyOrderItem.order_date >= ly_start,
+                ShopifyOrderItem.order_date <= ly_end,
+                ShopifyOrder.cancelled_at.is_(None),
+                ShopifyOrder.financial_status.in_(["paid", "partially_refunded"]),
+                ShopifyOrderItem.sku.isnot(None),
+                ShopifyOrderItem.sku != "",
+            )
+            .group_by(func.upper(ShopifyOrderItem.sku))
+            .all()
+        )
+
+        cutoff_12m = date.today() - timedelta(days=365)
+        avg_monthly_rows = (
+            self.db.query(
+                func.upper(ShopifyOrderItem.sku).label("sku"),
+                (func.sum(ShopifyOrderItem.quantity) / 12.0).label("avg_monthly"),
+            )
+            .join(ShopifyOrder, ShopifyOrderItem.shopify_order_id == ShopifyOrder.shopify_order_id)
+            .filter(
+                ShopifyOrderItem.order_date >= cutoff_12m,
+                ShopifyOrder.cancelled_at.is_(None),
+                ShopifyOrder.financial_status.in_(["paid", "partially_refunded"]),
+                ShopifyOrderItem.sku.isnot(None),
+                ShopifyOrderItem.sku != "",
+            )
+            .group_by(func.upper(ShopifyOrderItem.sku))
+            .all()
+        )
+        _avg_map = {r.sku: float(r.avg_monthly or 0) for r in avg_monthly_rows}
+
+        seasonality_map = {}
+        for r in same_month_ly:
+            avg_m = _avg_map.get(r.sku, 0)
+            if avg_m > 0:
+                factor = float(r.units or 0) / avg_m
+                seasonality_map[r.sku] = max(0.5, min(2.0, factor))
+
+        # ── Main suggestion loop ──
+
         suggestions = []
         for row in velocity_30d:
             sku = row.sku  # already upper-cased by func.upper() in query
@@ -1210,44 +1367,115 @@ class MLIntelligenceService:
             else:
                 velocity_trend = "none"
 
-            # Oversold flag — strictly negative inventory only
             oversold = units_on_hand < 0
+            cost_missing = (sku not in cost_map)
 
-            # Cost missing flag
-            cost_missing = (sku.upper() not in cost_map)
+            # ── Reorder-point science ──
+            sc = supply_chain.get(sku, _sc_defaults)
+            stats = demand_stats.get(sku, {"std_dev": 0.0, "cv": 0.0, "sales_days": 0})
+            season = seasonality_map.get(sku, 1.0)
+            adjusted_velocity = effective_velocity * season
 
-            # Days of cover + suggestion logic
+            lt = sc["lt"]
+            sl = sc["sl"]
+            z = _z_score(sl)
+            lt_demand = adjusted_velocity * lt
+            ss = z * stats["std_dev"] * math.sqrt(lt) if stats["std_dev"] > 0 else 0.0
+            rp = lt_demand + ss
+
+            # Days of cover (using adjusted velocity)
+            if adjusted_velocity > 0:
+                days_of_cover = units_on_hand / adjusted_velocity
+            else:
+                days_of_cover = 999.0 if units_on_hand > 0 else 0.0
+
+            # Legacy reorder_qty (backward compat: 30-day target)
+            legacy_reorder_qty = max(1, int(math.ceil(effective_velocity * 30 - units_on_hand))) if effective_velocity > 0 else None
+
+            # Classification using reorder point
             if oversold:
-                days_of_cover = 0.0
                 suggestion = "reorder_now"
                 urgency = "critical"
-                reorder_qty = max(1, int(math.ceil(effective_velocity * 30))) if effective_velocity > 0 else 1
+                reorder_qty = legacy_reorder_qty or 1
             elif effective_velocity == 0:
-                # No demand — no_sales regardless of stock level
                 days_of_cover = 999.0 if units_on_hand > 0 else 0.0
                 suggestion = "no_sales"
                 urgency = "ok"
                 reorder_qty = None
+            elif units_on_hand <= ss:
+                suggestion = "reorder_now"
+                urgency = "critical"
+                reorder_qty = legacy_reorder_qty
+            elif units_on_hand <= rp:
+                suggestion = "reorder_soon"
+                urgency = "warning"
+                reorder_qty = legacy_reorder_qty
+            elif days_of_cover <= 60:
+                suggestion = "adequate"
+                urgency = "ok"
+                reorder_qty = None
             else:
-                # effective_velocity > 0 guaranteed here
-                days_of_cover = units_on_hand / effective_velocity
+                suggestion = "overstock"
+                urgency = "ok"
+                reorder_qty = None
 
-                if days_of_cover < 7:
-                    suggestion = "reorder_now"
-                    urgency = "critical"
-                    reorder_qty = max(1, int(math.ceil(effective_velocity * 30 - units_on_hand)))
-                elif days_of_cover < 14:
-                    suggestion = "reorder_soon"
-                    urgency = "warning"
-                    reorder_qty = max(1, int(math.ceil(effective_velocity * 30 - units_on_hand)))
-                elif days_of_cover <= 60:
-                    suggestion = "adequate"
-                    urgency = "ok"
-                    reorder_qty = None
-                else:
-                    suggestion = "overstock"
-                    urgency = "ok"
-                    reorder_qty = None
+            # Recommended order qty (MOQ/case-pack aware)
+            rec_qty = None
+            next_ord_date = None
+            if suggestion in ("reorder_now", "reorder_soon") and adjusted_velocity > 0:
+                target_stock = adjusted_velocity * (lt + 14) + ss
+                raw = max(1, int(math.ceil(target_stock - units_on_hand)))
+                moq = sc["moq"]
+                cp = sc["cp"]
+                rec_qty = max(moq, raw)
+                if cp > 1:
+                    rec_qty = int(math.ceil(rec_qty / cp) * cp)
+
+            if adjusted_velocity > 0 and units_on_hand > rp:
+                days_until = (units_on_hand - rp) / adjusted_velocity
+                next_ord_date = date.today() + timedelta(days=int(days_until))
+            elif suggestion in ("reorder_now", "reorder_soon"):
+                next_ord_date = date.today()
+
+            # Confidence scoring
+            data_issues = []
+            if cost_missing:
+                data_issues.append("missing_cost")
+            if stats["sales_days"] < 7:
+                data_issues.append("sparse_sales")
+            if stats["cv"] > 1.0:
+                data_issues.append("high_variance")
+            if sku not in supply_chain:
+                data_issues.append("default_lead_time")
+
+            confidence = "high"
+            if stats["sales_days"] < 14 or cost_missing or stats["cv"] > 0.8:
+                confidence = "medium"
+            if stats["sales_days"] < 7 or stats["cv"] > 1.5 or (cost_missing and stats["sales_days"] < 14):
+                confidence = "low"
+
+            # Explanation JSON
+            explanation = json.dumps({
+                "velocity_30d": round(daily_velocity_30d, 2),
+                "velocity_7d": round(daily_velocity_7d, 2),
+                "effective_velocity": round(effective_velocity, 2),
+                "seasonality_factor": round(season, 2),
+                "adjusted_velocity": round(adjusted_velocity, 2),
+                "lead_time_days": lt,
+                "lead_time_demand": round(lt_demand, 1),
+                "service_level": sl,
+                "z_score": round(z, 2),
+                "demand_std_dev": round(stats["std_dev"], 2),
+                "safety_stock": round(ss, 1),
+                "reorder_point": round(rp, 1),
+                "units_on_hand": units_on_hand,
+                "recommended_qty": rec_qty,
+                "moq": sc["moq"],
+                "case_pack": sc["cp"],
+                "sales_days_30d": stats["sales_days"],
+                "demand_cv": round(stats["cv"], 2),
+                "data_issues": data_issues,
+            })
 
             suggestions.append(
                 MLInventorySuggestion(
@@ -1264,6 +1492,15 @@ class MLIntelligenceService:
                     oversold=oversold,
                     cost_missing=cost_missing,
                     offline_units_30d=round(offline_units, 1),
+                    lead_time_days=lt,
+                    reorder_point=round(rp, 1),
+                    safety_stock_units=round(ss, 1),
+                    lead_time_demand=round(lt_demand, 1),
+                    seasonality_factor=round(season, 2),
+                    recommended_order_qty=rec_qty,
+                    next_order_date=next_ord_date,
+                    confidence=confidence,
+                    explanation=explanation,
                     generated_at=now,
                 )
             )
@@ -1293,6 +1530,24 @@ class MLIntelligenceService:
                 ds_urgency = "ok"
                 ds_reorder_qty = None
 
+            ds_issues = ["no_sales"]
+            if inv_cost_missing:
+                ds_issues.append("missing_cost")
+            if inv_sku not in supply_chain:
+                ds_issues.append("default_lead_time")
+
+            ds_explanation = json.dumps({
+                "velocity_30d": 0, "velocity_7d": 0, "effective_velocity": 0,
+                "seasonality_factor": 1.0, "adjusted_velocity": 0,
+                "lead_time_days": DEFAULT_LEAD_TIME, "lead_time_demand": 0,
+                "service_level": DEFAULT_SERVICE_LEVEL, "z_score": 0,
+                "demand_std_dev": 0, "safety_stock": 0, "reorder_point": 0,
+                "units_on_hand": units_on_hand, "recommended_qty": None,
+                "moq": DEFAULT_MOQ, "case_pack": DEFAULT_CASE_PACK,
+                "sales_days_30d": 0, "demand_cv": 0,
+                "data_issues": ds_issues,
+            })
+
             suggestions.append(
                 MLInventorySuggestion(
                     sku=inv_sku,
@@ -1308,6 +1563,15 @@ class MLIntelligenceService:
                     oversold=inv_oversold,
                     cost_missing=inv_cost_missing,
                     offline_units_30d=0.0,
+                    lead_time_days=DEFAULT_LEAD_TIME,
+                    reorder_point=0.0,
+                    safety_stock_units=0.0,
+                    lead_time_demand=0.0,
+                    seasonality_factor=1.0,
+                    recommended_order_qty=None,
+                    next_order_date=date.today() if inv_oversold else None,
+                    confidence="medium",
+                    explanation=ds_explanation,
                     generated_at=now,
                 )
             )

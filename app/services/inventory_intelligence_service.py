@@ -12,6 +12,7 @@ Data joins:
   MLInventorySuggestion.sku → ProductCost.vendor_sku (UPPER match)
   MLInventorySuggestion.sku → ShopifyOrderItem.sku
 """
+import json
 import logging
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional, Any
@@ -683,6 +684,12 @@ class InventoryIntelligenceService:
                     MLInventorySuggestion.oversold,
                     MLInventorySuggestion.cost_missing,
                     MLInventorySuggestion.offline_units_30d,
+                    MLInventorySuggestion.confidence,
+                    MLInventorySuggestion.reorder_point,
+                    MLInventorySuggestion.safety_stock_units,
+                    MLInventorySuggestion.recommended_order_qty,
+                    MLInventorySuggestion.next_order_date,
+                    MLInventorySuggestion.lead_time_days,
                     effective_cost.label("unit_cost"),
                 )
                 .outerjoin(pc_cost, func.upper(MLInventorySuggestion.sku) == pc_cost.c.sku)
@@ -808,6 +815,12 @@ class InventoryIntelligenceService:
                         "offline_units_30d": round(float(r.offline_units_30d or 0), 1),
                         "unit_cost": round(float(r.unit_cost or 0), 2) if r.unit_cost else None,
                         "est_reorder_cost": round(float(r.unit_cost or 0) * (r.reorder_quantity or 0), 2) if r.unit_cost else None,
+                        "confidence": r.confidence,
+                        "reorder_point": round(float(r.reorder_point or 0), 1),
+                        "safety_stock": round(float(r.safety_stock_units or 0), 1),
+                        "recommended_qty": r.recommended_order_qty,
+                        "next_order_date": str(r.next_order_date) if r.next_order_date else None,
+                        "lead_time_days": r.lead_time_days,
                     }
                     for r in items
                 ],
@@ -1196,6 +1209,15 @@ class InventoryIntelligenceService:
                     "oversold": suggestion.oversold,
                     "cost_missing": suggestion.cost_missing,
                     "offline_units_30d": round(float(suggestion.offline_units_30d or 0), 1),
+                    "confidence": suggestion.confidence,
+                    "reorder_point": round(float(suggestion.reorder_point or 0), 1),
+                    "safety_stock": round(float(suggestion.safety_stock_units or 0), 1),
+                    "lead_time_demand": round(float(suggestion.lead_time_demand or 0), 1),
+                    "seasonality_factor": round(float(suggestion.seasonality_factor or 1), 2),
+                    "recommended_qty": suggestion.recommended_order_qty,
+                    "next_order_date": str(suggestion.next_order_date) if suggestion.next_order_date else None,
+                    "lead_time_days": suggestion.lead_time_days,
+                    "explanation": json.loads(suggestion.explanation) if suggestion.explanation else None,
                 }
 
             if inventory:
@@ -1355,6 +1377,31 @@ class InventoryIntelligenceService:
                     "detail": f"Margin {cost_info['margin_pct']}% < minimum {cost_info['min_margin_pct']}%",
                 })
 
+        # Data-issue flags from explanation JSON
+        expl = sug.get("explanation")
+        if isinstance(expl, dict):
+            data_issues = expl.get("data_issues", [])
+            if "sparse_sales" in data_issues:
+                sales_days = expl.get("sales_days_30d", 0)
+                flags.append({
+                    "type": "warning",
+                    "label": "Sparse Sales",
+                    "detail": f"Only {sales_days} days with sales in last 30 — forecast may be unreliable",
+                })
+            if "high_variance" in data_issues:
+                cv = expl.get("demand_cv", 0)
+                flags.append({
+                    "type": "warning",
+                    "label": "High Demand Variance",
+                    "detail": f"Demand CV {cv:.1f} — erratic sales pattern reduces forecast accuracy",
+                })
+            if "default_lead_time" in data_issues:
+                flags.append({
+                    "type": "info",
+                    "label": "Default Lead Time",
+                    "detail": "Using 14-day default — add supplier lead time for better accuracy",
+                })
+
         return flags
 
     # ─────────────────────────────────────────────
@@ -1404,3 +1451,102 @@ class InventoryIntelligenceService:
         except Exception as e:
             logger.error(f"Error searching SKUs: {e}")
             return []
+
+    # ─────────────────────────────────────────────
+    # MONITORING: DATA QUALITY METRICS
+    # ─────────────────────────────────────────────
+
+    def get_data_quality_metrics(self) -> Dict[str, Any]:
+        """
+        Inventory data quality metrics for monitoring.
+
+        Returns percentages of SKUs affected by each data issue,
+        confidence distribution, and a weekly drift indicator
+        (recommended vs actual reorder_quantity).
+        """
+        try:
+            gen_filter = self._latest_gen_filter()
+            total = (
+                self.db.query(func.count(MLInventorySuggestion.id))
+                .filter(gen_filter)
+                .scalar()
+            ) or 0
+
+            if total == 0:
+                return {"total_skus": 0, "message": "No ML suggestions found. Run the ML pipeline first."}
+
+            # Confidence distribution
+            conf_rows = (
+                self.db.query(
+                    MLInventorySuggestion.confidence,
+                    func.count(MLInventorySuggestion.id).label("cnt"),
+                )
+                .filter(gen_filter)
+                .group_by(MLInventorySuggestion.confidence)
+                .all()
+            )
+            confidence_dist = {r.confidence or "unknown": int(r.cnt) for r in conf_rows}
+
+            # Data issue counts — parse from explanation JSON
+            all_suggestions = (
+                self.db.query(MLInventorySuggestion.explanation)
+                .filter(gen_filter, MLInventorySuggestion.explanation.isnot(None))
+                .all()
+            )
+
+            issue_counts = {
+                "default_lead_time": 0,
+                "sparse_sales": 0,
+                "high_variance": 0,
+                "missing_cost": 0,
+                "no_sales": 0,
+            }
+            for row in all_suggestions:
+                try:
+                    expl = json.loads(row.explanation)
+                    for issue in expl.get("data_issues", []):
+                        if issue in issue_counts:
+                            issue_counts[issue] += 1
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+            issue_pcts = {
+                k: round(v / max(total, 1) * 100, 1) for k, v in issue_counts.items()
+            }
+
+            # Reorder queue stats: recommended_order_qty vs legacy reorder_quantity
+            drift_rows = (
+                self.db.query(
+                    func.sum(MLInventorySuggestion.reorder_quantity).label("legacy_total"),
+                    func.sum(MLInventorySuggestion.recommended_order_qty).label("recommended_total"),
+                    func.count(MLInventorySuggestion.id).label("reorder_skus"),
+                )
+                .filter(
+                    gen_filter,
+                    MLInventorySuggestion.suggestion.in_(["reorder_now", "reorder_soon"]),
+                )
+                .first()
+            )
+
+            legacy_total = int(drift_rows.legacy_total or 0) if drift_rows else 0
+            rec_total = int(drift_rows.recommended_total or 0) if drift_rows else 0
+            reorder_skus = int(drift_rows.reorder_skus or 0) if drift_rows else 0
+            drift_pct = round((rec_total - legacy_total) / max(legacy_total, 1) * 100, 1) if legacy_total > 0 else 0
+
+            return {
+                "total_skus": total,
+                "confidence_distribution": confidence_dist,
+                "confidence_high_pct": round(confidence_dist.get("high", 0) / max(total, 1) * 100, 1),
+                "data_issue_counts": issue_counts,
+                "data_issue_pcts": issue_pcts,
+                "reorder_queue": {
+                    "skus": reorder_skus,
+                    "legacy_total_qty": legacy_total,
+                    "recommended_total_qty": rec_total,
+                    "drift_pct": drift_pct,
+                    "drift_direction": "higher" if drift_pct > 0 else ("lower" if drift_pct < 0 else "same"),
+                },
+            }
+        except Exception as e:
+            logger.error(f"Error in data quality metrics: {e}")
+            return {"error": str(e)}

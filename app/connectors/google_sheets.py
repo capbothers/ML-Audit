@@ -124,6 +124,11 @@ class GoogleSheetsConnector(BaseConnector):
             "do not follow": "do_not_follow",
             "comments": "comments",
             "set price": "set_price",
+            # Supply chain parameters (optional enrichment)
+            "lead time days": "lead_time_days",
+            "service level": "service_level",
+            "moq": "moq",
+            "case pack": "case_pack",
         }
 
     def _execute_with_timeout(self, request, timeout: int = SHEETS_API_TIMEOUT):

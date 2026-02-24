@@ -72,6 +72,12 @@ class ProductCost(Base):
     # Tax status
     gst_free = Column(Boolean, default=False)  # Is this product GST-free?
 
+    # Supply chain parameters (optional — defaults used if absent)
+    lead_time_days = Column(Integer, nullable=True)        # Supplier lead time in days
+    service_level  = Column(Numeric(5, 2), nullable=True)  # Target fill rate e.g. 0.95
+    moq            = Column(Integer, nullable=True)         # Minimum order quantity
+    case_pack      = Column(Integer, nullable=True)         # Units per case
+
     # Timestamps
     last_synced = Column(DateTime, default=datetime.utcnow, index=True)
     last_updated = Column(DateTime, nullable=True)  # When cost last changed

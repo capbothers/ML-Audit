@@ -4,7 +4,7 @@ ML Intelligence Models - Phase 1
 Stores outputs from forecasting, anomaly detection, and inventory analysis.
 Designed for lightweight, explainable ML baselines.
 """
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Date, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Date, Text, UniqueConstraint
 from datetime import datetime
 
 from app.models.base import Base
@@ -84,6 +84,19 @@ class MLInventorySuggestion(Base):
     oversold = Column(Boolean, default=False, nullable=False)
     cost_missing = Column(Boolean, default=False, nullable=False)
     offline_units_30d = Column(Float, default=0, nullable=False)
+
+    # Reorder-point science (Layer 1)
+    lead_time_days        = Column(Integer, nullable=True)
+    reorder_point         = Column(Float, nullable=True)
+    safety_stock_units    = Column(Float, nullable=True)
+    lead_time_demand      = Column(Float, nullable=True)
+    seasonality_factor    = Column(Float, nullable=True)
+    recommended_order_qty = Column(Integer, nullable=True)
+    next_order_date       = Column(Date, nullable=True)
+
+    # Trust & explainability (Layer 2)
+    confidence            = Column(String, nullable=True)   # high / medium / low
+    explanation           = Column(Text, nullable=True)      # JSON string
 
     generated_at = Column(DateTime, default=datetime.utcnow, index=True, nullable=False)
 

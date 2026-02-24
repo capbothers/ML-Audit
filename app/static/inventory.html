@@ -489,13 +489,15 @@
                                 <th>Trend</th>
                                 <th class="num">Days Cover</th>
                                 <th class="num">Reorder Qty</th>
+                                <th class="num">Rec. Qty</th>
                                 <th class="num">Est. Cost</th>
                                 <th>Urgency</th>
+                                <th>Confidence</th>
                                 <th>Flags</th>
                             </tr>
                         </thead>
                         <tbody id="reorder-table">
-                            <tr><td colspan="11">Select this tab to load…</td></tr>
+                            <tr><td colspan="13">Select this tab to load…</td></tr>
                         </tbody>
                     </table>
                     <div class="pagination" id="reorder-pagination"></div>
@@ -958,7 +960,7 @@
 
     function renderReorderTable(items) {
         const tbody = document.getElementById('reorder-table');
-        if (!items || !items.length) { tbody.innerHTML = '<tr><td colspan="11">No reorder items</td></tr>'; return; }
+        if (!items || !items.length) { tbody.innerHTML = '<tr><td colspan="13">No reorder items</td></tr>'; return; }
         tbody.innerHTML = items.map(r => {
             let flagsHtml = '';
             if (r.oversold) flagsHtml += '<span class="badge critical" style="margin-right:4px;">OVERSOLD</span>';
@@ -973,8 +975,10 @@
                 <td>${trendBadge(r.velocity_trend)}</td>
                 <td class="num">${r.days_of_cover.toFixed(0)}</td>
                 <td class="num">${r.reorder_quantity || '-'}</td>
+                <td class="num">${r.recommended_qty != null ? '<strong>' + r.recommended_qty + '</strong>' : '-'}</td>
                 <td class="num">${r.est_reorder_cost != null ? '$' + Math.round(r.est_reorder_cost).toLocaleString() : '-'}</td>
                 <td>${urgencyBadge(r.urgency)}</td>
+                <td>${confidenceBadge(r.confidence)}</td>
                 <td>${flagsHtml || '-'}</td>
             </tr>`;
         }).join('');
@@ -1229,8 +1233,48 @@
                 <strong>Status:</strong> ${suggestionBadge(sug.suggestion)}
                 ${urgencyBadge(sug.urgency)}
                 ${trendBadge(sug.velocity_trend)}
-                ${sug.reorder_quantity ? `<span style="font-size:13px;color:var(--ink-soft);">Reorder: <strong>${sug.reorder_quantity} units</strong></span>` : ''}
+                ${confidenceBadge(sug.confidence)}
+                ${sug.recommended_qty ? `<span style="font-size:13px;color:var(--ink-soft);">Order: <strong>${sug.recommended_qty} units</strong></span>` : (sug.reorder_quantity ? `<span style="font-size:13px;color:var(--ink-soft);">Reorder: <strong>${sug.reorder_quantity} units</strong></span>` : '')}
             </div>`;
+        }
+
+        // Reorder Analysis section
+        if (sug.reorder_point != null || sug.safety_stock != null) {
+            html += '<div class="modal-section"><h3>Reorder Analysis</h3>';
+            html += '<div class="modal-stats">';
+            html += modalStat('Reorder Point', sug.reorder_point != null ? sug.reorder_point.toFixed(0) + ' units' : '-');
+            html += modalStat('Safety Stock', sug.safety_stock != null ? sug.safety_stock.toFixed(0) + ' units' : '-');
+            html += modalStat('Lead Time Demand', sug.lead_time_demand != null ? sug.lead_time_demand.toFixed(0) + ' units' : '-');
+            html += modalStat('Lead Time', sug.lead_time_days != null ? sug.lead_time_days + ' days' : '-');
+            html += modalStat('Seasonality', sug.seasonality_factor != null ? sug.seasonality_factor.toFixed(2) + 'x' : '-');
+            if (sug.recommended_qty) html += modalStat('Recommended Qty', '<strong>' + sug.recommended_qty + '</strong> units');
+            if (sug.next_order_date) html += modalStat('Next Order Date', sug.next_order_date);
+            html += '</div>';
+
+            // "Why this quantity" breakdown
+            const expl = sug.explanation;
+            if (expl && expl.adjusted_velocity) {
+                html += '<details style="margin-top:10px;"><summary style="cursor:pointer;font-size:13px;color:var(--cass-teal);font-weight:600;">Why this quantity?</summary>';
+                html += '<div style="font-size:12px;color:var(--ink-soft);margin-top:8px;line-height:1.7;font-family:monospace;background:var(--bg);padding:10px;border-radius:6px;">';
+                html += `Velocity: ${expl.effective_velocity}/day`;
+                if (expl.seasonality_factor && expl.seasonality_factor !== 1) html += ` &times; ${expl.seasonality_factor} seasonality = ${expl.adjusted_velocity} adjusted`;
+                html += '<br>';
+                html += `Lead time demand: ${expl.adjusted_velocity}/day &times; ${expl.lead_time_days}d = ${expl.lead_time_demand} units<br>`;
+                html += `Safety stock: z(${expl.service_level}) &times; ${expl.demand_std_dev}&sigma; &times; &radic;${expl.lead_time_days} = ${expl.safety_stock} units<br>`;
+                html += `Reorder point: ${expl.lead_time_demand} + ${expl.safety_stock} = ${expl.reorder_point} units<br>`;
+                html += `On hand: ${expl.units_on_hand}`;
+                if (expl.recommended_qty) {
+                    html += ` &rarr; order <strong>${expl.recommended_qty} units</strong>`;
+                    if (expl.moq > 1) html += ` (MOQ: ${expl.moq})`;
+                    if (expl.case_pack > 1) html += ` (case pack: ${expl.case_pack})`;
+                }
+                html += '<br>';
+                if (expl.data_issues && expl.data_issues.length) {
+                    html += `<span style="color:var(--amber);">Data issues: ${expl.data_issues.join(', ')}</span>`;
+                }
+                html += '</div></details>';
+            }
+            html += '</div>';
         }
 
         // Sparkline
@@ -1297,6 +1341,13 @@
         if (urgency === 'critical') return '<span class="badge critical">Critical</span>';
         if (urgency === 'warning') return '<span class="badge warning">Warning</span>';
         return '<span class="badge ok">OK</span>';
+    }
+
+    function confidenceBadge(c) {
+        if (c === 'high') return '<span class="badge ok">High</span>';
+        if (c === 'medium') return '<span class="badge warning">Med</span>';
+        if (c === 'low') return '<span class="badge critical">Low</span>';
+        return '<span class="badge neutral">-</span>';
     }
 
     function suggestionBadge(s) {
