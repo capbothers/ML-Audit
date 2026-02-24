@@ -1473,7 +1473,7 @@
                       : b.momentum === 'decelerating' ? '<span style="color:var(--red)">Decelerating</span>'
                       : '<span style="color:var(--slate)">Steady</span>';
 
-        return '<tr data-verdict="' + b.verdict + '">'
+        return '<tr data-verdict="' + b.verdict + '" style="cursor:pointer" onclick="openBrandSkuModal(\'' + escJs(b.brand) + '\')" title="Click to see SKU breakdown">'
             + '<td><strong>' + esc(b.brand) + '</strong></td>'
             + '<td><span style="' + verdictStyle + ';padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;white-space:nowrap">' + b.verdict + '</span></td>'
             + '<td class="num">' + pfmt$(b.revenue) + '</td>'
@@ -1502,6 +1502,114 @@
 
         document.querySelectorAll('#portfolio-body tr').forEach(r => {
             r.style.display = (verdict === 'all' || r.dataset.verdict === verdict) ? '' : 'none';
+        });
+    }
+
+    /* ──────────────────────────────────────────
+       BRAND SKU DRILL-DOWN (from portfolio)
+    ────────────────────────────────────────── */
+    async function openBrandSkuModal(brand) {
+        document.getElementById('sku-modal').classList.add('open');
+        document.getElementById('modal-content').innerHTML = '<div style="text-align:center;padding:40px;color:var(--slate)">Loading SKU breakdown for <strong>' + esc(brand) + '</strong>…</div>';
+        try {
+            const res = await fetch('/brands/portfolio/skus?brand=' + encodeURIComponent(brand) + '&days=30');
+            const json = await res.json();
+            if (!json.success) throw new Error(json.detail || 'API error');
+            renderBrandSkuModal(json.data);
+        } catch (e) {
+            console.error(e);
+            document.getElementById('modal-content').innerHTML = '<div style="text-align:center;padding:40px;color:var(--red)">Error: ' + esc(e.message) + '</div>';
+        }
+    }
+
+    function renderBrandSkuModal(data) {
+        const s = data.summary;
+        let html = '<div class="modal-header">'
+            + '<h2>' + esc(data.brand) + ' — SKU Breakdown</h2>'
+            + '<div class="subtitle">' + s.total_skus + ' SKUs · ' + data.period_days + '-day period</div>'
+            + '</div>';
+
+        // Summary stats
+        html += '<div class="modal-stats">';
+        html += modalStat('Active SKUs', s.active_skus + ' / ' + s.total_skus);
+        html += modalStat('Revenue', pfmt$(s.total_revenue));
+        html += modalStat('Units Sold', pfmtNum(s.total_units_sold));
+        html += modalStat('Overall Margin', s.overall_margin_pct.toFixed(1) + '%');
+        html += modalStat('Stock on Hand', pfmtNum(s.total_stock_on_hand));
+        html += modalStat('Stock Value', pfmt$(s.total_stock_value));
+        html += modalStat('Dead Stock', '<span style="color:var(--red)">' + s.dead_stock_skus + ' SKUs</span>');
+        html += '</div>';
+
+        // Filter pills
+        html += '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">'
+            + '<button class="sf-pill active" onclick="filterSkuTable(\'all\',this)" style="padding:5px 12px;border-radius:20px;border:1px solid rgba(27,27,27,0.15);background:var(--cass-black);color:#f7f1e8;font-size:12px;cursor:pointer;font-family:inherit">All (' + data.skus.length + ')</button>'
+            + '<button class="sf-pill" onclick="filterSkuTable(\'selling\',this)" style="padding:5px 12px;border-radius:20px;border:1px solid var(--green);background:transparent;color:var(--green);font-size:12px;cursor:pointer;font-family:inherit">Selling (' + s.active_skus + ')</button>'
+            + '<button class="sf-pill" onclick="filterSkuTable(\'dead\',this)" style="padding:5px 12px;border-radius:20px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:12px;cursor:pointer;font-family:inherit">Dead Stock (' + s.dead_stock_skus + ')</button>'
+            + '</div>';
+
+        // SKU table
+        html += '<div class="modal-section"><div style="overflow-x:auto"><table><thead><tr>'
+            + '<th>SKU</th><th>Product</th>'
+            + '<th class="num">Revenue</th><th class="num">Units</th>'
+            + '<th class="num">Margin %</th><th class="num">Stock</th>'
+            + '<th class="num">DIOH</th><th class="num">Stock Value</th>'
+            + '<th>Status</th>'
+            + '</tr></thead><tbody id="brand-sku-body">';
+
+        for (let i = 0; i < data.skus.length; i++) {
+            html += brandSkuRow(data.skus[i]);
+        }
+
+        html += '</tbody></table></div></div>';
+        document.getElementById('modal-content').innerHTML = html;
+    }
+
+    function brandSkuRow(s) {
+        const marginStyle = s.gross_margin_pct > 20 ? 'color:var(--green)' : s.gross_margin_pct < 5 ? 'color:var(--red)' : '';
+        const diohStr = s.dioh != null ? Math.round(s.dioh) + 'd' : '--';
+        const diohStyle = s.dioh != null && s.dioh > 180 ? 'color:var(--red);font-weight:600' : '';
+        const stockStyle = s.stock_on_hand === 0 ? 'color:var(--red)' : '';
+
+        let statusHtml;
+        if (s.is_dead_stock) {
+            statusHtml = '<span style="background:var(--red-bg);color:var(--red);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap">Dead Stock</span>';
+        } else if (s.revenue > 0 && s.stock_on_hand > 0) {
+            statusHtml = '<span style="background:var(--green-bg);color:var(--green);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap">Active</span>';
+        } else if (s.revenue > 0 && s.stock_on_hand === 0) {
+            statusHtml = '<span style="background:var(--amber-bg);color:var(--amber);padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;white-space:nowrap">Out of Stock</span>';
+        } else {
+            statusHtml = '<span style="color:var(--slate);font-size:11px">No Sales</span>';
+        }
+
+        const dataFilter = s.is_dead_stock ? 'dead' : s.revenue > 0 ? 'selling' : 'none';
+        const titleShort = s.title.length > 45 ? s.title.substring(0, 42) + '…' : s.title;
+
+        return '<tr data-sku-filter="' + dataFilter + '">'
+            + '<td style="font-family:monospace;font-size:12px;white-space:nowrap">' + esc(s.sku || '--') + '</td>'
+            + '<td style="font-size:13px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(s.title) + '">' + esc(titleShort) + '</td>'
+            + '<td class="num">' + pfmt$(s.revenue) + '</td>'
+            + '<td class="num">' + pfmtNum(s.units_sold) + '</td>'
+            + '<td class="num"><span style="' + marginStyle + '">' + (s.revenue > 0 ? s.gross_margin_pct.toFixed(1) + '%' : '--') + '</span></td>'
+            + '<td class="num"><span style="' + stockStyle + '">' + pfmtNum(s.stock_on_hand) + '</span></td>'
+            + '<td class="num"><span style="' + diohStyle + '">' + diohStr + '</span></td>'
+            + '<td class="num">' + (s.stock_value != null ? pfmt$(s.stock_value) : '--') + '</td>'
+            + '<td>' + statusHtml + '</td>'
+            + '</tr>';
+    }
+
+    function filterSkuTable(filter, btn) {
+        document.querySelectorAll('.sf-pill').forEach(p => {
+            p.style.background = 'transparent';
+            p.style.color = p.style.borderColor || 'var(--ink)';
+            p.classList.remove('active');
+        });
+        btn.classList.add('active');
+        btn.style.background = 'var(--cass-black)';
+        btn.style.color = '#f7f1e8';
+
+        document.querySelectorAll('#brand-sku-body tr').forEach(r => {
+            if (filter === 'all') { r.style.display = ''; return; }
+            r.style.display = r.dataset.skuFilter === filter ? '' : 'none';
         });
     }
 

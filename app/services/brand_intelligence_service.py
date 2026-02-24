@@ -4359,6 +4359,166 @@ class BrandIntelligenceService:
             watch_reasons.append("Mixed signals — monitor closely")
         return {"verdict": "Watch", "reasons": watch_reasons, "verdict_color": "amber"}
 
+    # ── SKU Drill-Down for Portfolio ──────────────────────────────────
+
+    def get_brand_sku_breakdown(self, brand: str, period_days: int = 30) -> Dict:
+        """Per-SKU breakdown for a brand: sales + inventory + dead stock flag."""
+        now = self._anchored_now()
+        cur_start = now - timedelta(days=period_days)
+        cur_end = now
+
+        # 1. Sales data per SKU (reuse existing method)
+        products = self._product_breakdown(brand, cur_start, cur_end)
+
+        # 2. Inventory snapshot per SKU for this vendor
+        inv_rows = (
+            self.db.query(
+                ShopifyInventory.sku,
+                ShopifyInventory.title,
+                ShopifyInventory.inventory_quantity,
+                ShopifyInventory.cost,
+            )
+            .filter(
+                ShopifyInventory.vendor == brand,
+                ShopifyInventory.sku.isnot(None),
+                ShopifyInventory.sku != "",
+            )
+            .all()
+        )
+        inv_map: Dict[str, Dict] = {}
+        for r in inv_rows:
+            inv_map[r.sku.upper()] = {
+                "stock_on_hand": int(r.inventory_quantity or 0),
+                "unit_cost": round(float(r.cost or 0), 2) if r.cost else None,
+                "inv_title": r.title,
+            }
+
+        # 3. Dead stock detection — SKUs with stock > 0 but zero sales in 90d
+        cutoff_90d = now - timedelta(days=90)
+        sold_skus_90d = set()
+        sold_q = (
+            self.db.query(func.upper(ShopifyOrderItem.sku))
+            .filter(
+                ShopifyOrderItem.vendor == brand,
+                ShopifyOrderItem.order_date >= cutoff_90d,
+                ShopifyOrderItem.sku.isnot(None),
+                ShopifyOrderItem.financial_status.notin_(["voided"]),
+            )
+            .distinct()
+            .all()
+        )
+        for r in sold_q:
+            sold_skus_90d.add(r[0])
+
+        # 4. 30-day velocity per SKU (for DIOH)
+        cutoff_30d = now - timedelta(days=30)
+        vel_q = (
+            self.db.query(
+                func.upper(ShopifyOrderItem.sku),
+                func.sum(ShopifyOrderItem.quantity).label("units_30d"),
+            )
+            .filter(
+                ShopifyOrderItem.vendor == brand,
+                ShopifyOrderItem.order_date >= cutoff_30d,
+                ShopifyOrderItem.sku.isnot(None),
+                ShopifyOrderItem.financial_status.notin_(["voided"]),
+            )
+            .group_by(func.upper(ShopifyOrderItem.sku))
+            .all()
+        )
+        vel_map = {r[0]: int(r.units_30d or 0) for r in vel_q}
+
+        # 5. Merge: sales products + inventory-only SKUs
+        seen_skus: set = set()
+        sku_rows: List[Dict] = []
+
+        for p in products:
+            sku_key = (p["sku"] or "").upper()
+            seen_skus.add(sku_key)
+            inv = inv_map.get(sku_key, {})
+            stock = inv.get("stock_on_hand", 0)
+            units_30d = vel_map.get(sku_key, 0)
+            daily_vel = units_30d / 30.0 if units_30d > 0 else 0
+            dioh = round(stock / daily_vel, 1) if daily_vel > 0 and stock > 0 else None
+            is_dead = stock > 0 and sku_key not in sold_skus_90d
+
+            stock_value = None
+            if inv.get("unit_cost") and stock > 0:
+                stock_value = round(inv["unit_cost"] * stock, 2)
+
+            sku_rows.append({
+                "sku": p["sku"] or "",
+                "title": p["title"],
+                "product_id": p["product_id"],
+                "revenue": p["revenue"],
+                "units_sold": p["units"],
+                "avg_price": p["avg_price"],
+                "cogs": p["cogs"],
+                "gross_margin_pct": p["gross_margin_pct"],
+                "stock_on_hand": stock,
+                "unit_cost": inv.get("unit_cost"),
+                "stock_value": stock_value,
+                "dioh": dioh,
+                "is_dead_stock": is_dead,
+                "velocity_30d": units_30d,
+            })
+
+        # Add inventory-only SKUs (in stock but never sold in this period)
+        for sku_upper, inv in inv_map.items():
+            if sku_upper in seen_skus or inv["stock_on_hand"] <= 0:
+                continue
+            is_dead = sku_upper not in sold_skus_90d
+            units_30d = vel_map.get(sku_upper, 0)
+            daily_vel = units_30d / 30.0 if units_30d > 0 else 0
+            stock = inv["stock_on_hand"]
+            dioh = round(stock / daily_vel, 1) if daily_vel > 0 else None
+            stock_value = round(inv["unit_cost"] * stock, 2) if inv.get("unit_cost") else None
+
+            sku_rows.append({
+                "sku": sku_upper,
+                "title": inv.get("inv_title") or "",
+                "product_id": None,
+                "revenue": 0,
+                "units_sold": 0,
+                "avg_price": 0,
+                "cogs": 0,
+                "gross_margin_pct": 0,
+                "stock_on_hand": stock,
+                "unit_cost": inv.get("unit_cost"),
+                "stock_value": stock_value,
+                "dioh": dioh,
+                "is_dead_stock": is_dead,
+                "velocity_30d": units_30d,
+            })
+
+        # Sort: revenue desc, then stock_value desc for unsold items
+        sku_rows.sort(key=lambda x: (-x["revenue"], -(x["stock_value"] or 0)))
+
+        # Summary stats
+        total_revenue = sum(s["revenue"] for s in sku_rows)
+        total_units = sum(s["units_sold"] for s in sku_rows)
+        total_stock = sum(s["stock_on_hand"] for s in sku_rows)
+        total_stock_value = sum(s["stock_value"] or 0 for s in sku_rows)
+        dead_count = sum(1 for s in sku_rows if s["is_dead_stock"])
+        total_cogs = sum(s["cogs"] for s in sku_rows)
+        overall_margin = round((total_revenue - total_cogs) / total_revenue * 100, 1) if total_revenue > 0 and total_cogs > 0 else 0
+
+        return {
+            "brand": brand,
+            "period_days": period_days,
+            "summary": {
+                "total_skus": len(sku_rows),
+                "active_skus": sum(1 for s in sku_rows if s["revenue"] > 0),
+                "dead_stock_skus": dead_count,
+                "total_revenue": round(total_revenue, 2),
+                "total_units_sold": total_units,
+                "total_stock_on_hand": total_stock,
+                "total_stock_value": round(total_stock_value, 2),
+                "overall_margin_pct": overall_margin,
+            },
+            "skus": sku_rows,
+        }
+
 
 def _month_name(mo: str) -> str:
     names = {

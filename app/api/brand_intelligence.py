@@ -202,6 +202,29 @@ async def get_brand_decision(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/portfolio/skus")
+async def get_portfolio_skus(
+    brand: str = Query(..., description="Brand/vendor name"),
+    days: int = Query(30, ge=1, le=730, description="Period in days"),
+    db: Session = Depends(get_db),
+):
+    """SKU-level drill-down for a brand in the portfolio report."""
+    cache_key = f"brand_portfolio_skus|{brand}|{days}"
+    cached = get_cached(cache_key)
+    if cached is not _MISS:
+        return cached
+
+    try:
+        service = BrandIntelligenceService(db)
+        data = service.get_brand_sku_breakdown(brand=brand, period_days=days)
+        result = {"success": True, "data": data}
+        set_cached(cache_key, result, 300)
+        return result
+    except Exception as e:
+        log.error(f"Error in /brands/portfolio/skus: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/compare")
 async def compare_brands(
     brands: str = Query(..., description="Comma-separated brand names"),
