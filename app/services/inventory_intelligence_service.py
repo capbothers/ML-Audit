@@ -381,6 +381,8 @@ class InventoryIntelligenceService:
     def get_stock_distribution(self) -> List[Dict[str, Any]]:
         """Count + value per suggestion bucket for the stacked bar."""
         try:
+            gen_filter = self._latest_gen_filter()
+
             # Get counts and raw units per suggestion (no capping)
             rows = (
                 self.db.query(
@@ -388,6 +390,7 @@ class InventoryIntelligenceService:
                     func.count().label("count"),
                     func.sum(MLInventorySuggestion.units_on_hand).label("units"),
                 )
+                .filter(gen_filter)
                 .group_by(MLInventorySuggestion.suggestion)
                 .all()
             )
@@ -404,6 +407,7 @@ class InventoryIntelligenceService:
                 )
                 .outerjoin(pc_cost, func.upper(MLInventorySuggestion.sku) == pc_cost.c.sku)
                 .outerjoin(inv_cost, func.upper(MLInventorySuggestion.sku) == inv_cost.c.sku)
+                .filter(gen_filter)
                 .group_by(MLInventorySuggestion.suggestion)
                 .all()
             )
@@ -446,6 +450,7 @@ class InventoryIntelligenceService:
     def get_brand_summary(self, limit: int = 20) -> List[Dict[str, Any]]:
         """Brand-level aggregations for the overview table."""
         try:
+            gen_filter = self._latest_gen_filter()
             rows = (
                 self.db.query(
                     MLInventorySuggestion.brand,
@@ -477,7 +482,7 @@ class InventoryIntelligenceService:
                         )
                     ).label("overstock_count"),
                 )
-                .filter(MLInventorySuggestion.brand.isnot(None))
+                .filter(gen_filter, MLInventorySuggestion.brand.isnot(None))
                 .group_by(MLInventorySuggestion.brand)
                 .order_by(desc("sku_count"))
                 .limit(limit)
@@ -548,13 +553,14 @@ class InventoryIntelligenceService:
     def get_velocity_summary(self) -> Dict[str, Any]:
         """Velocity trend summary for overview."""
         try:
+            gen_filter = self._latest_gen_filter()
             rows = (
                 self.db.query(
                     MLInventorySuggestion.velocity_trend,
                     func.count().label("cnt"),
                     func.avg(MLInventorySuggestion.daily_sales_velocity).label("avg_vel"),
                 )
-                .filter(MLInventorySuggestion.velocity_trend.isnot(None))
+                .filter(gen_filter, MLInventorySuggestion.velocity_trend.isnot(None))
                 .group_by(MLInventorySuggestion.velocity_trend)
                 .all()
             )
@@ -813,9 +819,10 @@ class InventoryIntelligenceService:
     def get_velocity_movers(self, limit: int = 20) -> Dict[str, Any]:
         """SKUs with biggest velocity changes (accelerating demand)."""
         try:
+            gen_filter = self._latest_gen_filter()
             increasing = (
                 self.db.query(MLInventorySuggestion)
-                .filter(MLInventorySuggestion.velocity_trend == "increasing")
+                .filter(gen_filter, MLInventorySuggestion.velocity_trend == "increasing")
                 .order_by(desc(MLInventorySuggestion.daily_sales_velocity))
                 .limit(limit)
                 .all()
@@ -823,7 +830,7 @@ class InventoryIntelligenceService:
 
             decreasing = (
                 self.db.query(MLInventorySuggestion)
-                .filter(MLInventorySuggestion.velocity_trend == "decreasing")
+                .filter(gen_filter, MLInventorySuggestion.velocity_trend == "decreasing")
                 .order_by(desc(MLInventorySuggestion.daily_sales_velocity))
                 .limit(limit)
                 .all()
@@ -1072,10 +1079,12 @@ class InventoryIntelligenceService:
     def get_sku_detail(self, sku: str) -> Dict[str, Any]:
         """Full SKU drill-down for the modal."""
         try:
+            gen_filter = self._latest_gen_filter()
+
             # ML suggestion data
             suggestion = (
                 self.db.query(MLInventorySuggestion)
-                .filter(func.upper(MLInventorySuggestion.sku) == sku.upper())
+                .filter(gen_filter, func.upper(MLInventorySuggestion.sku) == sku.upper())
                 .first()
             )
 
@@ -1355,6 +1364,7 @@ class InventoryIntelligenceService:
     def search_skus(self, query: str, limit: int = 20) -> List[Dict[str, Any]]:
         """Search SKUs by partial match on sku, brand, or title."""
         try:
+            gen_filter = self._latest_gen_filter()
             pattern = f"%{query.upper()}%"
             rows = (
                 self.db.query(
@@ -1368,6 +1378,7 @@ class InventoryIntelligenceService:
                     MLInventorySuggestion.urgency,
                 )
                 .filter(
+                    gen_filter,
                     (func.upper(MLInventorySuggestion.sku).like(pattern))
                     | (func.upper(MLInventorySuggestion.brand).like(pattern))
                     | (func.upper(MLInventorySuggestion.title).like(pattern))

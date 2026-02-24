@@ -1093,12 +1093,12 @@ class MLIntelligenceService:
         cutoff_30d = date.today() - timedelta(days=30)
         cutoff_7d = date.today() - timedelta(days=7)
 
-        # 30-day sales velocity by SKU
+        # 30-day sales velocity by SKU (grouped by upper-case to avoid collisions)
         velocity_30d = (
             self.db.query(
-                ShopifyOrderItem.sku,
-                ShopifyOrderItem.vendor,
-                ShopifyOrderItem.title,
+                func.upper(ShopifyOrderItem.sku).label("sku"),
+                func.max(ShopifyOrderItem.vendor).label("vendor"),
+                func.max(ShopifyOrderItem.title).label("title"),
                 func.sum(ShopifyOrderItem.quantity).label("units_sold_30d"),
             )
             .join(
@@ -1112,14 +1112,14 @@ class MLIntelligenceService:
                 ShopifyOrderItem.sku.isnot(None),
                 ShopifyOrderItem.sku != "",
             )
-            .group_by(ShopifyOrderItem.sku)
+            .group_by(func.upper(ShopifyOrderItem.sku))
             .all()
         )
 
         # 7-day sales velocity by SKU (for trend)
         velocity_7d_rows = (
             self.db.query(
-                ShopifyOrderItem.sku,
+                func.upper(ShopifyOrderItem.sku).label("sku"),
                 func.sum(ShopifyOrderItem.quantity).label("units_sold_7d"),
             )
             .join(
@@ -1133,20 +1133,20 @@ class MLIntelligenceService:
                 ShopifyOrderItem.sku.isnot(None),
                 ShopifyOrderItem.sku != "",
             )
-            .group_by(ShopifyOrderItem.sku)
+            .group_by(func.upper(ShopifyOrderItem.sku))
             .all()
         )
-        velocity_7d = {r.sku.upper(): float(r.units_sold_7d or 0) for r in velocity_7d_rows}
+        velocity_7d = {r.sku: float(r.units_sold_7d or 0) for r in velocity_7d_rows}
 
-        # Current inventory by SKU (active products only)
+        # Current inventory by SKU (active products only, grouped by upper-case)
         active_pids = self.db.query(ShopifyProduct.shopify_product_id).filter(
             ShopifyProduct.status == 'active'
         ).subquery()
         inventory_rows = (
             self.db.query(
-                ShopifyInventory.sku,
-                ShopifyInventory.vendor,
-                ShopifyInventory.title,
+                func.upper(ShopifyInventory.sku).label("sku"),
+                func.max(ShopifyInventory.vendor).label("vendor"),
+                func.max(ShopifyInventory.title).label("title"),
                 func.sum(ShopifyInventory.inventory_quantity).label("on_hand"),
             )
             .filter(
@@ -1154,11 +1154,11 @@ class MLIntelligenceService:
                 ShopifyInventory.sku.isnot(None),
                 ShopifyInventory.sku != "",
             )
-            .group_by(ShopifyInventory.sku)
+            .group_by(func.upper(ShopifyInventory.sku))
             .all()
         )
         inventory_by_sku = {
-            r.sku.upper(): {
+            r.sku: {
                 "on_hand": int(r.on_hand or 0),
                 "vendor": r.vendor,
                 "title": r.title,
@@ -1178,7 +1178,7 @@ class MLIntelligenceService:
 
         suggestions = []
         for row in velocity_30d:
-            sku = row.sku.upper() if row.sku else row.sku
+            sku = row.sku  # already upper-cased by func.upper() in query
             if not sku:
                 continue
 
