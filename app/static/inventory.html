@@ -380,6 +380,7 @@
                 <button class="tab-btn" onclick="switchTab('reorder')">Reorder Queue</button>
                 <button class="tab-btn" onclick="switchTab('health')">Stock Health</button>
                 <button class="tab-btn" onclick="switchTab('deepdive')">SKU Deep Dive</button>
+                <button class="tab-btn" onclick="switchTab('portfolio')">Brand Portfolio</button>
             </div>
 
             <!-- TAB 1: INVENTORY PULSE -->
@@ -649,6 +650,13 @@
                     </div>
                 </div>
             </div>
+
+            <!-- TAB 5: BRAND PORTFOLIO -->
+            <div id="tab-portfolio" class="tab-panel">
+                <div id="portfolio-content">
+                    <div class="loading-text" style="padding:40px;text-align:center;color:var(--slate)">Loading brand portfolio report...</div>
+                </div>
+            </div>
         </section>
     </div>
 
@@ -671,7 +679,7 @@
     let reorderPage = 1;
     let reorderPerPage = 25;
     let reorderBrand = '';
-    let tabsLoaded = { pulse: false, reorder: false, health: false, deepdive: false };
+    let tabsLoaded = { pulse: false, reorder: false, health: false, deepdive: false, portfolio: false };
     let allItems = []; // for CSV export
 
     /* ──────────────────────────────────────────
@@ -679,13 +687,14 @@
     ────────────────────────────────────────── */
     function switchTab(tab) {
         document.querySelectorAll('.tab-btn').forEach((b, i) => {
-            b.classList.toggle('active', ['pulse','reorder','health','deepdive'][i] === tab);
+            b.classList.toggle('active', ['pulse','reorder','health','deepdive','portfolio'][i] === tab);
         });
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         document.getElementById('tab-' + tab).classList.add('active');
 
         if (tab === 'reorder' && !tabsLoaded.reorder) loadReorderQueue();
         if (tab === 'health' && !tabsLoaded.health) loadStockHealth();
+        if (tab === 'portfolio' && !tabsLoaded.portfolio) loadPortfolio();
     }
 
     /* ──────────────────────────────────────────
@@ -1366,6 +1375,135 @@
     document.addEventListener('keydown', e => {
         if (e.key === 'Escape') closeModal();
     });
+
+    /* ──────────────────────────────────────────
+       BRAND PORTFOLIO
+    ────────────────────────────────────────── */
+    function pfmt$(v) {
+        if (v == null || isNaN(v)) return '--';
+        return '$' + Number(v).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+    function pfmtPct(v) {
+        if (v == null || isNaN(v)) return '--';
+        return (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+    }
+    function pfmtNum(v) {
+        if (v == null || isNaN(v)) return '--';
+        return Number(v).toLocaleString('en-AU');
+    }
+
+    async function loadPortfolio() {
+        if (tabsLoaded.portfolio) return;
+        const el = document.getElementById('portfolio-content');
+        el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--slate)">Loading brand portfolio report...</div>';
+
+        try {
+            const res = await fetch('/brands/portfolio?days=30');
+            const json = await res.json();
+            if (!json.success) throw new Error(json.detail || 'API error');
+            renderPortfolio(json.data);
+            tabsLoaded.portfolio = true;
+        } catch (err) {
+            console.error(err);
+            el.innerHTML = '<div style="padding:40px;text-align:center;color:var(--red)">Error: ' + esc(err.message) + '</div>';
+        }
+    }
+
+    function renderPortfolio(data) {
+        const k = data.kpis;
+
+        let html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px">';
+        html += pKpiCard('Brands', k.total_brands, '');
+        html += pKpiCard('Working', k.working_count, '<span style="color:var(--green)">' + k.working_revenue_pct.toFixed(1) + '% of revenue</span>');
+        html += pKpiCard('Watch', k.watch_count, '');
+        html += pKpiCard('Not Working', k.not_working_count, '<span style="color:var(--red)">' + k.not_working_revenue_pct.toFixed(1) + '% of revenue</span>');
+        html += pKpiCard('Stock Value', pfmt$(k.total_stock_value), '');
+        html += pKpiCard('Dead Stock SKUs', pfmtNum(k.total_dead_stock_skus), '');
+        html += '</div>';
+
+        // Filter pills
+        html += '<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">'
+            + '<button class="pf-pill active" onclick="filterPortfolio(\'all\',this)" style="padding:6px 14px;border-radius:20px;border:1px solid rgba(27,27,27,0.15);background:var(--cass-black);color:#f7f1e8;font-size:13px;cursor:pointer;font-family:inherit">All (' + data.brands.length + ')</button>'
+            + '<button class="pf-pill" onclick="filterPortfolio(\'Working\',this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--green);background:transparent;color:var(--green);font-size:13px;cursor:pointer;font-family:inherit">Working (' + k.working_count + ')</button>'
+            + '<button class="pf-pill" onclick="filterPortfolio(\'Watch\',this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--amber);background:transparent;color:var(--amber);font-size:13px;cursor:pointer;font-family:inherit">Watch (' + k.watch_count + ')</button>'
+            + '<button class="pf-pill" onclick="filterPortfolio(\'Not Working\',this)" style="padding:6px 14px;border-radius:20px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:13px;cursor:pointer;font-family:inherit">Not Working (' + k.not_working_count + ')</button>'
+            + '</div>';
+
+        // Table
+        html += '<div class="table-card"><div class="table-header"><h3>Brand Portfolio</h3><span style="font-size:12px;color:var(--slate)">' + data.brands.length + ' brands</span></div>';
+        html += '<div style="overflow-x:auto"><table><thead><tr>'
+            + '<th>Brand</th><th>Verdict</th>'
+            + '<th class="num">Net Sales</th><th class="num">YoY %</th>'
+            + '<th class="num">Margin %</th><th class="num">Health</th>'
+            + '<th class="num">DIOH</th><th class="num">Dead Stock</th>'
+            + '<th class="num">Stock Value</th><th class="num">Buyers</th>'
+            + '<th class="num">Repeat %</th><th>Momentum</th>'
+            + '<th>Reasons</th>'
+            + '</tr></thead><tbody id="portfolio-body">';
+
+        for (let i = 0; i < data.brands.length; i++) {
+            html += pRow(data.brands[i]);
+        }
+
+        html += '</tbody></table></div></div>';
+        document.getElementById('portfolio-content').innerHTML = html;
+    }
+
+    function pKpiCard(label, value, sub) {
+        return '<div style="background:var(--card);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);border:1px solid var(--line)">'
+            + '<div style="font-size:12px;color:var(--slate);margin-bottom:4px">' + label + '</div>'
+            + '<div style="font-size:22px;font-weight:600;font-family:\'Space Grotesk\',sans-serif">' + value + '</div>'
+            + (sub ? '<div style="font-size:12px;margin-top:4px">' + sub + '</div>' : '')
+            + '</div>';
+    }
+
+    function pRow(b) {
+        const verdictStyle = b.verdict_color === 'green'
+            ? 'background:var(--green-bg);color:var(--green)'
+            : b.verdict_color === 'red'
+            ? 'background:var(--red-bg);color:var(--red)'
+            : 'background:var(--amber-bg);color:var(--amber)';
+        const yoyStyle = b.revenue_yoy_pct == null ? 'color:var(--slate)'
+            : b.revenue_yoy_pct > 0 ? 'color:var(--green)' : 'color:var(--red)';
+        const marginStr = b.gross_margin_pct != null ? b.gross_margin_pct.toFixed(1) + '%' : '--';
+        const marginStyle = b.gross_margin_pct == null ? '' : b.gross_margin_pct > 20 ? 'color:var(--green)' : b.gross_margin_pct < 5 ? 'color:var(--red)' : '';
+        const healthGrade = b.health_grade || '-';
+        const healthColor = b.health_score >= 65 ? 'var(--green)' : b.health_score >= 40 ? 'var(--amber)' : 'var(--red)';
+        const momHtml = b.momentum === 'accelerating' ? '<span style="color:var(--green)">Accelerating</span>'
+                      : b.momentum === 'decelerating' ? '<span style="color:var(--red)">Decelerating</span>'
+                      : '<span style="color:var(--slate)">Steady</span>';
+
+        return '<tr data-verdict="' + b.verdict + '">'
+            + '<td><strong>' + esc(b.brand) + '</strong></td>'
+            + '<td><span style="' + verdictStyle + ';padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;white-space:nowrap">' + b.verdict + '</span></td>'
+            + '<td class="num">' + pfmt$(b.revenue) + '</td>'
+            + '<td class="num"><span style="' + yoyStyle + '">' + pfmtPct(b.revenue_yoy_pct) + '</span></td>'
+            + '<td class="num"><span style="' + marginStyle + '">' + marginStr + '</span></td>'
+            + '<td class="num"><span style="color:' + healthColor + ';font-weight:600">' + healthGrade + ' (' + Math.round(b.health_score) + ')</span></td>'
+            + '<td class="num">' + (b.dioh != null ? Math.round(b.dioh) + 'd' : '--') + '</td>'
+            + '<td class="num">' + pfmtNum(b.dead_stock_count) + '</td>'
+            + '<td class="num">' + pfmt$(b.stock_value) + '</td>'
+            + '<td class="num">' + pfmtNum(b.unique_buyers) + '</td>'
+            + '<td class="num">' + (b.repeat_purchase_rate != null ? b.repeat_purchase_rate.toFixed(1) + '%' : '--') + '</td>'
+            + '<td>' + momHtml + '</td>'
+            + '<td style="font-size:11px;max-width:260px;line-height:1.3">' + esc(b.verdict_reasons.join('; ')) + '</td>'
+            + '</tr>';
+    }
+
+    function filterPortfolio(verdict, btn) {
+        document.querySelectorAll('.pf-pill').forEach(p => {
+            p.style.background = 'transparent';
+            p.style.color = p.style.borderColor || 'var(--ink)';
+            p.classList.remove('active');
+        });
+        btn.classList.add('active');
+        btn.style.background = 'var(--cass-black)';
+        btn.style.color = '#f7f1e8';
+
+        document.querySelectorAll('#portfolio-body tr').forEach(r => {
+            r.style.display = (verdict === 'all' || r.dataset.verdict === verdict) ? '' : 'none';
+        });
+    }
 
     /* ──────────────────────────────────────────
        INIT
