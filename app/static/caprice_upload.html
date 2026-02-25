@@ -261,17 +261,10 @@
                     const data = await res.json();
 
                     if (res.ok && data.success) {
-                        const r = (data.results && data.results[0]) || {};
                         results.innerHTML += `
                             <div class="result-card success">
                                 <div class="fname">${file.name}</div>
-                                <div class="stats">${r.rows_imported || 0} rows imported, ${r.rows_updated || 0} updated &middot; Pricing date: ${r.pricing_date || 'N/A'}</div>
-                            </div>`;
-                    } else if (data.results && data.results[0] && data.results[0].status === 'skipped') {
-                        results.innerHTML += `
-                            <div class="result-card skipped">
-                                <div class="fname">${file.name}</div>
-                                <div class="stats">Skipped — already imported</div>
+                                <div class="stats">Uploaded — import running in background</div>
                             </div>`;
                     } else {
                         results.innerHTML += `
@@ -292,9 +285,17 @@
                 bar.style.width = ((done / total) * 100) + '%';
             }
 
-            text.textContent = `Done — ${done} file${done !== 1 ? 's' : ''} processed`;
+            text.textContent = `All ${done} file${done !== 1 ? 's' : ''} uploaded — importing in background. Log will refresh automatically.`;
             selectedFiles = [];
             renderFileList();
+
+            // Auto-refresh log every 10s to show background import progress
+            let refreshCount = 0;
+            const refreshInterval = setInterval(() => {
+                loadLog();
+                refreshCount++;
+                if (refreshCount >= 18) clearInterval(refreshInterval); // stop after 3 min
+            }, 10000);
             loadLog();
         }
 

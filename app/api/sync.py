@@ -867,13 +867,26 @@ async def get_sync_logs_summary(hours: int = Query(24, description="Hours of his
 # ── Caprice Pricing Import ──────────────────────────────────────────
 
 
-@router.post("/caprice/upload")
-async def upload_caprice_file(file: UploadFile = File(...)):
-    """
-    Upload a Caprice pricing .xlsx file and import it immediately.
+def _run_caprice_import():
+    """Background task: import all pending files in the inbox."""
+    try:
+        from app.services.caprice_import_service import CapriceImportService
+        result = CapriceImportService().run_import()
+        log.info(f"Caprice background import done: {result.get('imported', 0)} imported, {result.get('failed', 0)} failed")
+    except Exception as e:
+        log.error(f"Caprice background import error: {str(e)}")
 
-    Saves the file to the inbox, runs the import pipeline, and returns
-    the result. Accepts files via multipart form upload.
+
+@router.post("/caprice/upload")
+async def upload_caprice_file(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+):
+    """
+    Upload a Caprice pricing .xlsx file.
+
+    Saves the file to the inbox and kicks off the import in the background.
+    Returns immediately so the request doesn't time out on large files.
     """
     import os
     from pathlib import Path
@@ -894,12 +907,15 @@ async def upload_caprice_file(file: UploadFile = File(...)):
 
         log.info(f"Caprice upload: saved {file.filename} ({len(contents)} bytes) to inbox")
 
-        # Run import
-        from app.services.caprice_import_service import CapriceImportService
-        service = CapriceImportService()
-        result = service.run_import()
+        # Kick off import in background (won't block the HTTP response)
+        background_tasks.add_task(_run_caprice_import)
 
-        return {"success": True, "uploaded": file.filename, "size_bytes": len(contents), **result}
+        return {
+            "success": True,
+            "uploaded": file.filename,
+            "size_bytes": len(contents),
+            "message": "File saved. Import running in background — check the log below for results.",
+        }
 
     except HTTPException:
         raise
