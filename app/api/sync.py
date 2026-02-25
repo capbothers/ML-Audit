@@ -1,7 +1,7 @@
 """
 Data synchronization endpoints
 """
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile, File
 from typing import Optional, List
 from datetime import datetime, timedelta
 from app.models.base import SessionLocal
@@ -865,6 +865,47 @@ async def get_sync_logs_summary(hours: int = Query(24, description="Hours of his
 
 
 # ── Caprice Pricing Import ──────────────────────────────────────────
+
+
+@router.post("/caprice/upload")
+async def upload_caprice_file(file: UploadFile = File(...)):
+    """
+    Upload a Caprice pricing .xlsx file and import it immediately.
+
+    Saves the file to the inbox, runs the import pipeline, and returns
+    the result. Accepts files via multipart form upload.
+    """
+    import os
+    from pathlib import Path
+
+    if not file.filename or not file.filename.endswith(".xlsx"):
+        raise HTTPException(400, "File must be an .xlsx Excel file")
+
+    try:
+        # Ensure inbox exists
+        inbox = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))) / "imports" / "new-sheets"
+        inbox.mkdir(parents=True, exist_ok=True)
+
+        # Save uploaded file
+        dest = inbox / file.filename
+        contents = await file.read()
+        with open(dest, "wb") as f:
+            f.write(contents)
+
+        log.info(f"Caprice upload: saved {file.filename} ({len(contents)} bytes) to inbox")
+
+        # Run import
+        from app.services.caprice_import_service import CapriceImportService
+        service = CapriceImportService()
+        result = service.run_import()
+
+        return {"success": True, "uploaded": file.filename, "size_bytes": len(contents), **result}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Caprice upload error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/caprice/import-latest")
