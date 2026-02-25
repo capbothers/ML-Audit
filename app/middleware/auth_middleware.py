@@ -25,6 +25,7 @@ DASHBOARD_PATHS = {
     "/pricing-intel", "/customer-intelligence", "/merchant-center-intel",
     "/strategic-intelligence", "/finance-dashboard", "/ads-intelligence",
     "/site-intelligence", "/brand-intelligence", "/brand-portal",
+    "/caprice-upload",
 }
 
 

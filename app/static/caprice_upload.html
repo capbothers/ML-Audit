@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cass Brothers · Caprice Upload</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        :root {
+            --ink: #1c1b1f; --ink-soft: #3d3a40; --slate: #6b6670;
+            --card: #ffffff; --stone: #f5f2ec; --line: rgba(27,27,27,0.08);
+            --shadow: 0 1px 3px rgba(17,18,19,0.04), 0 8px 24px rgba(17,18,19,0.06);
+            --cass-black: #1b1b1b; --cass-cream: #f7f3ed; --cass-gold: #c49a4a;
+            --cass-teal: #1f6f6b; --cass-moss: #2f3d33;
+            --green: #1a7a3a; --green-bg: rgba(26,122,58,0.08);
+            --red: #b5342a; --red-bg: rgba(181,52,42,0.08);
+            --amber: #8b6b1f; --amber-bg: rgba(196,154,74,0.12);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "IBM Plex Sans", sans-serif;
+            background: radial-gradient(circle at top left, #fdfbf7 0%, var(--cass-cream) 45%, #f1ede6 100%);
+            color: var(--ink); min-height: 100vh;
+        }
+        .brand-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 28px; background: var(--cass-black); color: #f7f1e8;
+        }
+        .brand-mark {
+            display: flex; align-items: center; gap: 12px;
+            font-family: "Space Grotesk", sans-serif;
+        }
+        .brand-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--cass-gold); }
+        .back-link {
+            color: #b0adb4; text-decoration: none; font-size: 13px;
+            padding: 5px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.18);
+        }
+        .back-link:hover { border-color: rgba(255,255,255,0.4); color: #f7f1e8; }
+
+        .container { max-width: 700px; margin: 40px auto; padding: 0 20px; }
+        h1 { font-family: "Space Grotesk", sans-serif; font-size: 24px; font-weight: 600; margin-bottom: 6px; }
+        .subtitle { font-size: 13px; color: var(--slate); margin-bottom: 28px; }
+
+        /* Drop zone */
+        .drop-zone {
+            border: 2px dashed var(--line); border-radius: 18px;
+            padding: 48px 24px; text-align: center;
+            background: var(--card); cursor: pointer;
+            transition: all 0.2s;
+        }
+        .drop-zone.dragover { border-color: var(--cass-gold); background: var(--amber-bg); }
+        .drop-zone.has-files { border-color: var(--cass-teal); border-style: solid; }
+        .drop-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
+        .drop-text { font-size: 15px; color: var(--ink-soft); margin-bottom: 4px; }
+        .drop-hint { font-size: 12px; color: var(--slate); }
+
+        /* File list */
+        .file-list { margin-top: 16px; }
+        .file-item {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 16px; background: var(--stone); border-radius: 10px;
+            margin-bottom: 6px; font-size: 13px;
+        }
+        .file-item .name { font-weight: 600; }
+        .file-item .size { color: var(--slate); font-size: 12px; }
+        .file-item .remove {
+            background: none; border: none; color: var(--red); cursor: pointer;
+            font-size: 16px; padding: 0 4px;
+        }
+
+        /* Buttons */
+        .btn-row { display: flex; gap: 10px; margin-top: 20px; }
+        .btn {
+            padding: 10px 24px; border-radius: 12px; border: none;
+            font-family: inherit; font-size: 14px; font-weight: 600;
+            cursor: pointer; transition: all 0.15s;
+        }
+        .btn-primary { background: var(--cass-moss); color: #f7f1e8; }
+        .btn-primary:hover { background: var(--cass-black); }
+        .btn-primary:disabled { opacity: 0.4; cursor: default; }
+        .btn-secondary { background: var(--stone); color: var(--ink-soft); }
+        .btn-secondary:hover { background: var(--line); }
+
+        /* Progress */
+        .progress-wrap { margin-top: 20px; display: none; }
+        .progress-bar-bg {
+            width: 100%; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden;
+        }
+        .progress-bar {
+            height: 100%; background: var(--cass-teal); border-radius: 4px;
+            transition: width 0.3s;
+        }
+        .progress-text { font-size: 12px; color: var(--slate); margin-top: 6px; }
+
+        /* Results */
+        .results { margin-top: 24px; }
+        .result-card {
+            background: var(--card); border-radius: 14px; padding: 16px 20px;
+            box-shadow: var(--shadow); border: 1px solid var(--line); margin-bottom: 10px;
+        }
+        .result-card.success { border-left: 4px solid var(--green); }
+        .result-card.failed { border-left: 4px solid var(--red); }
+        .result-card.skipped { border-left: 4px solid var(--amber); }
+        .result-card .fname { font-weight: 600; font-size: 14px; }
+        .result-card .stats { font-size: 13px; color: var(--slate); margin-top: 4px; }
+        .result-card .error { font-size: 12px; color: var(--red); margin-top: 4px; }
+
+        /* Recent log */
+        .log-section { margin-top: 36px; }
+        .log-section h2 { font-family: "Space Grotesk", sans-serif; font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--card); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow); }
+        thead th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--slate); padding: 10px 12px; border-bottom: 2px solid var(--line); }
+        th.num, td.num { text-align: right; }
+        tbody td { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+        tbody tr:hover { background: var(--stone); }
+        .badge { padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+        .badge-success { background: var(--green-bg); color: var(--green); }
+        .badge-failed { background: var(--red-bg); color: var(--red); }
+        .badge-skipped { background: var(--amber-bg); color: var(--amber); }
+    </style>
+</head>
+<body>
+    <div class="brand-bar">
+        <div class="brand-mark">
+            <div class="brand-dot"></div>
+            <span style="font-size:15px;font-weight:600;">Cass Brothers</span>
+            <span style="opacity:0.5;font-size:13px;margin-left:4px;">Caprice Upload</span>
+        </div>
+        <a class="back-link" href="/dashboard">Back to Dashboard</a>
+    </div>
+
+    <div class="container">
+        <h1>Upload Caprice Pricing Files</h1>
+        <div class="subtitle">Drop your .xlsx pricing log files here and they'll be imported into the database immediately.</div>
+
+        <!-- Drop zone -->
+        <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+            <div class="drop-icon">&#128196;</div>
+            <div class="drop-text">Drop .xlsx files here or click to browse</div>
+            <div class="drop-hint">Accepts capricelog-DDMMYYYY.xlsx files</div>
+        </div>
+        <input type="file" id="fileInput" multiple accept=".xlsx" style="display:none" onchange="addFiles(this.files)">
+
+        <!-- File list -->
+        <div class="file-list" id="fileList"></div>
+
+        <!-- Buttons -->
+        <div class="btn-row">
+            <button class="btn btn-primary" id="uploadBtn" disabled onclick="uploadAll()">Upload & Import</button>
+            <button class="btn btn-secondary" id="clearBtn" style="display:none" onclick="clearFiles()">Clear</button>
+        </div>
+
+        <!-- Progress -->
+        <div class="progress-wrap" id="progressWrap">
+            <div class="progress-bar-bg"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
+            <div class="progress-text" id="progressText">Uploading...</div>
+        </div>
+
+        <!-- Results -->
+        <div class="results" id="results"></div>
+
+        <!-- Recent imports -->
+        <div class="log-section">
+            <h2>Recent Imports</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>File</th>
+                        <th>Pricing Date</th>
+                        <th>Status</th>
+                        <th class="num">Rows</th>
+                        <th>Imported</th>
+                    </tr>
+                </thead>
+                <tbody id="logTable"><tr><td colspan="5" style="text-align:center;color:var(--slate);padding:20px;">Loading...</td></tr></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let selectedFiles = [];
+
+        // Drag & drop
+        const dropZone = document.getElementById('dropZone');
+        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+        dropZone.addEventListener('drop', e => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            addFiles(e.dataTransfer.files);
+        });
+
+        function addFiles(fileList) {
+            for (const f of fileList) {
+                if (!f.name.endsWith('.xlsx')) continue;
+                if (selectedFiles.some(s => s.name === f.name)) continue;
+                selectedFiles.push(f);
+            }
+            renderFileList();
+        }
+
+        function removeFile(idx) {
+            selectedFiles.splice(idx, 1);
+            renderFileList();
+        }
+
+        function clearFiles() {
+            selectedFiles = [];
+            renderFileList();
+            document.getElementById('results').innerHTML = '';
+        }
+
+        function renderFileList() {
+            const el = document.getElementById('fileList');
+            const btn = document.getElementById('uploadBtn');
+            const clrBtn = document.getElementById('clearBtn');
+
+            if (!selectedFiles.length) {
+                el.innerHTML = '';
+                btn.disabled = true;
+                clrBtn.style.display = 'none';
+                dropZone.classList.remove('has-files');
+                return;
+            }
+
+            dropZone.classList.add('has-files');
+            btn.disabled = false;
+            clrBtn.style.display = 'inline-block';
+
+            el.innerHTML = selectedFiles.map((f, i) => `
+                <div class="file-item">
+                    <div><span class="name">${f.name}</span> <span class="size">(${(f.size / 1024 / 1024).toFixed(1)} MB)</span></div>
+                    <button class="remove" onclick="removeFile(${i})">&times;</button>
+                </div>
+            `).join('');
+        }
+
+        async function uploadAll() {
+            const btn = document.getElementById('uploadBtn');
+            const progress = document.getElementById('progressWrap');
+            const bar = document.getElementById('progressBar');
+            const text = document.getElementById('progressText');
+            const results = document.getElementById('results');
+
+            btn.disabled = true;
+            progress.style.display = 'block';
+            results.innerHTML = '';
+
+            const total = selectedFiles.length;
+            let done = 0;
+
+            for (const file of selectedFiles) {
+                text.textContent = `Uploading ${file.name} (${done + 1}/${total})...`;
+                bar.style.width = ((done / total) * 100) + '%';
+
+                const formData = new FormData();
+                formData.append('file', file);
+
+                try {
+                    const res = await fetch('/sync/caprice/upload', { method: 'POST', body: formData });
+                    const data = await res.json();
+
+                    if (res.ok && data.success) {
+                        const r = (data.results && data.results[0]) || {};
+                        results.innerHTML += `
+                            <div class="result-card success">
+                                <div class="fname">${file.name}</div>
+                                <div class="stats">${r.rows_imported || 0} rows imported, ${r.rows_updated || 0} updated &middot; Pricing date: ${r.pricing_date || 'N/A'}</div>
+                            </div>`;
+                    } else if (data.results && data.results[0] && data.results[0].status === 'skipped') {
+                        results.innerHTML += `
+                            <div class="result-card skipped">
+                                <div class="fname">${file.name}</div>
+                                <div class="stats">Skipped — already imported</div>
+                            </div>`;
+                    } else {
+                        results.innerHTML += `
+                            <div class="result-card failed">
+                                <div class="fname">${file.name}</div>
+                                <div class="error">${data.detail || 'Unknown error'}</div>
+                            </div>`;
+                    }
+                } catch (err) {
+                    results.innerHTML += `
+                        <div class="result-card failed">
+                            <div class="fname">${file.name}</div>
+                            <div class="error">${err.message}</div>
+                        </div>`;
+                }
+
+                done++;
+                bar.style.width = ((done / total) * 100) + '%';
+            }
+
+            text.textContent = `Done — ${done} file${done !== 1 ? 's' : ''} processed`;
+            selectedFiles = [];
+            renderFileList();
+            loadLog();
+        }
+
+        // Load recent import log
+        async function loadLog() {
+            try {
+                const res = await fetch('/sync/caprice/log?limit=15');
+                const data = await res.json();
+                const tbody = document.getElementById('logTable');
+
+                if (!data.logs || !data.logs.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--slate);padding:20px;">No imports yet</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = data.logs.map(e => {
+                    const cls = e.status === 'success' ? 'badge-success' : e.status === 'failed' ? 'badge-failed' : 'badge-skipped';
+                    const dt = e.imported_at ? new Date(e.imported_at).toLocaleString() : '';
+                    return `<tr>
+                        <td>${e.filename}</td>
+                        <td>${e.pricing_date || '-'}</td>
+                        <td><span class="badge ${cls}">${e.status}</span></td>
+                        <td class="num">${(e.rows_imported || 0).toLocaleString()}</td>
+                        <td>${dt}</td>
+                    </tr>`;
+                }).join('');
+            } catch (err) {
+                console.error('Failed to load log:', err);
+            }
+        }
+
+        loadLog();
+    </script>
+</body>
+</html>

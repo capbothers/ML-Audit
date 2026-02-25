@@ -236,6 +236,12 @@ async def stock_worthiness_page():
     return FileResponse(os.path.join(static_dir, "stock_worthiness.html"))
 
 
+@app.get("/caprice-upload")
+async def caprice_upload_page():
+    """Serve the Caprice file upload page"""
+    return FileResponse(os.path.join(static_dir, "caprice_upload.html"))
+
+
 @app.get("/brand-portal")
 async def brand_portal_page():
     """Serve the supplier brand portal"""
