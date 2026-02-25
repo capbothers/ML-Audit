@@ -14,7 +14,7 @@ from app.utils.logger import log
 from app import __version__
 
 # Import routers
-from app.api import health, insights, sync, llm, monitoring, profitability, attribution, data_quality, seo, email, journey, user_behavior, ad_spend, weekly_brief, content_gap, code_health, redirect_health, ml_intelligence, pricing_impact, performance, customer_intelligence, merchant_center_intelligence, strategic_intelligence, finance, site_health, auth, brand_intelligence, competitor_blog, stock_worthiness
+from app.api import health, insights, sync, llm, monitoring, profitability, attribution, data_quality, seo, email, journey, user_behavior, ad_spend, weekly_brief, content_gap, code_health, redirect_health, ml_intelligence, pricing_impact, performance, customer_intelligence, merchant_center_intelligence, strategic_intelligence, finance, site_health, auth, brand_intelligence, competitor_blog, stock_worthiness, brand_portal
 from app.middleware.auth_middleware import AuthMiddleware
 from app.middleware.security_middleware import SecurityMiddleware
 
@@ -146,6 +146,7 @@ app.include_router(site_health.router)
 app.include_router(brand_intelligence.router)
 app.include_router(competitor_blog.router)
 app.include_router(stock_worthiness.router)
+app.include_router(brand_portal.router)
 
 
 @app.get("/robots.txt", response_class=PlainTextResponse)
@@ -233,6 +234,12 @@ async def brand_intelligence_page():
 async def stock_worthiness_page():
     """Serve the stock worthiness dashboard"""
     return FileResponse(os.path.join(static_dir, "stock_worthiness.html"))
+
+
+@app.get("/brand-portal")
+async def brand_portal_page():
+    """Serve the supplier brand portal"""
+    return FileResponse(os.path.join(static_dir, "brand_portal.html"))
 
 
 @app.get("/")

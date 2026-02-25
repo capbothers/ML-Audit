@@ -24,7 +24,7 @@ DASHBOARD_PATHS = {
     "/", "/dashboard", "/inventory", "/seo-dashboard", "/performance",
     "/pricing-intel", "/customer-intelligence", "/merchant-center-intel",
     "/strategic-intelligence", "/finance-dashboard", "/ads-intelligence",
-    "/site-intelligence", "/brand-intelligence",
+    "/site-intelligence", "/brand-intelligence", "/brand-portal",
 }
 
 
