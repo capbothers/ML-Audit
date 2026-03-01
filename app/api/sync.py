@@ -867,48 +867,53 @@ async def get_sync_logs_summary(hours: int = Query(24, description="Hours of his
 # ── Caprice Pricing Import ──────────────────────────────────────────
 
 
-def _run_caprice_import():
-    """Background task: import all pending files in the inbox."""
-    try:
-        from app.services.caprice_import_service import CapriceImportService
-        result = CapriceImportService().run_import()
-        log.info(f"Caprice background import done: {result.get('imported', 0)} imported, {result.get('failed', 0)} failed")
-    except Exception as e:
-        log.error(f"Caprice background import error: {str(e)}")
-
-
 @router.post("/caprice/upload")
-async def upload_caprice_file(
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-):
+async def upload_caprice_file(file: UploadFile = File(...)):
     """
-    Upload a Caprice pricing .xlsx file.
+    Upload a Caprice pricing .xlsx file and import it.
 
-    Saves the file to the inbox and kicks off the import in the background.
-    Returns immediately so the request doesn't time out on large files.
+    Saves file to a temp location, imports in a daemon thread that
+    survives Render's request timeout, and returns immediately.
     """
     import os
+    import tempfile
+    import threading
     from pathlib import Path
 
     if not file.filename or not file.filename.endswith(".xlsx"):
         raise HTTPException(400, "File must be an .xlsx Excel file")
 
     try:
-        # Ensure inbox exists
-        inbox = Path(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))) / "imports" / "new-sheets"
-        inbox.mkdir(parents=True, exist_ok=True)
-
-        # Save uploaded file
-        dest = inbox / file.filename
+        # Save file to temp dir with original name (import extracts date from filename)
         contents = await file.read()
-        with open(dest, "wb") as f:
+        tmp_dir = tempfile.mkdtemp()
+        tmp_path = os.path.join(tmp_dir, file.filename)
+        with open(tmp_path, "wb") as f:
             f.write(contents)
 
-        log.info(f"Caprice upload: saved {file.filename} ({len(contents)} bytes) to inbox")
+        log.info(f"Caprice upload: saved {file.filename} ({len(contents)} bytes)")
 
-        # Kick off import in background (won't block the HTTP response)
-        background_tasks.add_task(_run_caprice_import)
+        # Import in a daemon thread — survives after HTTP response completes
+        def _import_in_thread(filepath, filename):
+            try:
+                log.info(f"Caprice import thread starting for {filename}")
+                from scripts.import_data import import_caprice_file
+                from app.models.base import SessionLocal
+                db = SessionLocal()
+                result = import_caprice_file(filepath, db)
+                db.close()
+                log.info(f"Caprice import thread done for {filename}: {result}")
+            except Exception as e:
+                log.error(f"Caprice import thread error for {filename}: {e}")
+            finally:
+                try:
+                    os.unlink(filepath)
+                    os.rmdir(os.path.dirname(filepath))
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_import_in_thread, args=(tmp_path, file.filename), daemon=True)
+        t.start()
 
         return {
             "success": True,
