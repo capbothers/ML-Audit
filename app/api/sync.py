@@ -895,16 +895,79 @@ async def upload_caprice_file(file: UploadFile = File(...)):
 
         # Import in a daemon thread — survives after HTTP response completes
         def _import_in_thread(filepath, filename):
+            import hashlib
+            from datetime import datetime
             try:
                 log.info(f"Caprice import thread starting for {filename}")
                 from scripts.import_data import import_caprice_file
                 from app.models.base import SessionLocal
+                from app.models.caprice_import import CapriceImportLog
+
                 db = SessionLocal()
+
+                # Calculate checksum for dedup + logging
+                h = hashlib.sha256()
+                with open(filepath, "rb") as fh:
+                    for chunk in iter(lambda: fh.read(8192), b""):
+                        h.update(chunk)
+                checksum = h.hexdigest()
+
+                # Check if already imported successfully
+                already = db.query(CapriceImportLog).filter(
+                    CapriceImportLog.checksum == checksum,
+                    CapriceImportLog.status == "success",
+                ).first()
+                if already:
+                    log.info(f"Caprice import: {filename} already imported (checksum match)")
+                    db.close()
+                    return
+
+                # Run the actual import
                 result = import_caprice_file(filepath, db)
+
+                # Log the result to caprice_import_log
+                if result.get("success"):
+                    entry = CapriceImportLog(
+                        filename=filename,
+                        checksum=checksum,
+                        status="success",
+                        rows_imported=result.get("imported", 0),
+                        rows_updated=result.get("updated", 0),
+                        rows_skipped=result.get("skipped", 0),
+                        rows_errored=result.get("errors", 0),
+                        pricing_date=str(result.get("pricing_date", "")),
+                        imported_at=datetime.utcnow(),
+                    )
+                else:
+                    entry = CapriceImportLog(
+                        filename=filename,
+                        checksum=checksum,
+                        status="failed",
+                        error=result.get("error", "Unknown error"),
+                        imported_at=datetime.utcnow(),
+                    )
+                db.add(entry)
+                db.commit()
                 db.close()
                 log.info(f"Caprice import thread done for {filename}: {result}")
             except Exception as e:
                 log.error(f"Caprice import thread error for {filename}: {e}")
+                # Try to log the failure
+                try:
+                    from app.models.base import SessionLocal as SL2
+                    from app.models.caprice_import import CapriceImportLog as CIL2
+                    db2 = SL2()
+                    db2.add(CIL2(
+                        filename=filename,
+                        checksum="error",
+                        status="failed",
+                        error=str(e)[:500],
+                        imported_at=datetime.utcnow(),
+                    ))
+                    db2.commit()
+                    db2.close()
+                except Exception:
+                    pass
             finally:
                 try:
                     os.unlink(filepath)
