@@ -878,11 +878,9 @@ async def upload_caprice_file(file: UploadFile = File(...)):
     import tempfile
     import re
     from datetime import date as date_type
-    from decimal import Decimal, InvalidOperation
 
     import pandas as pd
     from sqlalchemy import text
-    from app.models.competitive_pricing import CompetitivePricing
 
     if not file.filename or not file.filename.endswith(".xlsx"):
         raise HTTPException(400, "File must be an .xlsx Excel file")
@@ -928,7 +926,8 @@ async def upload_caprice_file(file: UploadFile = File(...)):
             sheet_name = xl.sheet_names[0]
 
         df = pd.read_excel(tmp_path, sheet_name=sheet_name)
-        log.info(f"Caprice upload: {file.filename} has {len(df)} rows, sheet '{sheet_name}'")
+        total_rows = len(df)
+        log.info(f"Caprice upload: {file.filename} has {total_rows} rows, sheet '{sheet_name}'")
 
         # Column mapping (Excel column -> DB column)
         col_map = {
@@ -962,82 +961,60 @@ async def upload_caprice_file(file: UploadFile = File(...)):
             'shireskylights': 'price_shire', 'voguespas': 'price_vogue',
         }
 
-        # Build mapping for columns that actually exist
-        active_map = {k: v for k, v in col_map.items() if k in df.columns}
-
         # Determine variant ID column
         vid_col = 'Variant ID' if 'Variant ID' in df.columns else 'variantId'
         if vid_col not in df.columns:
             raise HTTPException(400, "No Variant ID column found in file")
 
-        # String fields (everything else treated as decimal)
-        str_fields = {'match_rule', 'vendor', 'variant_sku', 'title'}
+        # Rename columns to DB field names (drop unmapped columns)
+        rename = {k: v for k, v in col_map.items() if k in df.columns}
+        df = df.rename(columns=rename)
+        db_cols = list(rename.values())
+        df = df[db_cols].copy()
 
-        # Prepare records for bulk insert
-        records = []
-        seen = set()
-        skipped = 0
+        # Drop rows without variant_id, deduplicate
+        df = df.dropna(subset=['variant_id'])
+        df['variant_id'] = df['variant_id'].astype(int)
+        before_dedup = len(df)
+        df = df.drop_duplicates(subset=['variant_id'], keep='first')
+        skipped = total_rows - len(df)
+
+        # Add metadata columns
         now = datetime.utcnow()
+        df['pricing_date'] = pricing_date
+        df['source_file'] = file.filename
+        df['import_date'] = now
 
-        for _, row in df.iterrows():
-            vid = row.get(vid_col)
-            if pd.isna(vid) or not vid:
-                skipped += 1
-                continue
-            vid = int(vid)
-            if vid in seen:
-                skipped += 1
-                continue
-            seen.add(vid)
-
-            rec = {
-                'variant_id': vid,
-                'pricing_date': pricing_date,
-                'source_file': file.filename,
-                'import_date': now,
-            }
-
-            for excel_col, db_col in active_map.items():
-                if db_col == 'variant_id':
-                    continue
-                val = row.get(excel_col)
-                if pd.isna(val) or val is None or val == '':
-                    rec[db_col] = None
-                elif db_col in str_fields:
-                    rec[db_col] = str(val)
-                else:
-                    try:
-                        rec[db_col] = float(Decimal(str(val)))
-                    except (InvalidOperation, ValueError):
-                        rec[db_col] = None
-
-            records.append(rec)
-
-        if not records:
+        if df.empty:
             raise HTTPException(400, "No valid rows found in file")
 
-        # Delete existing rows for this pricing_date, then bulk insert
-        deleted = db.query(CompetitivePricing).filter(
-            CompetitivePricing.pricing_date == pricing_date
-        ).delete()
-        db.commit()
+        # Delete existing rows for this pricing_date using raw SQL (fast)
+        from app.models.base import engine
+        with engine.begin() as conn:
+            result = conn.execute(
+                text("DELETE FROM competitive_pricing WHERE pricing_date = :d"),
+                {"d": str(pricing_date)}
+            )
+            deleted = result.rowcount
+
         log.info(f"Caprice upload: deleted {deleted} existing rows for {pricing_date}")
 
-        # Bulk insert in batches of 2000
-        batch_size = 2000
-        for i in range(0, len(records), batch_size):
-            batch = records[i:i + batch_size]
-            db.bulk_insert_mappings(CompetitivePricing, batch)
-            db.commit()
+        # Bulk insert using pandas to_sql (much faster than ORM)
+        # Use default method (executemany) — fast on PostgreSQL via psycopg2
+        df.to_sql(
+            'competitive_pricing', engine, if_exists='append',
+            index=False, chunksize=1000
+        )
+        rows_inserted = len(df)
 
-        log.info(f"Caprice upload: inserted {len(records)} rows for {pricing_date}")
+        log.info(f"Caprice upload: inserted {rows_inserted} rows for {pricing_date}")
 
         # Log success
         db.add(CapriceImportLog(
             filename=file.filename,
             checksum=checksum,
             status="success",
-            rows_imported=len(records),
+            rows_imported=rows_inserted,
             rows_updated=0,
             rows_skipped=skipped,
             pricing_date=str(pricing_date),
@@ -1049,7 +1026,7 @@ async def upload_caprice_file(file: UploadFile = File(...)):
             "success": True,
             "uploaded": file.filename,
             "pricing_date": str(pricing_date),
-            "rows_imported": len(records),
+            "rows_imported": rows_inserted,
             "rows_deleted": deleted,
             "rows_skipped": skipped,
         }
