@@ -870,21 +870,27 @@ async def get_sync_logs_summary(hours: int = Query(24, description="Hours of his
 @router.post("/caprice/upload")
 async def upload_caprice_file(file: UploadFile = File(...)):
     """
-    Upload a Caprice pricing .xlsx file and import it.
-
-    Saves file to a temp location, imports in a daemon thread that
-    survives Render's request timeout, and returns immediately.
+    Upload a Caprice pricing .xlsx file and import it synchronously
+    using fast bulk operations (completes within Render's 30s timeout).
     """
     import os
+    import hashlib
     import tempfile
-    import threading
-    from pathlib import Path
+    import re
+    from datetime import date as date_type
+    from decimal import Decimal, InvalidOperation
+
+    import pandas as pd
+    from sqlalchemy import text
+    from app.models.competitive_pricing import CompetitivePricing
 
     if not file.filename or not file.filename.endswith(".xlsx"):
         raise HTTPException(400, "File must be an .xlsx Excel file")
 
+    db = SessionLocal()
+    tmp_path = None
     try:
-        # Save file to temp dir with original name (import extracts date from filename)
+        # Save to temp file (pandas needs a file path)
         contents = await file.read()
         tmp_dir = tempfile.mkdtemp()
         tmp_path = os.path.join(tmp_dir, file.filename)
@@ -893,103 +899,186 @@ async def upload_caprice_file(file: UploadFile = File(...)):
 
         log.info(f"Caprice upload: saved {file.filename} ({len(contents)} bytes)")
 
-        # Import in a daemon thread — survives after HTTP response completes
-        def _import_in_thread(filepath, filename):
-            import hashlib
-            from datetime import datetime
-            try:
-                log.info(f"Caprice import thread starting for {filename}")
-                from scripts.import_data import import_caprice_file
-                from app.models.base import SessionLocal
-                from app.models.caprice_import import CapriceImportLog
+        # Checksum for dedup
+        checksum = hashlib.sha256(contents).hexdigest()
 
-                db = SessionLocal()
+        already = db.query(CapriceImportLog).filter(
+            CapriceImportLog.checksum == checksum,
+            CapriceImportLog.status == "success",
+        ).first()
+        if already:
+            return {"success": True, "uploaded": file.filename,
+                    "message": "Already imported (duplicate file)", "rows_imported": 0}
 
-                # Calculate checksum for dedup + logging
-                h = hashlib.sha256()
-                with open(filepath, "rb") as fh:
-                    for chunk in iter(lambda: fh.read(8192), b""):
-                        h.update(chunk)
-                checksum = h.hexdigest()
+        # Extract date from filename (DDMMYYYY)
+        match = re.search(r'(\d{2})(\d{2})(\d{4})', file.filename)
+        if match:
+            d, m, y = match.groups()
+            pricing_date = date_type(int(y), int(m), int(d))
+        else:
+            pricing_date = date_type.today()
 
-                # Check if already imported successfully
-                already = db.query(CapriceImportLog).filter(
-                    CapriceImportLog.checksum == checksum,
-                    CapriceImportLog.status == "success",
-                ).first()
-                if already:
-                    log.info(f"Caprice import: {filename} already imported (checksum match)")
-                    db.close()
-                    return
+        # Detect sheet and read Excel
+        xl = pd.ExcelFile(tmp_path)
+        if 'Prices Today' in xl.sheet_names:
+            sheet_name = 'Prices Today'
+        elif 'log' in xl.sheet_names:
+            sheet_name = 'log'
+        else:
+            sheet_name = xl.sheet_names[0]
 
-                # Run the actual import
-                result = import_caprice_file(filepath, db)
+        df = pd.read_excel(tmp_path, sheet_name=sheet_name)
+        log.info(f"Caprice upload: {file.filename} has {len(df)} rows, sheet '{sheet_name}'")
 
-                # Log the result to caprice_import_log
-                if result.get("success"):
-                    entry = CapriceImportLog(
-                        filename=filename,
-                        checksum=checksum,
-                        status="success",
-                        rows_imported=result.get("imported", 0),
-                        rows_updated=result.get("updated", 0),
-                        rows_skipped=result.get("skipped", 0),
-                        rows_errored=result.get("errors", 0),
-                        pricing_date=str(result.get("pricing_date", "")),
-                        imported_at=datetime.utcnow(),
-                    )
+        # Column mapping (Excel column -> DB column)
+        col_map = {
+            'Variant ID': 'variant_id', 'variantId': 'variant_id',
+            'Match': 'match_rule', 'Set Price': 'set_price',
+            'Ceiling Price': 'ceiling_price', 'Vendor': 'vendor',
+            'Variant SKU': 'variant_sku', 'Title': 'title',
+            'RRP': 'rrp', '% Off': 'discount_off_rrp_pct',
+            'Current Cass Price': 'current_price', 'Cass Minimum': 'minimum_price',
+            'Lowest Price': 'lowest_competitor_price',
+            'LowestPrice-MinPrice': 'price_vs_minimum',
+            '$ Below Minimum': 'price_vs_minimum',
+            'NETT': 'nett_cost', '% Profit Margin': 'profit_margin_pct',
+            'Profit': 'profit_amount', 'Profit ($)': 'profit_amount',
+            '8appliances': 'price_8appliances',
+            'appliancesonline': 'price_appliancesonline',
+            'austpek': 'price_austpek', 'binglee': 'price_binglee',
+            'blueleafbath': 'price_blueleafbath',
+            'brandsdirectonline': 'price_brandsdirect',
+            'buildmat': 'price_buildmat', 'cookandbathe': 'price_cookandbathe',
+            'designerbathware': 'price_designerbathware',
+            'harveynorman': 'price_harveynorman',
+            'idealbathroomcentre': 'price_idealbathroom',
+            'justbathroomware': 'price_justbathroomware',
+            'thebluespace': 'price_thebluespace', 'wellsons': 'price_wellsons',
+            'winnings': 'price_winnings', 'agcequipment': 'price_agcequipment',
+            'berloniappliances': 'price_berloniapp', 'eands': 'price_eands',
+            'plumbingsales': 'price_plumbingsales', 'powerland': 'price_powerland',
+            'saappliancewarehouse': 'price_saappliances',
+            'samedayhotwaterservice': 'price_sameday',
+            'shireskylights': 'price_shire', 'voguespas': 'price_vogue',
+        }
+
+        # Build mapping for columns that actually exist
+        active_map = {k: v for k, v in col_map.items() if k in df.columns}
+
+        # Determine variant ID column
+        vid_col = 'Variant ID' if 'Variant ID' in df.columns else 'variantId'
+        if vid_col not in df.columns:
+            raise HTTPException(400, "No Variant ID column found in file")
+
+        # String fields (everything else treated as decimal)
+        str_fields = {'match_rule', 'vendor', 'variant_sku', 'title'}
+
+        # Prepare records for bulk insert
+        records = []
+        seen = set()
+        skipped = 0
+        now = datetime.utcnow()
+
+        for _, row in df.iterrows():
+            vid = row.get(vid_col)
+            if pd.isna(vid) or not vid:
+                skipped += 1
+                continue
+            vid = int(vid)
+            if vid in seen:
+                skipped += 1
+                continue
+            seen.add(vid)
+
+            rec = {
+                'variant_id': vid,
+                'pricing_date': pricing_date,
+                'source_file': file.filename,
+                'import_date': now,
+            }
+
+            for excel_col, db_col in active_map.items():
+                if db_col == 'variant_id':
+                    continue
+                val = row.get(excel_col)
+                if pd.isna(val) or val is None or val == '':
+                    rec[db_col] = None
+                elif db_col in str_fields:
+                    rec[db_col] = str(val)
                 else:
-                    entry = CapriceImportLog(
-                        filename=filename,
-                        checksum=checksum,
-                        status="failed",
-                        error=result.get("error", "Unknown error"),
-                        imported_at=datetime.utcnow(),
-                    )
-                db.add(entry)
-                db.commit()
-                db.close()
-                log.info(f"Caprice import thread done for {filename}: {result}")
-            except Exception as e:
-                log.error(f"Caprice import thread error for {filename}: {e}")
-                # Try to log the failure
-                try:
-                    from app.models.base import SessionLocal as SL2
-                    from app.models.caprice_import import CapriceImportLog as CIL2
-                    db2 = SL2()
-                    db2.add(CIL2(
-                        filename=filename,
-                        checksum="error",
-                        status="failed",
-                        error=str(e)[:500],
-                        imported_at=datetime.utcnow(),
-                    ))
-                    db2.commit()
-                    db2.close()
-                except Exception:
-                    pass
-            finally:
-                try:
-                    os.unlink(filepath)
-                    os.rmdir(os.path.dirname(filepath))
-                except Exception:
-                    pass
+                    try:
+                        rec[db_col] = float(Decimal(str(val)))
+                    except (InvalidOperation, ValueError):
+                        rec[db_col] = None
 
-        t = threading.Thread(target=_import_in_thread, args=(tmp_path, file.filename), daemon=True)
-        t.start()
+            records.append(rec)
+
+        if not records:
+            raise HTTPException(400, "No valid rows found in file")
+
+        # Delete existing rows for this pricing_date, then bulk insert
+        deleted = db.query(CompetitivePricing).filter(
+            CompetitivePricing.pricing_date == pricing_date
+        ).delete()
+        db.commit()
+        log.info(f"Caprice upload: deleted {deleted} existing rows for {pricing_date}")
+
+        # Bulk insert in batches of 2000
+        batch_size = 2000
+        for i in range(0, len(records), batch_size):
+            batch = records[i:i + batch_size]
+            db.bulk_insert_mappings(CompetitivePricing, batch)
+            db.commit()
+
+        log.info(f"Caprice upload: inserted {len(records)} rows for {pricing_date}")
+
+        # Log success
+        db.add(CapriceImportLog(
+            filename=file.filename,
+            checksum=checksum,
+            status="success",
+            rows_imported=len(records),
+            rows_updated=0,
+            rows_skipped=skipped,
+            pricing_date=str(pricing_date),
+            imported_at=now,
+        ))
+        db.commit()
 
         return {
             "success": True,
             "uploaded": file.filename,
-            "size_bytes": len(contents),
-            "message": "File saved. Import running in background — check the log below for results.",
+            "pricing_date": str(pricing_date),
+            "rows_imported": len(records),
+            "rows_deleted": deleted,
+            "rows_skipped": skipped,
         }
 
     except HTTPException:
         raise
     except Exception as e:
         log.error(f"Caprice upload error: {str(e)}")
+        # Log failure
+        try:
+            db.add(CapriceImportLog(
+                filename=file.filename,
+                checksum=hashlib.sha256(contents).hexdigest() if contents else "error",
+                status="failed",
+                error=str(e)[:500],
+                imported_at=datetime.utcnow(),
+            ))
+            db.commit()
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+                os.rmdir(os.path.dirname(tmp_path))
+            except Exception:
+                pass
 
 
 @router.post("/caprice/import-latest")

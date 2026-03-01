@@ -261,10 +261,15 @@
                     const data = await res.json();
 
                     if (res.ok && data.success) {
+                        const rows = data.rows_imported || 0;
+                        const pdate = data.pricing_date || '';
+                        const msg = rows > 0
+                            ? `${rows.toLocaleString()} rows imported for ${pdate}`
+                            : (data.message || 'Import complete');
                         results.innerHTML += `
                             <div class="result-card success">
                                 <div class="fname">${file.name}</div>
-                                <div class="stats">Uploaded — import running in background</div>
+                                <div class="stats">${msg}</div>
                             </div>`;
                     } else {
                         results.innerHTML += `
@@ -285,17 +290,9 @@
                 bar.style.width = ((done / total) * 100) + '%';
             }
 
-            text.textContent = `All ${done} file${done !== 1 ? 's' : ''} uploaded — importing in background. Log will refresh automatically.`;
+            text.textContent = `All ${done} file${done !== 1 ? 's' : ''} imported successfully.`;
             selectedFiles = [];
             renderFileList();
-
-            // Auto-refresh log every 10s to show background import progress
-            let refreshCount = 0;
-            const refreshInterval = setInterval(() => {
-                loadLog();
-                refreshCount++;
-                if (refreshCount >= 18) clearInterval(refreshInterval); // stop after 3 min
-            }, 10000);
             loadLog();
         }
 
