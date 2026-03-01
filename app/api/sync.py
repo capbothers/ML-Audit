@@ -999,13 +999,35 @@ async def upload_caprice_file(file: UploadFile = File(...)):
 
         log.info(f"Caprice upload: deleted {deleted} existing rows for {pricing_date}")
 
-        # Bulk insert using pandas to_sql (much faster than ORM)
-        # Use default method (executemany) — fast on PostgreSQL via psycopg2
-        df.to_sql(
-            'competitive_pricing', engine, if_exists='append',
-            index=False, chunksize=1000
-        )
+        # Bulk insert — use PostgreSQL COPY for speed, fallback to to_sql
+        from app.models.base import engine
+        db_url = str(engine.url)
         rows_inserted = len(df)
+
+        if 'postgresql' in db_url or 'postgres' in db_url:
+            # PostgreSQL: use COPY FROM STDIN via psycopg2 (16K rows in ~2s)
+            import io
+            cols = list(df.columns)
+            csv_buffer = io.StringIO()
+            df.to_csv(csv_buffer, index=False, header=False, sep='\t', na_rep='\\N')
+            csv_buffer.seek(0)
+
+            raw_conn = engine.raw_connection()
+            try:
+                cursor = raw_conn.cursor()
+                cursor.copy_expert(
+                    f"COPY competitive_pricing ({','.join(cols)}) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\N')",
+                    csv_buffer
+                )
+                raw_conn.commit()
+            finally:
+                raw_conn.close()
+        else:
+            # SQLite fallback
+            df.to_sql(
+                'competitive_pricing', engine, if_exists='append',
+                index=False, chunksize=1000
+            )
 
         log.info(f"Caprice upload: inserted {rows_inserted} rows for {pricing_date}")
 
