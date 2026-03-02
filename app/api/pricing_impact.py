@@ -401,21 +401,26 @@ async def get_brand_report(
             })
         competitor_activity.sort(key=lambda x: x["times_below_floor"], reverse=True)
 
-        # Monthly trends - fetch ALL dates for this brand
-        monthly_rows = (
-            db.query(CompetitivePricing)
+        # Monthly trends — use SQL aggregation instead of loading all rows
+        # This avoids OOM/timeout on large brands with 100k+ historical rows
+        from sqlalchemy import cast, String
+        monthly_agg = (
+            db.query(
+                func.max(CompetitivePricing.pricing_date).label("latest_date"),
+                func.count(CompetitivePricing.variant_sku).label("total_skus"),
+            )
             .filter(CompetitivePricing.vendor == brand)
+            .group_by(CompetitivePricing.pricing_date)
             .order_by(CompetitivePricing.pricing_date)
             .all()
         )
-        # Group by month, use latest snapshot per month
-        month_snapshots = defaultdict(dict)  # month -> {date -> [rows]}
-        for r in monthly_rows:
-            m = str(r.pricing_date)[:7]  # "YYYY-MM"
-            d = str(r.pricing_date)
-            if d not in month_snapshots[m]:
-                month_snapshots[m][d] = []
-            month_snapshots[m][d].append(r)
+
+        # Get latest snapshot per month
+        month_latest = {}  # "YYYY-MM" -> latest pricing_date in that month
+        for row in monthly_agg:
+            m = str(row.latest_date)[:7]
+            if m not in month_latest or str(row.latest_date) > str(month_latest[m]):
+                month_latest[m] = row.latest_date
 
         MONTH_NAMES = {
             "01": "Jan", "02": "Feb", "03": "Mar", "04": "Apr",
@@ -423,12 +428,10 @@ async def get_brand_report(
             "09": "Sep", "10": "Oct", "11": "Nov", "12": "Dec",
         }
 
-        monthly_trends = []
-        sorted_months = sorted(month_snapshots.keys())
         # Fill gaps between first and last month
+        sorted_months = sorted(month_latest.keys())
         all_months = []
         if sorted_months:
-            from datetime import date as _date
             first = sorted_months[0].split("-")
             last = sorted_months[-1].split("-")
             y, m = int(first[0]), int(first[1])
@@ -440,13 +443,21 @@ async def get_brand_report(
                     m = 1
                     y += 1
 
+        monthly_trends = []
         for month in all_months:
             mm = month.split("-")[1]
             yyyy = month.split("-")[0]
-            if month in month_snapshots:
-                dates = month_snapshots[month]
-                latest_in_month = max(dates.keys())
-                snap = _analyze_snapshot(dates[latest_in_month])
+            if month in month_latest:
+                # Only load the latest snapshot for this month (one date)
+                snap_rows = (
+                    db.query(CompetitivePricing)
+                    .filter(
+                        CompetitivePricing.vendor == brand,
+                        CompetitivePricing.pricing_date == month_latest[month],
+                    )
+                    .all()
+                )
+                snap = _analyze_snapshot(snap_rows)
                 wd = [a for a in snap if a["discount_pct"] is not None]
                 bf = [a for a in snap if a["below_floor"]]
                 monthly_trends.append({
@@ -456,8 +467,9 @@ async def get_brand_report(
                     "skus_below_floor": len(bf),
                     "avg_gap_below": round(sum(a["gap_below"] for a in bf) / len(bf), 2) if bf else 0,
                     "total_skus": len(snap),
-                    "snapshot_count": len(dates),
+                    "snapshot_count": 1,
                 })
+                del snap_rows, snap  # free memory
             else:
                 monthly_trends.append({
                     "month": month,
