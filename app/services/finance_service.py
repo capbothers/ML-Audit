@@ -255,9 +255,11 @@ class FinanceService:
         valid_statuses = ['paid', 'partially_refunded', 'partially_paid']
 
         _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+        _net = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
         result = self.db.query(
             func.count(ShopifyOrder.id).label('total_orders'),
             func.coalesce(func.sum(ShopifyOrder.total_price), 0).label('gross_revenue'),
+            func.coalesce(func.sum(_net), 0).label('net_revenue'),
             func.coalesce(func.sum(ShopifyOrder.total_refunded), 0).label('refunds'),
         ).filter(
             _ts >= datetime.combine(month_start, datetime.min.time()),
@@ -269,6 +271,7 @@ class FinanceService:
         return {
             'total_orders': result.total_orders or 0,
             'gross_revenue': Decimal(str(result.gross_revenue or 0)),
+            'net_revenue': Decimal(str(result.net_revenue or 0)),
             'refunds': Decimal(str(result.refunds or 0)),
         }
 

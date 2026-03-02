@@ -50,17 +50,13 @@ class ChatDataService:
             # Orders count and date range
             order_count = self.db.query(func.count(ShopifyOrder.id)).scalar() or 0
             if order_count > 0:
-                min_date = self.db.query(func.min(ShopifyOrder.created_at)).scalar()
-                max_date = self.db.query(func.max(ShopifyOrder.created_at)).scalar()
-                # Use current_total_price (net after refunds) when available, fallback to total_price (gross)
+                _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+                min_date = self.db.query(func.min(_ts)).scalar()
+                max_date = self.db.query(func.max(_ts)).scalar()
+                _net = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
                 revenue_result = self.db.query(
                     func.sum(ShopifyOrder.total_price).label('gross_revenue'),
-                    func.sum(
-                        case(
-                            (ShopifyOrder.current_total_price.isnot(None), ShopifyOrder.current_total_price),
-                            else_=ShopifyOrder.total_price
-                        )
-                    ).label('net_revenue')
+                    func.sum(_net).label('net_revenue')
                 ).filter(
                     ShopifyOrder.financial_status != 'voided',
                     ShopifyOrder.cancelled_at.is_(None)
@@ -197,14 +193,11 @@ class ChatDataService:
     def get_revenue_by_year(self) -> Dict[int, Dict]:
         """Get revenue breakdown by year"""
         try:
-            # Use current_total_price (net after refunds) when available
-            net_revenue_expr = case(
-                (ShopifyOrder.current_total_price.isnot(None), ShopifyOrder.current_total_price),
-                else_=ShopifyOrder.total_price
-            )
+            _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+            net_revenue_expr = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
 
             results = self.db.query(
-                extract('year', ShopifyOrder.created_at).label('year'),
+                extract('year', _ts).label('year'),
                 func.count(ShopifyOrder.id).label('order_count'),
                 func.sum(ShopifyOrder.total_price).label('gross_revenue'),
                 func.sum(net_revenue_expr).label('net_revenue')
@@ -212,7 +205,7 @@ class ChatDataService:
                 ShopifyOrder.financial_status != 'voided',
                 ShopifyOrder.cancelled_at.is_(None)
             ).group_by(
-                extract('year', ShopifyOrder.created_at)
+                extract('year', _ts)
             ).order_by('year').all()
 
             return {
@@ -302,21 +295,19 @@ class ChatDataService:
         """Get detailed revenue breakdown for a specific date range"""
         try:
             start_dt, end_dt = self._date_bounds(start_date, end_date)
-            net_revenue_expr = case(
-                (ShopifyOrder.current_total_price.isnot(None), ShopifyOrder.current_total_price),
-                else_=ShopifyOrder.total_price
-            )
+            _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+            net_revenue_expr = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
 
             results = self.db.query(
                 func.count(ShopifyOrder.id).label('order_count'),
                 func.sum(ShopifyOrder.total_price).label('gross_revenue'),
                 func.sum(net_revenue_expr).label('net_revenue'),
                 func.avg(net_revenue_expr).label('avg_order'),
-                func.min(ShopifyOrder.created_at).label('first_order'),
-                func.max(ShopifyOrder.created_at).label('last_order')
+                func.min(_ts).label('first_order'),
+                func.max(_ts).label('last_order')
             ).filter(
-                ShopifyOrder.created_at >= start_dt,
-                ShopifyOrder.created_at < end_dt,
+                _ts >= start_dt,
+                _ts < end_dt,
                 ShopifyOrder.financial_status != 'voided',
                 ShopifyOrder.cancelled_at.is_(None)
             ).first()
@@ -1327,24 +1318,21 @@ class ChatDataService:
         try:
             cutoff_date = datetime.now() - timedelta(days=months * 30)
 
-            # Use current_total_price (net after refunds) when available
-            net_revenue_expr = case(
-                (ShopifyOrder.current_total_price.isnot(None), ShopifyOrder.current_total_price),
-                else_=ShopifyOrder.total_price
-            )
+            _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+            net_revenue_expr = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
 
             results = self.db.query(
-                extract('year', ShopifyOrder.created_at).label('year'),
-                extract('month', ShopifyOrder.created_at).label('month'),
+                extract('year', _ts).label('year'),
+                extract('month', _ts).label('month'),
                 func.count(ShopifyOrder.id).label('order_count'),
                 func.sum(net_revenue_expr).label('revenue')
             ).filter(
-                ShopifyOrder.created_at >= cutoff_date,
+                _ts >= cutoff_date,
                 ShopifyOrder.financial_status != 'voided',
                 ShopifyOrder.cancelled_at.is_(None)
             ).group_by(
-                extract('year', ShopifyOrder.created_at),
-                extract('month', ShopifyOrder.created_at)
+                extract('year', _ts),
+                extract('month', _ts)
             ).order_by('year', 'month').all()
 
             return [
@@ -1363,11 +1351,8 @@ class ChatDataService:
         """Get orders summary for a specific period"""
         try:
             start_dt, end_dt = self._date_bounds(start_date, end_date)
-            # Use current_total_price (net after refunds) when available
-            net_revenue_expr = case(
-                (ShopifyOrder.current_total_price.isnot(None), ShopifyOrder.current_total_price),
-                else_=ShopifyOrder.total_price
-            )
+            _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+            net_revenue_expr = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
 
             results = self.db.query(
                 func.count(ShopifyOrder.id).label('order_count'),
@@ -1375,8 +1360,8 @@ class ChatDataService:
                 func.sum(net_revenue_expr).label('net_revenue'),
                 func.avg(net_revenue_expr).label('avg_order')
             ).filter(
-                ShopifyOrder.created_at >= start_dt,
-                ShopifyOrder.created_at < end_dt,
+                _ts >= start_dt,
+                _ts < end_dt,
                 ShopifyOrder.financial_status != 'voided',
                 ShopifyOrder.cancelled_at.is_(None)
             ).first()
@@ -1399,38 +1384,35 @@ class ChatDataService:
         start_dt, end_dt = self._date_bounds(start_date, end_date)
 
         try:
-            # Use current_total_price (net after refunds) when available, fallback to total_price (gross)
-            net_revenue_expr = case(
-                (ShopifyOrder.current_total_price.isnot(None), ShopifyOrder.current_total_price),
-                else_=ShopifyOrder.total_price
-            )
+            _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+            net_revenue_expr = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
 
             results = self.db.query(
                 func.count(ShopifyOrder.id).label('order_count'),
                 func.sum(ShopifyOrder.total_price).label('gross_revenue'),
                 func.sum(net_revenue_expr).label('net_revenue'),
                 func.avg(net_revenue_expr).label('avg_order'),
-                func.min(ShopifyOrder.created_at).label('first_order'),
-                func.max(ShopifyOrder.created_at).label('last_order')
+                func.min(_ts).label('first_order'),
+                func.max(_ts).label('last_order')
             ).filter(
-                ShopifyOrder.created_at >= start_dt,
-                ShopifyOrder.created_at < end_dt,
+                _ts >= start_dt,
+                _ts < end_dt,
                 ShopifyOrder.financial_status != 'voided',
                 ShopifyOrder.cancelled_at.is_(None)
             ).first()
 
             # Get daily breakdown
             daily = self.db.query(
-                func.date(ShopifyOrder.created_at).label('day'),
+                func.date(_ts).label('day'),
                 func.count(ShopifyOrder.id).label('orders'),
                 func.sum(net_revenue_expr).label('revenue')
             ).filter(
-                ShopifyOrder.created_at >= start_dt,
-                ShopifyOrder.created_at < end_dt,
+                _ts >= start_dt,
+                _ts < end_dt,
                 ShopifyOrder.financial_status != 'voided',
                 ShopifyOrder.cancelled_at.is_(None)
             ).group_by(
-                func.date(ShopifyOrder.created_at)
+                func.date(_ts)
             ).order_by('day').all()
 
             gross = float(results.gross_revenue or 0)
@@ -1458,24 +1440,21 @@ class ChatDataService:
         """Sales by Shopify channel/source_name"""
         try:
             # Clamp to available data range
-            max_date = self.db.query(func.max(ShopifyOrder.created_at)).scalar()
+            _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+            max_date = self.db.query(func.max(_ts)).scalar()
             if max_date:
                 max_date = max_date.date()
                 if end_date > max_date:
                     end_date = max_date
             start_dt, end_dt = self._date_bounds(start_date, end_date)
-            total_sales_expr = case(
-                (ShopifyOrder.current_subtotal_price.isnot(None), ShopifyOrder.current_subtotal_price),
-                (ShopifyOrder.current_total_price.isnot(None), ShopifyOrder.current_total_price),
-                else_=ShopifyOrder.total_price
-            )
+            total_sales_expr = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
             rows = self.db.query(
                 ShopifyOrder.source_name,
                 func.count(ShopifyOrder.id).label("orders"),
                 func.sum(total_sales_expr).label("revenue")
             ).filter(
-                ShopifyOrder.created_at >= start_dt,
-                ShopifyOrder.created_at < end_dt,
+                _ts >= start_dt,
+                _ts < end_dt,
                 ShopifyOrder.financial_status != 'voided',
                 ShopifyOrder.cancelled_at.is_(None)
             ).group_by(ShopifyOrder.source_name).order_by(func.sum(total_sales_expr).desc()).all()
@@ -1500,7 +1479,7 @@ class ChatDataService:
                 "total_orders": total_orders,
                 "total_revenue": total_revenue,
                 "data_end": str(end_date),
-                "sales_basis": "current_subtotal_price if available, else current_total_price"
+                "sales_basis": "current_subtotal_price (Shopify Net Sales)"
             }
         except Exception as e:
             log.error(f"Error getting sales by channel: {str(e)}")

@@ -816,9 +816,11 @@ Estimated additional revenue: $150-500/day if paid performs at 50% of organic co
             cutoff_date = cutoff.date()
             metrics = {}
 
-            # 1. Revenue from Shopify orders (last 24h)
-            revenue_result = db.query(func.sum(ShopifyOrder.total_price)).filter(
-                ShopifyOrder.created_at >= cutoff,
+            # 1. Revenue from Shopify orders (last 24h) — net sales basis
+            _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+            _net = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
+            revenue_result = db.query(func.sum(_net)).filter(
+                _ts >= cutoff,
                 ShopifyOrder.financial_status.in_(['paid', 'partially_refunded'])
             ).scalar()
             metrics['revenue'] = float(revenue_result) if revenue_result else 0
@@ -838,7 +840,7 @@ Estimated additional revenue: $150-500/day if paid performs at 50% of organic co
             # Conversions: Use Shopify orders as source of truth
             # This ensures apples-to-apples comparison with baseline (which also uses orders)
             current_orders = db.query(func.count(ShopifyOrder.id)).filter(
-                ShopifyOrder.created_at >= cutoff,
+                _ts >= cutoff,
                 ShopifyOrder.financial_status.in_(['paid', 'partially_refunded'])
             ).scalar() or 0
             metrics['conversion_rate'] = (current_orders / sessions * 100) if sessions > 0 else 0
@@ -915,10 +917,12 @@ Estimated additional revenue: $150-500/day if paid performs at 50% of organic co
             end_date = end_cutoff.date()
             metrics = {}
 
-            # 1. Average daily revenue from Shopify orders
-            revenue_result = db.query(func.sum(ShopifyOrder.total_price)).filter(
-                ShopifyOrder.created_at >= start_cutoff,
-                ShopifyOrder.created_at < end_cutoff,
+            # 1. Average daily revenue from Shopify orders — net sales basis
+            _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+            _net = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
+            revenue_result = db.query(func.sum(_net)).filter(
+                _ts >= start_cutoff,
+                _ts < end_cutoff,
                 ShopifyOrder.financial_status.in_(['paid', 'partially_refunded'])
             ).scalar()
             # Convert to daily average (divide by 6 days since we exclude last 24h)
@@ -943,8 +947,8 @@ Estimated additional revenue: $150-500/day if paid performs at 50% of organic co
             # GA4 aggregated rows only have conversion data for today, so we use
             # actual order counts which are reliable across the historical period
             baseline_orders = db.query(func.count(ShopifyOrder.id)).filter(
-                ShopifyOrder.created_at >= start_cutoff,
-                ShopifyOrder.created_at < end_cutoff,
+                _ts >= start_cutoff,
+                _ts < end_cutoff,
                 ShopifyOrder.financial_status.in_(['paid', 'partially_refunded'])
             ).scalar() or 0
             metrics['conversion_rate'] = (baseline_orders / sessions * 100) if sessions > 0 else 0
@@ -1803,15 +1807,17 @@ Estimated additional revenue: $150-500/day if paid performs at 50% of organic co
             cutoff = datetime.utcnow() - timedelta(days=7)
 
             # Get recent orders with shipping data
+            _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+            _net = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
             results = db.query(
                 ShopifyOrder.shipping_country,
                 ShopifyOrder.shipping_province,
                 func.count(ShopifyOrder.id).label('orders'),
                 func.sum(ShopifyOrder.total_shipping).label('total_shipping'),
-                func.sum(ShopifyOrder.total_price).label('total_revenue'),
+                func.sum(_net).label('total_revenue'),
                 func.avg(ShopifyOrder.total_shipping).label('avg_shipping')
             ).filter(
-                ShopifyOrder.created_at >= cutoff,
+                _ts >= cutoff,
                 ShopifyOrder.financial_status.in_(['paid', 'partially_refunded'])
             ).group_by(
                 ShopifyOrder.shipping_country,
