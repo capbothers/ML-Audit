@@ -189,7 +189,8 @@ class GoogleSheetsConnector(BaseConnector):
             log.error(f"Google Sheets authentication timed out: {e}")
             return False
         except Exception as e:
-            log.error(f"Google Sheets authentication failed: {str(e)}")
+            log.error(f"Google Sheets authentication failed: {type(e).__name__}: {str(e)}")
+            self._auth_error = f"{type(e).__name__}: {str(e)}"
             return False
 
     async def sync(

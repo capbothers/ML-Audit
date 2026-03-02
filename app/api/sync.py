@@ -91,9 +91,22 @@ def test_cost_sheet_access():
         )
         # Build the service (authenticate)
         import asyncio
-        authenticated = asyncio.run(connector.authenticate())
+        try:
+            authenticated = asyncio.run(connector.authenticate())
+        except Exception as auth_err:
+            return {
+                "success": False,
+                "error": f"Authentication exception: {type(auth_err).__name__}: {str(auth_err)}",
+                "credentials_path": settings.google_sheets_credentials_path,
+                "sheet_id": settings.cost_sheet_id[:8] + "...",
+            }
         if not authenticated:
-            return {"success": False, "error": "Authentication failed — check credentials file and sheet ID"}
+            return {
+                "success": False,
+                "error": getattr(connector, '_auth_error', 'authenticate() returned False — unknown reason'),
+                "credentials_path": settings.google_sheets_credentials_path,
+                "sheet_id": settings.cost_sheet_id[:8] + "...",
+            }
         tabs = connector._get_all_sheet_titles()
         return {
             "success": True,
@@ -106,7 +119,7 @@ def test_cost_sheet_access():
         return {"success": False, "error": str(e)}
     except Exception as e:
         log.error(f"Cost sheet test error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"success": False, "error": f"{type(e).__name__}: {str(e)}"}
     finally:
         db.close()
 
