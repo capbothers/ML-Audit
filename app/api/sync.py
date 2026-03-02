@@ -1192,95 +1192,117 @@ def get_caprice_import_log(
 @router.get("/caprice/diagnose")
 def diagnose_caprice_data():
     """
-    Diagnostic endpoint — check what data is actually stored for the latest pricing snapshot.
-    Returns a few sample rows with key fields to verify data integrity.
+    Diagnostic endpoint — test SQL INSERT vs COPY for competitor prices.
     """
     from sqlalchemy import func, text
     from app.models.competitive_pricing import CompetitivePricing
+    import io
+    from app.models.base import engine
+
+    results = {}
     db = SessionLocal()
     try:
-        # Get latest pricing date
+        # Test 1: Direct SQL INSERT with competitor prices
+        test_vid = 9999999999
+        test_date = '2099-01-01'
+
+        # Clean up any previous test rows
+        db.execute(text("DELETE FROM competitive_pricing WHERE variant_id = :v"),
+                   {"v": test_vid})
+        db.commit()
+
+        # Insert via raw SQL
+        db.execute(text(
+            "INSERT INTO competitive_pricing "
+            "(variant_id, pricing_date, vendor, variant_sku, rrp, current_price, "
+            "price_8appliances, price_buildmat, price_harveynorman) "
+            "VALUES (:vid, :pd, 'TEST', 'TEST-SKU', 250.0, 213.0, 212.5, 225.0, 305.0)"
+        ), {"vid": test_vid, "pd": test_date})
+        db.commit()
+
+        # Read it back
+        sql_row = db.execute(text(
+            "SELECT variant_sku, rrp, current_price, price_8appliances, price_buildmat, price_harveynorman "
+            "FROM competitive_pricing WHERE variant_id = :v"
+        ), {"v": test_vid}).fetchone()
+        results["sql_insert"] = dict(sql_row._mapping) if sql_row else "FAILED"
+
+        # Clean up
+        db.execute(text("DELETE FROM competitive_pricing WHERE variant_id = :v"),
+                   {"v": test_vid})
+        db.commit()
+
+        # Test 2: COPY with competitor prices (single row)
+        copy_line = f"{test_vid}\t\\N\t\\N\t\\N\tTEST\tTEST-COPY\t\\N\t250.0\t\\N\t213.0\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t212.5\t\\N\t\\N\t\\N\t\\N\t\\N\t225.0\t\\N\t\\N\t305.0\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t{test_date}\tdiagnose\t2026-03-02 00:00:00\n"
+
+        # Column list matching the upload endpoint's df.columns order
+        copy_cols = [
+            'variant_id', 'match_rule', 'set_price', 'ceiling_price', 'vendor',
+            'variant_sku', 'title', 'rrp', 'discount_off_rrp_pct', 'current_price',
+            'minimum_price', 'lowest_competitor_price', 'price_vs_minimum', 'nett_cost',
+            'profit_margin_pct', 'profit_amount',
+            'price_8appliances', 'price_appliancesonline', 'price_austpek', 'price_binglee',
+            'price_blueleafbath', 'price_brandsdirect', 'price_buildmat', 'price_cookandbathe',
+            'price_designerbathware', 'price_harveynorman', 'price_idealbathroom',
+            'price_justbathroomware', 'price_thebluespace', 'price_wellsons', 'price_winnings',
+            'price_agcequipment', 'price_berloniapp', 'price_eands', 'price_plumbingsales',
+            'price_saappliances', 'price_sameday', 'price_shire', 'price_vogue',
+            'pricing_date', 'source_file', 'import_date',
+        ]
+
+        buf = io.StringIO(copy_line)
+        raw_conn = engine.raw_connection()
+        try:
+            cursor = raw_conn.cursor()
+            cursor.copy_from(buf, 'competitive_pricing',
+                             columns=copy_cols, sep='\t', null='\\N')
+            raw_conn.commit()
+
+            # Read it back
+            cursor.execute(
+                "SELECT variant_sku, rrp, current_price, price_8appliances, price_buildmat, price_harveynorman "
+                "FROM competitive_pricing WHERE variant_id = %s", (test_vid,)
+            )
+            copy_row = cursor.fetchone()
+            if copy_row:
+                results["copy_insert"] = {
+                    "variant_sku": copy_row[0],
+                    "rrp": float(copy_row[1]) if copy_row[1] else None,
+                    "current_price": float(copy_row[2]) if copy_row[2] else None,
+                    "price_8appliances": float(copy_row[3]) if copy_row[3] else None,
+                    "price_buildmat": float(copy_row[4]) if copy_row[4] else None,
+                    "price_harveynorman": float(copy_row[5]) if copy_row[5] else None,
+                }
+            else:
+                results["copy_insert"] = "NO ROW FOUND"
+
+            # Clean up
+            cursor.execute("DELETE FROM competitive_pricing WHERE variant_id = %s", (test_vid,))
+            raw_conn.commit()
+        except Exception as ce:
+            results["copy_error"] = str(ce)
+        finally:
+            raw_conn.close()
+
+        # Also check existing data from last import
         latest = db.query(func.max(CompetitivePricing.pricing_date)).scalar()
-        if not latest:
-            return {"error": "No pricing data found"}
+        if latest:
+            comp_count = db.execute(text(
+                "SELECT COUNT(*) FROM competitive_pricing "
+                "WHERE pricing_date = :d AND price_8appliances IS NOT NULL"
+            ), {"d": str(latest)}).scalar()
+            total_count = db.execute(text(
+                "SELECT COUNT(*) FROM competitive_pricing WHERE pricing_date = :d"
+            ), {"d": str(latest)}).scalar()
+            results["latest_date"] = str(latest)
+            results["total_rows"] = total_count
+            results["rows_with_competitors"] = comp_count
 
-        total = db.query(func.count(CompetitivePricing.id)).filter(
-            CompetitivePricing.pricing_date == latest
-        ).scalar()
+        return results
 
-        # Count by vendor
-        vendors = db.query(
-            CompetitivePricing.vendor,
-            func.count(CompetitivePricing.id)
-        ).filter(
-            CompetitivePricing.pricing_date == latest
-        ).group_by(CompetitivePricing.vendor).order_by(
-            func.count(CompetitivePricing.id).desc()
-        ).limit(10).all()
-
-        # Get 5 sample Zip rows
-        zip_samples = db.query(CompetitivePricing).filter(
-            CompetitivePricing.pricing_date == latest,
-            CompetitivePricing.vendor == 'Zip',
-        ).limit(5).all()
-
-        # Get 5 sample Billi rows
-        billi_samples = db.query(CompetitivePricing).filter(
-            CompetitivePricing.pricing_date == latest,
-            CompetitivePricing.vendor == 'Billi',
-        ).limit(5).all()
-
-        def row_to_dict(cp):
-            return {
-                "variant_id": cp.variant_id,
-                "variant_sku": cp.variant_sku,
-                "title": (cp.title or "")[:60],
-                "vendor": cp.vendor,
-                "rrp": float(cp.rrp) if cp.rrp is not None else None,
-                "current_price": float(cp.current_price) if cp.current_price is not None else None,
-                "discount_off_rrp_pct": float(cp.discount_off_rrp_pct) if cp.discount_off_rrp_pct is not None else None,
-                "minimum_price": float(cp.minimum_price) if cp.minimum_price is not None else None,
-                "nett_cost": float(cp.nett_cost) if cp.nett_cost is not None else None,
-                "lowest_competitor_price": float(cp.lowest_competitor_price) if cp.lowest_competitor_price is not None else None,
-                "price_8appliances": float(cp.price_8appliances) if cp.price_8appliances is not None else None,
-                "price_buildmat": float(cp.price_buildmat) if cp.price_buildmat is not None else None,
-                "price_harveynorman": float(cp.price_harveynorman) if cp.price_harveynorman is not None else None,
-                "price_thebluespace": float(cp.price_thebluespace) if cp.price_thebluespace is not None else None,
-                "is_losing_money": cp.is_losing_money,
-                "is_below_minimum": cp.is_below_minimum,
-                "pricing_date": str(cp.pricing_date),
-                "source_file": cp.source_file,
-            }
-
-        # Raw SQL check — get actual column names from the table
-        col_check = db.execute(text(
-            "SELECT column_name, data_type FROM information_schema.columns "
-            "WHERE table_name = 'competitive_pricing' AND column_name LIKE 'price_%' "
-            "ORDER BY ordinal_position"
-        )).fetchall()
-
-        # Raw SQL check — get one Billi 994051 row with all price_ columns
-        raw_row = db.execute(text(
-            "SELECT variant_sku, rrp, current_price, "
-            "price_8appliances, price_buildmat, price_berloniapp, "
-            "price_appliancesonline, price_harveynorman, price_thebluespace "
-            "FROM competitive_pricing "
-            "WHERE variant_sku = '994051' AND pricing_date = :d "
-            "LIMIT 1"
-        ), {"d": str(latest)}).fetchone()
-
-        return {
-            "latest_pricing_date": str(latest),
-            "total_rows": total,
-            "top_vendors": [{"vendor": v, "count": c} for v, c in vendors],
-            "zip_samples": [row_to_dict(r) for r in zip_samples],
-            "billi_samples": [row_to_dict(r) for r in billi_samples],
-            "price_columns_in_db": [{"name": r[0], "type": r[1]} for r in col_check],
-            "raw_billi_994051": dict(raw_row._mapping) if raw_row else "not found",
-        }
     except Exception as e:
         log.error(f"Diagnose error: {str(e)}")
-        return {"error": str(e)}
+        return {"error": str(e), "partial_results": results}
     finally:
         db.close()
 
