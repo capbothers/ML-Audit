@@ -527,7 +527,8 @@ async def sync_shopify_full():
     try:
         log.info("Starting Shopify full sync (with products)...")
         sync_service = DataSyncService()
-        result = await sync_service.sync_shopify(days=3, include_products=True)
+        # 90-day window ensures complete data for dashboards + fills any gaps
+        result = await sync_service.sync_shopify(days=90, include_products=True)
 
         if result.get('success'):
             log.info(

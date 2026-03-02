@@ -643,6 +643,8 @@ class DataSyncService:
                         existing.total_shipping = Decimal(str(order_data.get('total_shipping', 0)))
                         existing.total_tax = Decimal(str(order_data.get('total_tax', 0)))
                         existing.total_discounts = Decimal(str(order_data.get('total_discounts', 0)))
+                        existing.processed_at = self._parse_datetime(order_data.get('processed_at'))
+                        existing.cancelled_at = datetime.fromisoformat(order_data['cancelled_at'].replace('Z', '+00:00')) if order_data.get('cancelled_at') else None
                         existing.updated_at = datetime.utcnow()
                         result['updated'] += 1
 
@@ -689,6 +691,7 @@ class DataSyncService:
                             tags=order_data.get('tags', '').split(', ') if order_data.get('tags') else None,
                             created_at=order_created_at,
                             updated_at=datetime.fromisoformat(order_data['updated_at'].replace('Z', '+00:00')) if order_data.get('updated_at') else None,
+                            processed_at=self._parse_datetime(order_data.get('processed_at')),
                             cancelled_at=datetime.fromisoformat(order_data['cancelled_at'].replace('Z', '+00:00')) if order_data.get('cancelled_at') else None,
                             synced_at=datetime.utcnow()
                         )
