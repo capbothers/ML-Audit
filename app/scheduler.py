@@ -110,9 +110,11 @@ async def sync_stale_connectors():
         log.info("Stale connector recovery already running, skipping overlapping run")
         return
 
+    # GA4 excluded from stale recovery — it's too memory-heavy for catch-up
+    # on Render free tier (512MB). GA4 will still sync on its regular cron
+    # schedule (4am + 4pm AEST).
     thresholds_hours = {
         "shopify": 12,
-        "ga4": 96,
         "search_console": 120,
         "merchant_center": 72,
         "google_ads": 72,
@@ -121,7 +123,6 @@ async def sync_stale_connectors():
     google_ads_sync_fn = sync_google_ads_sheet if settings.google_ads_sheet_id else sync_google_ads
     sync_map = {
         "shopify": sync_shopify,
-        "ga4": sync_ga4,
         "search_console": sync_search_console,
         "merchant_center": sync_merchant_center,
         "google_ads": google_ads_sync_fn,
