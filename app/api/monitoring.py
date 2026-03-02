@@ -181,16 +181,20 @@ async def get_dashboard_data():
             })
 
         # Calculate key metrics
+        # Use processed_at + current_subtotal_price to align with Shopify Net Sales
+        _net = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
+        _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+
         # Today's revenue
-        today_revenue = db.query(func.sum(ShopifyOrder.total_price)).filter(
-            ShopifyOrder.created_at >= last_24h,
+        today_revenue = db.query(func.sum(_net)).filter(
+            _ts >= last_24h,
             ShopifyOrder.financial_status.in_(['paid', 'partially_refunded'])
         ).scalar() or 0
 
         # Yesterday's revenue (for comparison)
-        yesterday_revenue = db.query(func.sum(ShopifyOrder.total_price)).filter(
-            ShopifyOrder.created_at >= last_48h,
-            ShopifyOrder.created_at < last_24h,
+        yesterday_revenue = db.query(func.sum(_net)).filter(
+            _ts >= last_48h,
+            _ts < last_24h,
             ShopifyOrder.financial_status.in_(['paid', 'partially_refunded'])
         ).scalar() or 0
 
@@ -213,7 +217,7 @@ async def get_dashboard_data():
 
         # Conversion rate
         today_orders = db.query(func.count(ShopifyOrder.id)).filter(
-            ShopifyOrder.created_at >= last_24h,
+            _ts >= last_24h,
             ShopifyOrder.financial_status.in_(['paid', 'partially_refunded'])
         ).scalar() or 0
 
@@ -429,21 +433,25 @@ async def get_live_metrics():
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
         today_date = now.date()
 
+        # Use processed_at + current_subtotal_price to align with Shopify Net Sales
+        _net = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
+        _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+
         # Revenue and orders in last hour
         hour_stats = db.query(
             func.count(ShopifyOrder.id).label('orders'),
-            func.sum(ShopifyOrder.total_price).label('revenue')
+            func.sum(_net).label('revenue')
         ).filter(
-            ShopifyOrder.created_at >= last_hour,
+            _ts >= last_hour,
             ShopifyOrder.financial_status.in_(['paid', 'partially_refunded'])
         ).first()
 
         # Revenue today
         today_stats = db.query(
             func.count(ShopifyOrder.id).label('orders'),
-            func.sum(ShopifyOrder.total_price).label('revenue')
+            func.sum(_net).label('revenue')
         ).filter(
-            ShopifyOrder.created_at >= today_start,
+            _ts >= today_start,
             ShopifyOrder.financial_status.in_(['paid', 'partially_refunded'])
         ).first()
 
@@ -503,15 +511,17 @@ async def get_metric_timeseries(days: int = 7):
         start_date = (now - timedelta(days=days - 1)).date()
         end_date = now.date()
 
-        # Shopify revenue/orders by day
+        # Shopify revenue/orders by day (processed_at + net sales basis)
+        _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+        _net = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
         shopify_rows = db.query(
-            func.date(ShopifyOrder.created_at).label("date"),
+            func.date(_ts).label("date"),
             func.count(ShopifyOrder.id).label("orders"),
-            func.sum(ShopifyOrder.total_price).label("revenue")
+            func.sum(_net).label("revenue")
         ).filter(
-            ShopifyOrder.created_at >= datetime.combine(start_date, datetime.min.time()),
+            _ts >= datetime.combine(start_date, datetime.min.time()),
             ShopifyOrder.financial_status.in_(['paid', 'partially_refunded'])
-        ).group_by(func.date(ShopifyOrder.created_at)).all()
+        ).group_by(func.date(_ts)).all()
 
         shopify_by_date = {
             row.date: {

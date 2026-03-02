@@ -43,18 +43,20 @@ async def performance_summary(
     prior_start_dt = _date_to_dt(prior_start)
     prior_end_dt = _date_to_dt(prior_end + timedelta(days=1))
 
-    price_expr = func.coalesce(ShopifyOrder.current_total_price, ShopifyOrder.total_price)
+    # Net Sales = current_subtotal_price (post-refund, ex tax/shipping) — matches Shopify reports
+    price_expr = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
+    _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
 
     def shopify_metrics(start_dt, end_dt):
         revenue = db.query(func.sum(price_expr)).filter(
-            ShopifyOrder.created_at >= start_dt,
-            ShopifyOrder.created_at < end_dt,
+            _ts >= start_dt,
+            _ts < end_dt,
             ShopifyOrder.cancelled_at.is_(None),
             ShopifyOrder.financial_status != 'voided'
         ).scalar() or 0
         orders = db.query(func.count(ShopifyOrder.id)).filter(
-            ShopifyOrder.created_at >= start_dt,
-            ShopifyOrder.created_at < end_dt,
+            _ts >= start_dt,
+            _ts < end_dt,
             ShopifyOrder.cancelled_at.is_(None),
             ShopifyOrder.financial_status != 'voided'
         ).scalar() or 0

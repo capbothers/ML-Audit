@@ -254,13 +254,14 @@ class FinanceService:
         # Filter valid orders
         valid_statuses = ['paid', 'partially_refunded', 'partially_paid']
 
+        _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
         result = self.db.query(
             func.count(ShopifyOrder.id).label('total_orders'),
             func.coalesce(func.sum(ShopifyOrder.total_price), 0).label('gross_revenue'),
             func.coalesce(func.sum(ShopifyOrder.total_refunded), 0).label('refunds'),
         ).filter(
-            ShopifyOrder.created_at >= datetime.combine(month_start, datetime.min.time()),
-            ShopifyOrder.created_at < datetime.combine(month_end, datetime.min.time()),
+            _ts >= datetime.combine(month_start, datetime.min.time()),
+            _ts < datetime.combine(month_end, datetime.min.time()),
             ShopifyOrder.cancelled_at.is_(None),
             ShopifyOrder.financial_status.in_(valid_statuses),
         ).first()

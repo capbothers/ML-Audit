@@ -581,7 +581,7 @@ class StrategicIntelligenceService:
 
         try:
             # Shopify orders — use latest order date if target has no data
-            latest_order_raw = self.db.query(func.max(func.date(ShopifyOrder.created_at))).scalar()
+            latest_order_raw = self.db.query(func.max(func.date(func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)))).scalar()
             # SQLite returns date strings; parse to date object
             if isinstance(latest_order_raw, str):
                 latest_order_date = date.fromisoformat(latest_order_raw)
@@ -595,35 +595,39 @@ class StrategicIntelligenceService:
             today_start = datetime(shopify_effective.year, shopify_effective.month, shopify_effective.day)
             today_end = today_start + timedelta(days=1)
 
+            # Use processed_at + net sales basis to align with Shopify reports
+            _ts = func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at)
+            _net = func.coalesce(ShopifyOrder.current_subtotal_price, ShopifyOrder.subtotal_price)
+
             orders_today = self.db.query(
                 func.count(ShopifyOrder.id).label('count'),
-                func.sum(ShopifyOrder.total_price).label('revenue'),
-                func.avg(ShopifyOrder.total_price).label('aov'),
+                func.sum(_net).label('revenue'),
+                func.avg(_net).label('aov'),
             ).filter(
-                ShopifyOrder.created_at >= today_start,
-                ShopifyOrder.created_at < today_end,
+                _ts >= today_start,
+                _ts < today_end,
             ).first()
 
             # 7-day orders
             week_start = today_start - timedelta(days=7)
             orders_7d = self.db.query(
                 func.count(ShopifyOrder.id).label('count'),
-                func.sum(ShopifyOrder.total_price).label('revenue'),
-                func.avg(ShopifyOrder.total_price).label('aov'),
+                func.sum(_net).label('revenue'),
+                func.avg(_net).label('aov'),
             ).filter(
-                ShopifyOrder.created_at >= week_start,
-                ShopifyOrder.created_at < today_end,
+                _ts >= week_start,
+                _ts < today_end,
             ).first()
 
             # 30-day orders
             month_start = today_start - timedelta(days=30)
             orders_30d = self.db.query(
                 func.count(ShopifyOrder.id).label('count'),
-                func.sum(ShopifyOrder.total_price).label('revenue'),
-                func.avg(ShopifyOrder.total_price).label('aov'),
+                func.sum(_net).label('revenue'),
+                func.avg(_net).label('aov'),
             ).filter(
-                ShopifyOrder.created_at >= month_start,
-                ShopifyOrder.created_at < today_end,
+                _ts >= month_start,
+                _ts < today_end,
             ).first()
 
             snapshot['orders_today'] = int(orders_today.count or 0) if orders_today else 0

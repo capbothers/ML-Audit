@@ -417,8 +417,8 @@ async def sync_shopify():
     try:
         log.info("Starting Shopify sync...")
         sync_service = DataSyncService()
-        # Sync last 3 days to catch delayed updates and ensure order_items are current
-        result = await sync_service.sync_shopify(days=3, include_products=False)
+        # Sync last 7 days to catch delayed updates, refund changes, and short outages
+        result = await sync_service.sync_shopify(days=7, include_products=False)
 
         if result.get('success'):
             log.info(

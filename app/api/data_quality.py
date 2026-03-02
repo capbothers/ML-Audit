@@ -707,7 +707,7 @@ def _get_freshness_report(db) -> dict:
         }
 
     sources['shopify_orders'] = _check(
-        'shopify_orders', ShopifyOrder, ShopifyOrder.created_at, _STALE_THRESHOLDS['shopify_orders'])
+        'shopify_orders', ShopifyOrder, func.coalesce(ShopifyOrder.processed_at, ShopifyOrder.created_at), _STALE_THRESHOLDS['shopify_orders'])
     sources['shopify_order_items'] = _check(
         'shopify_order_items', ShopifyOrderItem, ShopifyOrderItem.order_date, _STALE_THRESHOLDS['shopify_order_items'])
     sources['ga4_daily_summary'] = _check(

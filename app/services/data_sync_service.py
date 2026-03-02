@@ -649,7 +649,8 @@ class DataSyncService:
                         result['updated'] += 1
 
                         # Upsert order items for this order
-                        order_created_at = existing.created_at
+                        # Use processed_at for order_date (aligns with Shopify sales reports)
+                        order_item_date = existing.processed_at or existing.created_at
                         financial_status = existing.financial_status
                         fulfillment_status = existing.fulfillment_status
                     else:
@@ -657,7 +658,10 @@ class DataSyncService:
                         # Parse UTM and Google Ads params from landing URL
                         _utm = parse_landing_site(order_data.get('landing_site'))
 
-                        order_created_at = datetime.fromisoformat(order_data['created_at'].replace('Z', '+00:00')) if order_data.get('created_at') else None
+                        _raw_created = datetime.fromisoformat(order_data['created_at'].replace('Z', '+00:00')) if order_data.get('created_at') else None
+                        _raw_processed = self._parse_datetime(order_data.get('processed_at'))
+                        # order_date on items uses processed_at (aligns with Shopify sales reports)
+                        order_item_date = _raw_processed or _raw_created
                         financial_status = order_data.get('financial_status')
                         fulfillment_status = order_data.get('fulfillment_status')
 
@@ -689,7 +693,7 @@ class DataSyncService:
                             gclid=_utm.get("gclid"),
                             gad_campaign_id=_utm.get("gad_campaign_id"),
                             tags=order_data.get('tags', '').split(', ') if order_data.get('tags') else None,
-                            created_at=order_created_at,
+                            created_at=_raw_created,
                             updated_at=datetime.fromisoformat(order_data['updated_at'].replace('Z', '+00:00')) if order_data.get('updated_at') else None,
                             processed_at=self._parse_datetime(order_data.get('processed_at')),
                             cancelled_at=datetime.fromisoformat(order_data['cancelled_at'].replace('Z', '+00:00')) if order_data.get('cancelled_at') else None,
@@ -718,7 +722,7 @@ class DataSyncService:
                             order_item = ShopifyOrderItem(
                                 shopify_order_id=shopify_order_id,
                                 order_number=order_data.get('order_number'),
-                                order_date=order_created_at,
+                                order_date=order_item_date,
                                 line_item_id=item.get('id'),
                                 shopify_product_id=item.get('product_id'),
                                 shopify_variant_id=item.get('variant_id'),
