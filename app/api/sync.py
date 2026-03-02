@@ -1226,6 +1226,75 @@ def delete_caprice_date(pricing_date: str):
         return {"deleted_rows": result.rowcount, "pricing_date": pricing_date}
 
 
+@router.get("/health")
+def sync_health():
+    """Diagnostic: scheduler status, env var presence, and connector readiness."""
+    from app.config import get_settings
+    import os
+
+    settings = get_settings()
+
+    # Check which env vars are actually set (show presence, not values)
+    env_checks = {
+        "shopify": {
+            "SHOPIFY_SHOP_URL": bool(settings.shopify_shop_url),
+            "SHOPIFY_ACCESS_TOKEN": bool(settings.shopify_access_token),
+        },
+        "ga4": {
+            "GA4_PROPERTY_ID": bool(settings.ga4_property_id),
+            "GA4_CREDENTIALS_PATH": settings.ga4_credentials_path,
+            "credentials_file_exists": os.path.exists(settings.ga4_credentials_path),
+        },
+        "search_console": {
+            "GSC_SITE_URL": bool(settings.gsc_site_url),
+            "GSC_CREDENTIALS_PATH": settings.gsc_credentials_path,
+            "credentials_file_exists": os.path.exists(settings.gsc_credentials_path),
+        },
+        "google_ads": {
+            "GOOGLE_ADS_CUSTOMER_ID": bool(settings.google_ads_customer_id),
+            "GOOGLE_ADS_SHEET_ID": bool(settings.google_ads_sheet_id),
+            "mode": "sheet" if settings.google_ads_sheet_id else "api",
+        },
+        "cost_sheet": {
+            "COST_SHEET_ID": bool(settings.cost_sheet_id),
+            "GOOGLE_SHEETS_CREDENTIALS_PATH": settings.google_sheets_credentials_path,
+            "credentials_file_exists": os.path.exists(settings.google_sheets_credentials_path),
+        },
+        "merchant_center": {
+            "MERCHANT_CENTER_ID": bool(settings.merchant_center_id),
+            "credentials_file_exists": os.path.exists(settings.merchant_center_credentials_path),
+        },
+        "klaviyo": {
+            "KLAVIYO_API_KEY": bool(settings.klaviyo_api_key),
+        },
+        "shippit": {
+            "SHIPPIT_API_KEY": bool(settings.shippit_api_key),
+        },
+    }
+
+    # Check scheduler state
+    try:
+        from app.scheduler import scheduler
+        sched_info = {
+            "running": scheduler.running,
+            "jobs": [
+                {
+                    "id": job.id,
+                    "name": job.name,
+                    "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
+                }
+                for job in scheduler.get_jobs()
+            ],
+        }
+    except Exception as e:
+        sched_info = {"error": str(e)}
+
+    return {
+        "connectors": env_checks,
+        "scheduler": sched_info,
+    }
+
+
 # ── Google Ads CSV Import ──────────────────────────────────────────
 
 
