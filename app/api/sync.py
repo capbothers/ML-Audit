@@ -1141,6 +1141,82 @@ def get_caprice_import_log(
         db.close()
 
 
+@router.get("/caprice/diagnose")
+def diagnose_caprice_data():
+    """
+    Diagnostic endpoint — check what data is actually stored for the latest pricing snapshot.
+    Returns a few sample rows with key fields to verify data integrity.
+    """
+    from sqlalchemy import func, text
+    db = SessionLocal()
+    try:
+        # Get latest pricing date
+        latest = db.query(func.max(CompetitivePricing.pricing_date)).scalar()
+        if not latest:
+            return {"error": "No pricing data found"}
+
+        total = db.query(func.count(CompetitivePricing.id)).filter(
+            CompetitivePricing.pricing_date == latest
+        ).scalar()
+
+        # Count by vendor
+        vendors = db.query(
+            CompetitivePricing.vendor,
+            func.count(CompetitivePricing.id)
+        ).filter(
+            CompetitivePricing.pricing_date == latest
+        ).group_by(CompetitivePricing.vendor).order_by(
+            func.count(CompetitivePricing.id).desc()
+        ).limit(10).all()
+
+        # Get 5 sample Zip rows
+        zip_samples = db.query(CompetitivePricing).filter(
+            CompetitivePricing.pricing_date == latest,
+            CompetitivePricing.vendor == 'Zip',
+        ).limit(5).all()
+
+        # Get 5 sample Billi rows
+        billi_samples = db.query(CompetitivePricing).filter(
+            CompetitivePricing.pricing_date == latest,
+            CompetitivePricing.vendor == 'Billi',
+        ).limit(5).all()
+
+        def row_to_dict(cp):
+            return {
+                "variant_id": cp.variant_id,
+                "variant_sku": cp.variant_sku,
+                "title": (cp.title or "")[:60],
+                "vendor": cp.vendor,
+                "rrp": float(cp.rrp) if cp.rrp is not None else None,
+                "current_price": float(cp.current_price) if cp.current_price is not None else None,
+                "discount_off_rrp_pct": float(cp.discount_off_rrp_pct) if cp.discount_off_rrp_pct is not None else None,
+                "minimum_price": float(cp.minimum_price) if cp.minimum_price is not None else None,
+                "nett_cost": float(cp.nett_cost) if cp.nett_cost is not None else None,
+                "lowest_competitor_price": float(cp.lowest_competitor_price) if cp.lowest_competitor_price is not None else None,
+                "price_8appliances": float(cp.price_8appliances) if cp.price_8appliances is not None else None,
+                "price_buildmat": float(cp.price_buildmat) if cp.price_buildmat is not None else None,
+                "price_harveynorman": float(cp.price_harveynorman) if cp.price_harveynorman is not None else None,
+                "price_thebluespace": float(cp.price_thebluespace) if cp.price_thebluespace is not None else None,
+                "is_losing_money": cp.is_losing_money,
+                "is_below_minimum": cp.is_below_minimum,
+                "pricing_date": str(cp.pricing_date),
+                "source_file": cp.source_file,
+            }
+
+        return {
+            "latest_pricing_date": str(latest),
+            "total_rows": total,
+            "top_vendors": [{"vendor": v, "count": c} for v, c in vendors],
+            "zip_samples": [row_to_dict(r) for r in zip_samples],
+            "billi_samples": [row_to_dict(r) for r in billi_samples],
+        }
+    except Exception as e:
+        log.error(f"Diagnose error: {str(e)}")
+        return {"error": str(e)}
+    finally:
+        db.close()
+
+
 # ── Google Ads CSV Import ──────────────────────────────────────────
 
 
