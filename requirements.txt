@@ -56,6 +56,7 @@ python-dateutil==2.8.2
 pytz==2023.3
 tenacity==8.2.3
 schedule==1.2.0
+APScheduler==3.10.4
 
 # SEO & Web Analysis
 beautifulsoup4==4.12.3
