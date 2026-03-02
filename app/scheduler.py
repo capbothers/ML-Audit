@@ -897,7 +897,7 @@ def setup_scheduler():
         name='Stale Connector Recovery',
         replace_existing=True,
         max_instances=1,
-        next_run_time=datetime.now(SYDNEY_TZ) + timedelta(minutes=5),
+        next_run_time=datetime.now(SYDNEY_TZ) + timedelta(minutes=15),
         misfire_grace_time=INTERVAL_GRACE,
     )
 
@@ -908,11 +908,7 @@ def start_scheduler():
     """Start the scheduler"""
     setup_scheduler()
     scheduler.start()
-    log.info("Scheduler started")
-    try:
-        asyncio.get_running_loop().create_task(sync_stale_connectors())
-    except Exception as e:
-        log.warning(f"Could not enqueue startup stale-recovery run: {str(e)}")
+    log.info("Scheduler started — stale recovery will run in 15 minutes")
 
 
 def stop_scheduler():
