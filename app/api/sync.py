@@ -1030,9 +1030,21 @@ async def upload_caprice_file(file: UploadFile = File(...)):
             raw_conn = engine.raw_connection()
             try:
                 cursor = raw_conn.cursor()
+                log.info(f"Caprice upload: copy_from with {len(cols)} columns: {cols[:5]}...{cols[-5:]}")
                 cursor.copy_from(buf, 'competitive_pricing',
                                  columns=cols, sep='\t', null='\\N')
                 raw_conn.commit()
+
+                # Verify data was written with competitor prices
+                cursor.execute(
+                    "SELECT variant_sku, rrp, price_8appliances, price_buildmat, price_harveynorman "
+                    "FROM competitive_pricing WHERE pricing_date = %s AND price_8appliances IS NOT NULL "
+                    "LIMIT 3", (str(pricing_date),)
+                )
+                verify_rows = cursor.fetchall()
+                log.info(f"Caprice upload: verify after COPY — {len(verify_rows)} rows have price_8appliances")
+                for vr in verify_rows:
+                    log.info(f"  verify: sku={vr[0]}, rrp={vr[1]}, 8appl={vr[2]}, buildmat={vr[3]}, harvey={vr[4]}")
             finally:
                 raw_conn.close()
         else:
@@ -1057,6 +1069,27 @@ async def upload_caprice_file(file: UploadFile = File(...)):
         ))
         db.commit()
 
+        # Quick verification: count rows with competitor data
+        verify_count = 0
+        verify_sample = []
+        try:
+            from sqlalchemy import text as sql_text
+            with engine.connect() as vconn:
+                res = vconn.execute(sql_text(
+                    "SELECT COUNT(*) FROM competitive_pricing "
+                    "WHERE pricing_date = :d AND price_8appliances IS NOT NULL"
+                ), {"d": str(pricing_date)})
+                verify_count = res.scalar()
+
+                res2 = vconn.execute(sql_text(
+                    "SELECT variant_sku, price_8appliances, price_buildmat "
+                    "FROM competitive_pricing "
+                    "WHERE pricing_date = :d AND price_8appliances IS NOT NULL LIMIT 3"
+                ), {"d": str(pricing_date)})
+                verify_sample = [dict(r._mapping) for r in res2]
+        except Exception as ve:
+            log.error(f"Verify error: {ve}")
+
         return {
             "success": True,
             "uploaded": file.filename,
@@ -1064,6 +1097,8 @@ async def upload_caprice_file(file: UploadFile = File(...)):
             "rows_imported": rows_inserted,
             "rows_deleted": deleted,
             "rows_skipped": skipped,
+            "verify_with_competitors": verify_count,
+            "verify_samples": verify_sample,
         }
 
     except HTTPException:
