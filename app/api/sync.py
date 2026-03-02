@@ -1020,7 +1020,7 @@ async def upload_caprice_file(file: UploadFile = File(...)):
 
         df.to_sql(
             'competitive_pricing', engine, if_exists='append',
-            index=False, chunksize=500, method='multi'
+            index=False, chunksize=100
         )
 
         log.info(f"Caprice upload: inserted {rows_inserted} rows for {pricing_date}")
