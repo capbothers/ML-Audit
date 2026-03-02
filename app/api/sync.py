@@ -1204,12 +1204,31 @@ def diagnose_caprice_data():
                 "source_file": cp.source_file,
             }
 
+        # Raw SQL check — get actual column names from the table
+        col_check = db.execute(text(
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_name = 'competitive_pricing' AND column_name LIKE 'price_%' "
+            "ORDER BY ordinal_position"
+        )).fetchall()
+
+        # Raw SQL check — get one Billi 994051 row with all price_ columns
+        raw_row = db.execute(text(
+            "SELECT variant_sku, rrp, current_price, "
+            "price_8appliances, price_buildmat, price_berloniapp, "
+            "price_appliancesonline, price_harveynorman, price_thebluespace "
+            "FROM competitive_pricing "
+            "WHERE variant_sku = '994051' AND pricing_date = :d "
+            "LIMIT 1"
+        ), {"d": str(latest)}).fetchone()
+
         return {
             "latest_pricing_date": str(latest),
             "total_rows": total,
             "top_vendors": [{"vendor": v, "count": c} for v, c in vendors],
             "zip_samples": [row_to_dict(r) for r in zip_samples],
             "billi_samples": [row_to_dict(r) for r in billi_samples],
+            "price_columns_in_db": [{"name": r[0], "type": r[1]} for r in col_check],
+            "raw_billi_994051": dict(raw_row._mapping) if raw_row else "not found",
         }
     except Exception as e:
         log.error(f"Diagnose error: {str(e)}")
