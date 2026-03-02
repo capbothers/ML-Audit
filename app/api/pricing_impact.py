@@ -424,24 +424,50 @@ async def get_brand_report(
         }
 
         monthly_trends = []
-        for month in sorted(month_snapshots.keys()):
-            dates = month_snapshots[month]
-            # Use latest date in the month
-            latest_in_month = max(dates.keys())
-            snap = _analyze_snapshot(dates[latest_in_month])
-            wd = [a for a in snap if a["discount_pct"] is not None]
-            bf = [a for a in snap if a["below_floor"]]
+        sorted_months = sorted(month_snapshots.keys())
+        # Fill gaps between first and last month
+        all_months = []
+        if sorted_months:
+            from datetime import date as _date
+            first = sorted_months[0].split("-")
+            last = sorted_months[-1].split("-")
+            y, m = int(first[0]), int(first[1])
+            end_y, end_m = int(last[0]), int(last[1])
+            while (y, m) <= (end_y, end_m):
+                all_months.append(f"{y:04d}-{m:02d}")
+                m += 1
+                if m > 12:
+                    m = 1
+                    y += 1
+
+        for month in all_months:
             mm = month.split("-")[1]
             yyyy = month.split("-")[0]
-            monthly_trends.append({
-                "month": month,
-                "month_name": f"{MONTH_NAMES.get(mm, mm)} {yyyy}",
-                "avg_discount_pct": round(sum(a["discount_pct"] for a in wd) / len(wd), 1) if wd else 0,
-                "skus_below_floor": len(bf),
-                "avg_gap_below": round(sum(a["gap_below"] for a in bf) / len(bf), 2) if bf else 0,
-                "total_skus": len(snap),
-                "snapshot_count": len(dates),
-            })
+            if month in month_snapshots:
+                dates = month_snapshots[month]
+                latest_in_month = max(dates.keys())
+                snap = _analyze_snapshot(dates[latest_in_month])
+                wd = [a for a in snap if a["discount_pct"] is not None]
+                bf = [a for a in snap if a["below_floor"]]
+                monthly_trends.append({
+                    "month": month,
+                    "month_name": f"{MONTH_NAMES.get(mm, mm)} {yyyy}",
+                    "avg_discount_pct": round(sum(a["discount_pct"] for a in wd) / len(wd), 1) if wd else 0,
+                    "skus_below_floor": len(bf),
+                    "avg_gap_below": round(sum(a["gap_below"] for a in bf) / len(bf), 2) if bf else 0,
+                    "total_skus": len(snap),
+                    "snapshot_count": len(dates),
+                })
+            else:
+                monthly_trends.append({
+                    "month": month,
+                    "month_name": f"{MONTH_NAMES.get(mm, mm)} {yyyy}",
+                    "avg_discount_pct": 0,
+                    "skus_below_floor": 0,
+                    "avg_gap_below": 0,
+                    "total_skus": 0,
+                    "snapshot_count": 0,
+                })
 
         # Heavily discounted SKUs (top 50)
         heavily_discounted = sorted(
