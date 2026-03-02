@@ -1148,6 +1148,7 @@ def diagnose_caprice_data():
     Returns a few sample rows with key fields to verify data integrity.
     """
     from sqlalchemy import func, text
+    from app.models.competitive_pricing import CompetitivePricing
     db = SessionLocal()
     try:
         # Get latest pricing date
