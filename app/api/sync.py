@@ -999,45 +999,29 @@ async def upload_caprice_file(file: UploadFile = File(...)):
 
         log.info(f"Caprice upload: deleted {deleted} existing rows for {pricing_date}")
 
-        # Bulk insert — use PostgreSQL COPY for speed, fallback to to_sql
+        # Bulk insert using pandas to_sql (works reliably for both SQLite and PostgreSQL)
         from app.models.base import engine
-        db_url = str(engine.url)
         rows_inserted = len(df)
 
-        if 'postgresql' in db_url or 'postgres' in db_url:
-            # PostgreSQL: use execute_values for fast bulk INSERT
-            # (COPY FROM STDIN was silently dropping competitor price columns)
-            from psycopg2.extras import execute_values
+        # Debug: capture column info for troubleshooting
+        competitor_cols_in_df = [c for c in df.columns if c.startswith('price_')]
+        competitor_non_null = {c: int(df[c].notna().sum()) for c in competitor_cols_in_df}
+        debug_info = {
+            "total_df_columns": len(df.columns),
+            "df_columns": list(df.columns),
+            "competitor_columns_count": len(competitor_cols_in_df),
+            "competitor_non_null_counts": competitor_non_null,
+        }
+        log.info(f"Caprice upload: {len(competitor_cols_in_df)} competitor cols, "
+                 f"non-null counts: {competitor_non_null}")
 
-            cols = list(df.columns)
-            # Convert DataFrame to list of tuples with None for NaN
-            values = []
-            for row in df.values:
-                values.append(tuple(
-                    None if pd.isna(v) else
-                    int(v) if isinstance(v, (int,)) else
-                    float(v) if hasattr(v, '__float__') and not isinstance(v, str) else
-                    v
-                    for v in row
-                ))
+        # Replace NaN/NaT with None for proper NULL handling
+        df = df.where(df.notna(), None)
 
-            col_list = ','.join(cols)
-            sql = f"INSERT INTO competitive_pricing ({col_list}) VALUES %s"
-
-            raw_conn = engine.raw_connection()
-            try:
-                cursor = raw_conn.cursor()
-                execute_values(cursor, sql, values, page_size=500)
-                raw_conn.commit()
-                log.info(f"Caprice upload: execute_values inserted {len(values)} rows")
-            finally:
-                raw_conn.close()
-        else:
-            # SQLite fallback
-            df.to_sql(
-                'competitive_pricing', engine, if_exists='append',
-                index=False, chunksize=1000
-            )
+        df.to_sql(
+            'competitive_pricing', engine, if_exists='append',
+            index=False, chunksize=500, method='multi'
+        )
 
         log.info(f"Caprice upload: inserted {rows_inserted} rows for {pricing_date}")
 
@@ -1084,6 +1068,7 @@ async def upload_caprice_file(file: UploadFile = File(...)):
             "rows_skipped": skipped,
             "verify_with_competitors": verify_count,
             "verify_samples": verify_sample,
+            "debug": debug_info,
         }
 
     except HTTPException:
