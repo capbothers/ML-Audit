@@ -1162,119 +1162,68 @@ def get_caprice_import_log(
 @router.get("/caprice/diagnose")
 def diagnose_caprice_data():
     """
-    Diagnostic endpoint — test SQL INSERT vs COPY for competitor prices.
+    Diagnostic endpoint — show competitor data status for ALL pricing dates.
     """
-    from sqlalchemy import func, text
-    from app.models.competitive_pricing import CompetitivePricing
-    import io
+    from sqlalchemy import text
     from app.models.base import engine
 
-    results = {}
-    db = SessionLocal()
+    results = {"code_version": "to_sql_v2"}
     try:
-        # Test 1: Direct SQL INSERT with competitor prices
-        test_vid = 9999999999
-        test_date = '2099-01-01'
+        with engine.connect() as conn:
+            # Get all pricing dates with their row counts and competitor counts
+            rows = conn.execute(text(
+                "SELECT pricing_date, COUNT(*) as total, "
+                "SUM(CASE WHEN price_8appliances IS NOT NULL THEN 1 ELSE 0 END) as with_8app, "
+                "SUM(CASE WHEN price_buildmat IS NOT NULL THEN 1 ELSE 0 END) as with_buildmat, "
+                "SUM(CASE WHEN price_harveynorman IS NOT NULL THEN 1 ELSE 0 END) as with_harvey "
+                "FROM competitive_pricing "
+                "GROUP BY pricing_date ORDER BY pricing_date DESC"
+            )).fetchall()
 
-        # Clean up any previous test rows
-        db.execute(text("DELETE FROM competitive_pricing WHERE variant_id = :v"),
-                   {"v": test_vid})
-        db.commit()
-
-        # Insert via raw SQL
-        db.execute(text(
-            "INSERT INTO competitive_pricing "
-            "(variant_id, pricing_date, vendor, variant_sku, rrp, current_price, "
-            "price_8appliances, price_buildmat, price_harveynorman) "
-            "VALUES (:vid, :pd, 'TEST', 'TEST-SKU', 250.0, 213.0, 212.5, 225.0, 305.0)"
-        ), {"vid": test_vid, "pd": test_date})
-        db.commit()
-
-        # Read it back
-        sql_row = db.execute(text(
-            "SELECT variant_sku, rrp, current_price, price_8appliances, price_buildmat, price_harveynorman "
-            "FROM competitive_pricing WHERE variant_id = :v"
-        ), {"v": test_vid}).fetchone()
-        results["sql_insert"] = dict(sql_row._mapping) if sql_row else "FAILED"
-
-        # Clean up
-        db.execute(text("DELETE FROM competitive_pricing WHERE variant_id = :v"),
-                   {"v": test_vid})
-        db.commit()
-
-        # Test 2: COPY with competitor prices (single row)
-        copy_line = f"{test_vid}\t\\N\t\\N\t\\N\tTEST\tTEST-COPY\t\\N\t250.0\t\\N\t213.0\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t212.5\t\\N\t\\N\t\\N\t\\N\t\\N\t225.0\t\\N\t\\N\t305.0\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t\\N\t{test_date}\tdiagnose\t2026-03-02 00:00:00\n"
-
-        # Column list matching the upload endpoint's df.columns order
-        copy_cols = [
-            'variant_id', 'match_rule', 'set_price', 'ceiling_price', 'vendor',
-            'variant_sku', 'title', 'rrp', 'discount_off_rrp_pct', 'current_price',
-            'minimum_price', 'lowest_competitor_price', 'price_vs_minimum', 'nett_cost',
-            'profit_margin_pct', 'profit_amount',
-            'price_8appliances', 'price_appliancesonline', 'price_austpek', 'price_binglee',
-            'price_blueleafbath', 'price_brandsdirect', 'price_buildmat', 'price_cookandbathe',
-            'price_designerbathware', 'price_harveynorman', 'price_idealbathroom',
-            'price_justbathroomware', 'price_thebluespace', 'price_wellsons', 'price_winnings',
-            'price_agcequipment', 'price_berloniapp', 'price_eands', 'price_plumbingsales',
-            'price_saappliances', 'price_sameday', 'price_shire', 'price_vogue',
-            'pricing_date', 'source_file', 'import_date',
-        ]
-
-        buf = io.StringIO(copy_line)
-        raw_conn = engine.raw_connection()
-        try:
-            cursor = raw_conn.cursor()
-            cursor.copy_from(buf, 'competitive_pricing',
-                             columns=copy_cols, sep='\t', null='\\N')
-            raw_conn.commit()
-
-            # Read it back
-            cursor.execute(
-                "SELECT variant_sku, rrp, current_price, price_8appliances, price_buildmat, price_harveynorman "
-                "FROM competitive_pricing WHERE variant_id = %s", (test_vid,)
-            )
-            copy_row = cursor.fetchone()
-            if copy_row:
-                results["copy_insert"] = {
-                    "variant_sku": copy_row[0],
-                    "rrp": float(copy_row[1]) if copy_row[1] else None,
-                    "current_price": float(copy_row[2]) if copy_row[2] else None,
-                    "price_8appliances": float(copy_row[3]) if copy_row[3] else None,
-                    "price_buildmat": float(copy_row[4]) if copy_row[4] else None,
-                    "price_harveynorman": float(copy_row[5]) if copy_row[5] else None,
+            results["dates"] = [
+                {
+                    "pricing_date": str(r[0]),
+                    "total_rows": r[1],
+                    "with_8appliances": r[2],
+                    "with_buildmat": r[3],
+                    "with_harveynorman": r[4],
                 }
-            else:
-                results["copy_insert"] = "NO ROW FOUND"
+                for r in rows
+            ]
 
-            # Clean up
-            cursor.execute("DELETE FROM competitive_pricing WHERE variant_id = %s", (test_vid,))
-            raw_conn.commit()
-        except Exception as ce:
-            results["copy_error"] = str(ce)
-        finally:
-            raw_conn.close()
-
-        # Also check existing data from last import
-        latest = db.query(func.max(CompetitivePricing.pricing_date)).scalar()
-        if latest:
-            comp_count = db.execute(text(
-                "SELECT COUNT(*) FROM competitive_pricing "
-                "WHERE pricing_date = :d AND price_8appliances IS NOT NULL"
-            ), {"d": str(latest)}).scalar()
-            total_count = db.execute(text(
-                "SELECT COUNT(*) FROM competitive_pricing WHERE pricing_date = :d"
-            ), {"d": str(latest)}).scalar()
-            results["latest_date"] = str(latest)
-            results["total_rows"] = total_count
-            results["rows_with_competitors"] = comp_count
+            # Sample a row with competitor data from the most recent date that has any
+            for r in rows:
+                if r[2] > 0:  # has 8appliances data
+                    sample = conn.execute(text(
+                        "SELECT variant_sku, rrp, current_price, price_8appliances, "
+                        "price_buildmat, price_harveynorman "
+                        "FROM competitive_pricing "
+                        "WHERE pricing_date = :d AND price_8appliances IS NOT NULL LIMIT 3"
+                    ), {"d": str(r[0])}).fetchall()
+                    results["sample_with_competitors"] = [
+                        dict(s._mapping) for s in sample
+                    ]
+                    break
 
         return results
 
     except Exception as e:
         log.error(f"Diagnose error: {str(e)}")
         return {"error": str(e), "partial_results": results}
-    finally:
-        db.close()
+
+
+@router.delete("/caprice/date/{pricing_date}")
+def delete_caprice_date(pricing_date: str):
+    """Delete all competitive_pricing rows for a specific date (to remove broken imports)."""
+    from sqlalchemy import text
+    from app.models.base import engine
+
+    with engine.begin() as conn:
+        result = conn.execute(
+            text("DELETE FROM competitive_pricing WHERE pricing_date = :d"),
+            {"d": pricing_date}
+        )
+        return {"deleted_rows": result.rowcount, "pricing_date": pricing_date}
 
 
 # ── Google Ads CSV Import ──────────────────────────────────────────
