@@ -1006,19 +1006,32 @@ async def upload_caprice_file(file: UploadFile = File(...)):
 
         if 'postgresql' in db_url or 'postgres' in db_url:
             # PostgreSQL: use COPY FROM STDIN via psycopg2 (16K rows in ~2s)
+            # Build text-format data manually (tab-delimited, \N for NULL,
+            # backslash escaping for special chars).
             import io
             cols = list(df.columns)
-            csv_buffer = io.StringIO()
-            df.to_csv(csv_buffer, index=False, header=False, sep='\t', na_rep='\\N')
-            csv_buffer.seek(0)
+
+            buf = io.StringIO()
+            for row in df.values:
+                parts = []
+                for val in row:
+                    if pd.isna(val):
+                        parts.append('\\N')
+                    else:
+                        s = str(val)
+                        s = (s.replace('\\', '\\\\')
+                              .replace('\t', '\\t')
+                              .replace('\n', '\\n')
+                              .replace('\r', '\\r'))
+                        parts.append(s)
+                buf.write('\t'.join(parts) + '\n')
+            buf.seek(0)
 
             raw_conn = engine.raw_connection()
             try:
                 cursor = raw_conn.cursor()
-                cursor.copy_expert(
-                    f"COPY competitive_pricing ({','.join(cols)}) FROM STDIN WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\N')",
-                    csv_buffer
-                )
+                cursor.copy_from(buf, 'competitive_pricing',
+                                 columns=cols, sep='\t', null='\\N')
                 raw_conn.commit()
             finally:
                 raw_conn.close()
