@@ -665,19 +665,29 @@
            Init
            ============================================================ */
         async function init() {
-            const res = await fetch('/brand-portal/brands');
-            const brands = await res.json();
             const sel = document.getElementById('brand-selector');
-            sel.innerHTML = '<option value="">-- Select Brand --</option>';
-            brands.forEach(b => {
-                sel.innerHTML += `<option value="${b.brand}">${b.brand} (${b.sku_count} SKUs)</option>`;
-            });
+            try {
+                const res = await fetch('/brand-portal/brands');
+                if (!res.ok) throw new Error(`API returned ${res.status}`);
+                const brands = await res.json();
+                if (!brands.length) {
+                    sel.innerHTML = '<option value="">No brands available</option>';
+                    return;
+                }
+                sel.innerHTML = '<option value="">-- Select Brand --</option>';
+                brands.forEach(b => {
+                    sel.innerHTML += `<option value="${b.brand}">${b.brand} (${b.sku_count} SKUs)</option>`;
+                });
 
-            // Auto-select from URL param
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('brand')) {
-                sel.value = params.get('brand');
-                onBrandChange();
+                // Auto-select from URL param
+                const params = new URLSearchParams(window.location.search);
+                if (params.get('brand')) {
+                    sel.value = params.get('brand');
+                    onBrandChange();
+                }
+            } catch (err) {
+                console.error('Brand portal init failed:', err);
+                sel.innerHTML = '<option value="">Failed to load brands</option>';
             }
         }
         init();

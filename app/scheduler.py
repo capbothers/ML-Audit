@@ -21,6 +21,20 @@ settings = get_settings()
 scheduler = AsyncIOScheduler()
 _stale_recovery_lock = asyncio.Lock()
 
+# Limit concurrent sync jobs to 2 — even on Professional (4GB) plan,
+# 17+ jobs firing simultaneously after a deploy will OOM.
+_sync_semaphore = asyncio.Semaphore(2)
+
+
+def _guarded(sync_fn):
+    """Wrap a sync coroutine so it acquires the concurrency semaphore."""
+    async def wrapper():
+        async with _sync_semaphore:
+            await sync_fn()
+    wrapper.__name__ = sync_fn.__name__
+    wrapper.__qualname__ = sync_fn.__qualname__
+    return wrapper
+
 
 def _extract_sync_counts(result: dict) -> tuple:
     """Extract (records_created, records_updated) from a connector result dict.
@@ -160,7 +174,8 @@ async def sync_stale_connectors():
 
             log.warning(f"Stale recovery: triggering {source} sync ({lag_display})")
             try:
-                await sync_map[source]()
+                async with _sync_semaphore:
+                    await sync_map[source]()
             except Exception as e:
                 log.error(f"Stale recovery failed for {source}: {str(e)}")
 
@@ -648,7 +663,7 @@ def setup_scheduler():
     Configure and start the scheduler.
 
     All cron times are Australia/Sydney (AEST/AEDT).
-    Render Professional plan (4GB RAM) — syncs can run concurrently.
+    Render Professional plan (4GB RAM) — max 2 concurrent syncs via semaphore.
 
     Sync Frequencies:
     - Shopify orders:     Every 2 hours (orders + order_items for COGS/P&L)
@@ -673,7 +688,7 @@ def setup_scheduler():
 
     # ── Shopify ──────────────────────────────────────────
     scheduler.add_job(
-        sync_shopify,
+        _guarded(sync_shopify),
         trigger=IntervalTrigger(hours=2),
         id='shopify_sync',
         name='Shopify Orders & Items Sync',
@@ -682,7 +697,7 @@ def setup_scheduler():
         misfire_grace_time=INTERVAL_GRACE,
     )
     scheduler.add_job(
-        sync_shopify_full,
+        _guarded(sync_shopify_full),
         trigger=CronTrigger(hour=1, minute=0, timezone=SYDNEY_TZ),
         id='shopify_full_sync',
         name='Shopify Full Sync (with products)',
@@ -694,7 +709,7 @@ def setup_scheduler():
     # ── Google Ads ───────────────────────────────────────
     if settings.google_ads_sheet_id:
         scheduler.add_job(
-            sync_google_ads_sheet,
+            _guarded(sync_google_ads_sheet),
             trigger=CronTrigger(hour=6, minute=0, timezone=SYDNEY_TZ),
             id='google_ads_sheet_sync',
             name='Google Ads Sheet Daily Import',
@@ -704,7 +719,7 @@ def setup_scheduler():
         )
     else:
         scheduler.add_job(
-            sync_google_ads,
+            _guarded(sync_google_ads),
             trigger=IntervalTrigger(hours=1),
             id='google_ads_api_sync',
             name='Google Ads API Hourly Sync',
@@ -715,7 +730,7 @@ def setup_scheduler():
 
     # ── Cost Sheet (NETT Master) ─────────────────────────
     scheduler.add_job(
-        sync_cost_sheet,
+        _guarded(sync_cost_sheet),
         trigger=CronTrigger(hour=4, minute=30, timezone=SYDNEY_TZ),
         id='cost_sheet_sync',
         name='Cost Sheet Daily Sync',
@@ -726,7 +741,7 @@ def setup_scheduler():
 
     # ── GA4 ──────────────────────────────────────────────
     scheduler.add_job(
-        sync_ga4,
+        _guarded(sync_ga4),
         trigger=CronTrigger(hour=4, minute=0, timezone=SYDNEY_TZ),
         id='ga4_sync_morning',
         name='GA4 Morning Sync',
@@ -735,7 +750,7 @@ def setup_scheduler():
         misfire_grace_time=CRON_GRACE,
     )
     scheduler.add_job(
-        sync_ga4,
+        _guarded(sync_ga4),
         trigger=CronTrigger(hour=16, minute=0, timezone=SYDNEY_TZ),
         id='ga4_sync_afternoon',
         name='GA4 Afternoon Sync',
@@ -746,7 +761,7 @@ def setup_scheduler():
 
     # ── Search Console ───────────────────────────────────
     scheduler.add_job(
-        sync_search_console,
+        _guarded(sync_search_console),
         trigger=CronTrigger(hour=5, minute=0, timezone=SYDNEY_TZ),
         id='search_console_sync',
         name='Search Console Daily Sync',
@@ -757,7 +772,7 @@ def setup_scheduler():
 
     # ── Merchant Center ──────────────────────────────────
     scheduler.add_job(
-        sync_merchant_center,
+        _guarded(sync_merchant_center),
         trigger=CronTrigger(hour=2, minute=0, timezone=SYDNEY_TZ),
         id='merchant_center_sync',
         name='Merchant Center Daily Sync',
@@ -768,7 +783,7 @@ def setup_scheduler():
 
     # ── Klaviyo ──────────────────────────────────────────
     scheduler.add_job(
-        sync_klaviyo,
+        _guarded(sync_klaviyo),
         trigger=IntervalTrigger(hours=1),
         id='klaviyo_sync',
         name='Klaviyo Hourly Sync',
@@ -779,7 +794,7 @@ def setup_scheduler():
 
     # ── Hotjar/Clarity ───────────────────────────────────
     scheduler.add_job(
-        sync_hotjar,
+        _guarded(sync_hotjar),
         trigger=CronTrigger(hour=6, minute=30, timezone=SYDNEY_TZ),
         id='hotjar_sync',
         name='Hotjar/Clarity Daily Sync',
@@ -790,7 +805,7 @@ def setup_scheduler():
 
     # ── GitHub ───────────────────────────────────────────
     scheduler.add_job(
-        sync_github,
+        _guarded(sync_github),
         trigger=CronTrigger(hour=7, minute=0, timezone=SYDNEY_TZ),
         id='github_sync',
         name='GitHub Daily Sync',
@@ -801,7 +816,7 @@ def setup_scheduler():
 
     # ── ML Intelligence ──────────────────────────────────
     scheduler.add_job(
-        run_ml_intelligence,
+        _guarded(run_ml_intelligence),
         trigger=CronTrigger(hour=3, minute=0, timezone=SYDNEY_TZ),
         id='ml_intelligence',
         name='ML Intelligence Daily Pipeline',
@@ -812,7 +827,7 @@ def setup_scheduler():
 
     # ── Caprice Pricing ──────────────────────────────────
     scheduler.add_job(
-        sync_caprice_pricing,
+        _guarded(sync_caprice_pricing),
         trigger=CronTrigger(hour=13, minute=0, timezone=SYDNEY_TZ),
         id='caprice_pricing_import',
         name='Caprice Pricing Daily Import',
@@ -824,7 +839,7 @@ def setup_scheduler():
     # ── Shippit ────────────────────────────────────────────
     if settings.shippit_api_key:
         scheduler.add_job(
-            sync_shippit,
+            _guarded(sync_shippit),
             trigger=IntervalTrigger(hours=6),
             id='shippit_sync',
             name='Shippit Shipping Cost Sync',
@@ -835,7 +850,7 @@ def setup_scheduler():
 
     # ── Competitor Blogs ─────────────────────────────────
     scheduler.add_job(
-        sync_competitor_blogs,
+        _guarded(sync_competitor_blogs),
         trigger=CronTrigger(hour=7, minute=30, timezone=SYDNEY_TZ),
         id='competitor_blogs_sync',
         name='Competitor Blog Daily Scrape',
@@ -846,7 +861,7 @@ def setup_scheduler():
 
     # ── Decision Outcome Scoring ──────────────────────────
     scheduler.add_job(
-        score_decision_outcomes_7d,
+        _guarded(score_decision_outcomes_7d),
         trigger=CronTrigger(hour=4, minute=0, timezone=SYDNEY_TZ),
         id='decision_outcomes_7d',
         name='Score 7-Day Decision Outcomes',
@@ -855,7 +870,7 @@ def setup_scheduler():
         misfire_grace_time=CRON_GRACE,
     )
     scheduler.add_job(
-        score_decision_outcomes_30d,
+        _guarded(score_decision_outcomes_30d),
         trigger=CronTrigger(hour=4, minute=15, timezone=SYDNEY_TZ),
         id='decision_outcomes_30d',
         name='Score 30-Day Decision Outcomes',

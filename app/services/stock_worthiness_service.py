@@ -58,10 +58,12 @@ class StockWorthinessService:
         )
         return pc_cost, inv_cost
 
-    def _has_offline_snapshot_data(self) -> bool:
-        """Offline inference requires at least two distinct snapshot days."""
+    def _has_offline_snapshot_data(self, days: int = 30) -> bool:
+        """Offline inference requires at least two distinct snapshot days in window."""
+        cutoff = date.today() - timedelta(days=days)
         snapshot_day_count = (
             self.db.query(func.count(func.distinct(InventoryDailySnapshot.snapshot_date)))
+            .filter(InventoryDailySnapshot.snapshot_date >= cutoff)
             .scalar()
         ) or 0
         return snapshot_day_count >= 2
@@ -113,10 +115,15 @@ class StockWorthinessService:
             .group_by(func.upper(ShopifyOrderItem.sku), func.date(ShopifyOrderItem.order_date))
             .all()
         )
-        online_by_day: Dict[tuple, float] = {
-            (r.sku_upper, r.order_day): float(r.qty or 0)
-            for r in online_rows
-        }
+        online_by_day: Dict[tuple, float] = {}
+        for r in online_rows:
+            order_day = r.order_day
+            if isinstance(order_day, str):
+                try:
+                    order_day = date.fromisoformat(order_day)
+                except ValueError:
+                    continue
+            online_by_day[(r.sku_upper, order_day)] = float(r.qty or 0)
 
         offline_map: Dict[str, float] = {sku: 0.0 for sku in sku_set}
         prev_by_sku: Dict[str, Any] = {}
@@ -268,7 +275,7 @@ class StockWorthinessService:
         vel7_map = {r.sku_upper: float(r.units_sold_7d or 0) / 7.0 for r in sales_7d}
 
         # 4b. Offline movement inferred from snapshot depletion (showrooms/counter)
-        offline_data_available = self._has_offline_snapshot_data()
+        offline_data_available = self._has_offline_snapshot_data(days=30)
         offline_30_map: Dict[str, float] = {}
         offline_7_map: Dict[str, float] = {}
         if offline_data_available:
@@ -477,7 +484,7 @@ class StockWorthinessService:
         # Fetch ALL rows for accurate KPI aggregation
         rows = base_q.all()
 
-        offline_data_available = self._has_offline_snapshot_data()
+        offline_data_available = self._has_offline_snapshot_data(days=30)
         offline_30_map: Dict[str, float] = {}
         if offline_data_available:
             offline_30_map = self._compute_offline_units_map(
@@ -580,7 +587,7 @@ class StockWorthinessService:
             sparkline.append({"date": d, **entry})
 
         # Offline movement inferred from inventory snapshots
-        offline_data_available = self._has_offline_snapshot_data()
+        offline_data_available = self._has_offline_snapshot_data(days=30)
         offline_30 = 0.0
         offline_7 = 0.0
         if offline_data_available:
