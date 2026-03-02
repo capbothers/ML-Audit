@@ -6,7 +6,7 @@ Uses APScheduler to run connector syncs at optimal intervals.
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import asyncio
 from typing import Optional
@@ -21,6 +21,7 @@ SYDNEY_TZ = ZoneInfo("Australia/Sydney")
 
 settings = get_settings()
 scheduler = AsyncIOScheduler()
+_stale_recovery_lock = asyncio.Lock()
 
 
 def _extract_sync_counts(result: dict) -> tuple:
@@ -96,14 +97,90 @@ async def sync_google_ads():
             pass
 
 
+async def sync_stale_connectors():
+    """
+    Catch-up guardrail for critical sources if regular schedule windows were missed.
+
+    This is especially important when the app sleeps/restarts and cron windows pass.
+    """
+    from app.models.base import SessionLocal
+    from app.models.data_quality import DataSyncStatus
+
+    if _stale_recovery_lock.locked():
+        log.info("Stale connector recovery already running, skipping overlapping run")
+        return
+
+    thresholds_hours = {
+        "shopify": 12,
+        "ga4": 96,
+        "search_console": 120,
+        "merchant_center": 72,
+        "google_ads": 72,
+    }
+
+    google_ads_sync_fn = sync_google_ads_sheet if settings.google_ads_sheet_id else sync_google_ads
+    sync_map = {
+        "shopify": sync_shopify,
+        "ga4": sync_ga4,
+        "search_console": sync_search_console,
+        "merchant_center": sync_merchant_center,
+        "google_ads": google_ads_sync_fn,
+    }
+
+    async with _stale_recovery_lock:
+        import gc
+
+        db = SessionLocal()
+        try:
+            statuses = db.query(DataSyncStatus).filter(
+                DataSyncStatus.source_name.in_(list(thresholds_hours.keys()))
+            ).all()
+            by_source = {s.source_name: s for s in statuses}
+        finally:
+            db.close()
+
+        now = datetime.utcnow()
+        stale_sources = []
+        for source, threshold in thresholds_hours.items():
+            status = by_source.get(source)
+            last_success = status.last_successful_sync if status else None
+            lag_hours = ((now - last_success).total_seconds() / 3600.0) if last_success else None
+
+            if lag_hours is not None and lag_hours <= threshold:
+                continue
+            stale_sources.append(source)
+
+        if not stale_sources:
+            return
+
+        log.warning(f"Stale recovery: {len(stale_sources)} sources need catch-up: {stale_sources}")
+
+        for source in stale_sources:
+            lag_display = "never synced"
+            status = by_source.get(source)
+            if status and status.last_successful_sync:
+                lag_hours = (now - status.last_successful_sync).total_seconds() / 3600.0
+                lag_display = f"{lag_hours:.1f}h stale"
+
+            log.warning(f"Stale recovery: triggering {source} sync ({lag_display})")
+            try:
+                await sync_map[source]()
+            except Exception as e:
+                log.error(f"Stale recovery failed for {source}: {str(e)}")
+
+            # Free memory between syncs to avoid OOM on Render free tier
+            gc.collect()
+            await asyncio.sleep(5)
+
+
 async def sync_ga4():
     """Sync GA4 data (twice daily) using DataSyncService"""
     from app.services.data_sync_service import DataSyncService
     try:
         log.info("Starting GA4 sync...")
         sync_service = DataSyncService()
-        # GA4 has 24-48h delay, sync last 5 days to cover weekends and late processing
-        result = await sync_service.sync_ga4(days=5)
+        # GA4 has 24-48h delay, sync last 3 days (keeps memory low on Render free tier)
+        result = await sync_service.sync_ga4(days=3)
 
         if result.get('success'):
             log.info(
@@ -583,6 +660,7 @@ def setup_scheduler():
     - Shopify orders:     Every 2 hours (orders + order_items for COGS/P&L)
     - Shopify full:       Daily 1:00am  (includes products/variants catalog)
     - Google Ads (Sheet): Daily 6:00am  (campaign + product data from Google Sheets)
+      OR Google Ads API:  Every hour    (when sheet mode is not configured)
     - Cost Sheet (NETT):  Daily 4:30am  (product costs from Google Sheets)
     - GA4:                4:00am + 4:00pm (5-day window covers data delay)
     - Search Console:     Daily 5:00am  (has 2-3 day delay)
@@ -597,8 +675,8 @@ def setup_scheduler():
     # misfire_grace_time: when the app wakes from Render free-tier sleep,
     # any job whose scheduled time was missed within this window will fire
     # immediately instead of being skipped.
-    CRON_GRACE = 6 * 3600       # 6 hours — covers overnight sleep
-    INTERVAL_GRACE = 4 * 3600   # 4 hours — generous for interval jobs
+    CRON_GRACE = 30 * 3600      # 30 hours — catches missed daily windows across restarts/sleep
+    INTERVAL_GRACE = 24 * 3600  # 24 hours — catch up interval jobs after downtime
 
     # ── Shopify ──────────────────────────────────────────
     # Orders only - every 2 hours
@@ -623,16 +701,28 @@ def setup_scheduler():
     )
 
     # ── Google Ads ───────────────────────────────────────
-    # Sheet import - daily at 6am AEST
-    scheduler.add_job(
-        sync_google_ads_sheet,
-        trigger=CronTrigger(hour=6, minute=0, timezone=SYDNEY_TZ),
-        id='google_ads_sheet_sync',
-        name='Google Ads Sheet Daily Import',
-        replace_existing=True,
-        max_instances=1,
-        misfire_grace_time=CRON_GRACE,
-    )
+    if settings.google_ads_sheet_id:
+        # Sheet import - daily at 6am AEST
+        scheduler.add_job(
+            sync_google_ads_sheet,
+            trigger=CronTrigger(hour=6, minute=0, timezone=SYDNEY_TZ),
+            id='google_ads_sheet_sync',
+            name='Google Ads Sheet Daily Import',
+            replace_existing=True,
+            max_instances=1,
+            misfire_grace_time=CRON_GRACE,
+        )
+    else:
+        # API sync - hourly when sheet mode is not configured
+        scheduler.add_job(
+            sync_google_ads,
+            trigger=IntervalTrigger(hours=1),
+            id='google_ads_api_sync',
+            name='Google Ads API Hourly Sync',
+            replace_existing=True,
+            max_instances=1,
+            misfire_grace_time=INTERVAL_GRACE,
+        )
 
     # ── Cost Sheet (NETT Master) ─────────────────────────
     # Daily at 4:30am AEST
@@ -798,6 +888,19 @@ def setup_scheduler():
         misfire_grace_time=CRON_GRACE,
     )
 
+    # ── Catch-up Guardrail ───────────────────────────────
+    # Every 3 hours, detect stale critical sources and trigger catch-up syncs.
+    scheduler.add_job(
+        sync_stale_connectors,
+        trigger=IntervalTrigger(hours=3),
+        id='stale_recovery_sync',
+        name='Stale Connector Recovery',
+        replace_existing=True,
+        max_instances=1,
+        next_run_time=datetime.now(SYDNEY_TZ) + timedelta(minutes=5),
+        misfire_grace_time=INTERVAL_GRACE,
+    )
+
     log.info("Scheduler configured with all sync jobs (timezone: Australia/Sydney)")
 
 
@@ -806,6 +909,10 @@ def start_scheduler():
     setup_scheduler()
     scheduler.start()
     log.info("Scheduler started")
+    try:
+        asyncio.get_running_loop().create_task(sync_stale_connectors())
+    except Exception as e:
+        log.warning(f"Could not enqueue startup stale-recovery run: {str(e)}")
 
 
 def stop_scheduler():
