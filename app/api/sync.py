@@ -1005,46 +1005,31 @@ async def upload_caprice_file(file: UploadFile = File(...)):
         rows_inserted = len(df)
 
         if 'postgresql' in db_url or 'postgres' in db_url:
-            # PostgreSQL: use COPY FROM STDIN via psycopg2 (16K rows in ~2s)
-            # Build text-format data manually (tab-delimited, \N for NULL,
-            # backslash escaping for special chars).
-            import io
-            cols = list(df.columns)
+            # PostgreSQL: use execute_values for fast bulk INSERT
+            # (COPY FROM STDIN was silently dropping competitor price columns)
+            from psycopg2.extras import execute_values
 
-            buf = io.StringIO()
+            cols = list(df.columns)
+            # Convert DataFrame to list of tuples with None for NaN
+            values = []
             for row in df.values:
-                parts = []
-                for val in row:
-                    if pd.isna(val):
-                        parts.append('\\N')
-                    else:
-                        s = str(val)
-                        s = (s.replace('\\', '\\\\')
-                              .replace('\t', '\\t')
-                              .replace('\n', '\\n')
-                              .replace('\r', '\\r'))
-                        parts.append(s)
-                buf.write('\t'.join(parts) + '\n')
-            buf.seek(0)
+                values.append(tuple(
+                    None if pd.isna(v) else
+                    int(v) if isinstance(v, (int,)) else
+                    float(v) if hasattr(v, '__float__') and not isinstance(v, str) else
+                    v
+                    for v in row
+                ))
+
+            col_list = ','.join(cols)
+            sql = f"INSERT INTO competitive_pricing ({col_list}) VALUES %s"
 
             raw_conn = engine.raw_connection()
             try:
                 cursor = raw_conn.cursor()
-                log.info(f"Caprice upload: copy_from with {len(cols)} columns: {cols[:5]}...{cols[-5:]}")
-                cursor.copy_from(buf, 'competitive_pricing',
-                                 columns=cols, sep='\t', null='\\N')
+                execute_values(cursor, sql, values, page_size=500)
                 raw_conn.commit()
-
-                # Verify data was written with competitor prices
-                cursor.execute(
-                    "SELECT variant_sku, rrp, price_8appliances, price_buildmat, price_harveynorman "
-                    "FROM competitive_pricing WHERE pricing_date = %s AND price_8appliances IS NOT NULL "
-                    "LIMIT 3", (str(pricing_date),)
-                )
-                verify_rows = cursor.fetchall()
-                log.info(f"Caprice upload: verify after COPY — {len(verify_rows)} rows have price_8appliances")
-                for vr in verify_rows:
-                    log.info(f"  verify: sku={vr[0]}, rrp={vr[1]}, 8appl={vr[2]}, buildmat={vr[3]}, harvey={vr[4]}")
+                log.info(f"Caprice upload: execute_values inserted {len(values)} rows")
             finally:
                 raw_conn.close()
         else:
