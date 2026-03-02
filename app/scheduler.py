@@ -12,8 +12,6 @@ import asyncio
 from typing import Optional
 import time
 
-# Lazy imports: connectors and heavy services are imported inside job functions
-# to avoid loading everything at startup (saves ~50MB on Render free tier).
 from app.config import get_settings
 from app.utils.logger import log
 
@@ -22,25 +20,6 @@ SYDNEY_TZ = ZoneInfo("Australia/Sydney")
 settings = get_settings()
 scheduler = AsyncIOScheduler()
 _stale_recovery_lock = asyncio.Lock()
-
-# Global sync lock — only one sync job runs at a time on Render free tier (512MB).
-# Without this, overlapping syncs stack memory and cause OOM crashes.
-_sync_lock = asyncio.Lock()
-
-
-async def _guarded_sync(name: str, coro_fn):
-    """Run a sync function under the global lock with gc.collect() after."""
-    import gc
-    if _sync_lock.locked():
-        log.info(f"Skipping {name} — another sync is already running")
-        return
-    async with _sync_lock:
-        log.info(f"[sync-guard] Starting {name}")
-        try:
-            await coro_fn()
-        finally:
-            gc.collect()
-            log.info(f"[sync-guard] Finished {name}, memory freed")
 
 
 def _extract_sync_counts(result: dict) -> tuple:
@@ -129,14 +108,12 @@ async def sync_stale_connectors():
         log.info("Stale connector recovery already running, skipping overlapping run")
         return
 
-    # Thresholds: if a source hasn't synced within this many hours, trigger catch-up.
-    # GA4 included with generous threshold — it syncs with days=3 which is manageable.
     thresholds_hours = {
-        "shopify": 12,
-        "ga4": 48,
-        "search_console": 48,
-        "merchant_center": 48,
-        "google_ads": 48,
+        "shopify": 6,
+        "ga4": 24,
+        "search_console": 24,
+        "merchant_center": 24,
+        "google_ads": 24,
     }
 
     google_ads_sync_fn = sync_google_ads_sheet if settings.google_ads_sheet_id else sync_google_ads
@@ -149,8 +126,6 @@ async def sync_stale_connectors():
     }
 
     async with _stale_recovery_lock:
-        import gc
-
         db = SessionLocal()
         try:
             statuses = db.query(DataSyncStatus).filter(
@@ -183,23 +158,11 @@ async def sync_stale_connectors():
                 lag_hours = (now - status.last_successful_sync).total_seconds() / 3600.0
                 lag_display = f"{lag_hours:.1f}h stale"
 
-            # Acquire the global sync lock so we don't overlap with a cron job
-            if _sync_lock.locked():
-                log.info(f"Stale recovery: waiting for global sync lock before {source}...")
-                async with _sync_lock:
-                    pass  # just waited for previous sync to finish
-                gc.collect()
-
             log.warning(f"Stale recovery: triggering {source} sync ({lag_display})")
             try:
-                async with _sync_lock:
-                    await sync_map[source]()
+                await sync_map[source]()
             except Exception as e:
                 log.error(f"Stale recovery failed for {source}: {str(e)}")
-
-            # Free memory between syncs to avoid OOM on Render free tier
-            gc.collect()
-            await asyncio.sleep(5)
 
 
 async def sync_ga4():
@@ -677,28 +640,6 @@ async def score_decision_outcomes_30d():
         log.error(f"Decision outcome scoring (30d) error: {str(e)}")
 
 
-# ── Guarded wrappers — scheduler calls these, not the raw sync functions ──
-# Each wrapper acquires the global _sync_lock so only one sync runs at a time.
-
-async def _g_shopify():        await _guarded_sync("shopify", sync_shopify)
-async def _g_shopify_full():   await _guarded_sync("shopify_full", sync_shopify_full)
-async def _g_ga4():            await _guarded_sync("ga4", sync_ga4)
-async def _g_search_console(): await _guarded_sync("search_console", sync_search_console)
-async def _g_merchant_center():await _guarded_sync("merchant_center", sync_merchant_center)
-async def _g_klaviyo():        await _guarded_sync("klaviyo", sync_klaviyo)
-async def _g_hotjar():         await _guarded_sync("hotjar", sync_hotjar)
-async def _g_github():         await _guarded_sync("github", sync_github)
-async def _g_ml():             await _guarded_sync("ml_intelligence", run_ml_intelligence)
-async def _g_caprice():        await _guarded_sync("caprice", sync_caprice_pricing)
-async def _g_shippit():        await _guarded_sync("shippit", sync_shippit)
-async def _g_blogs():          await _guarded_sync("competitor_blogs", sync_competitor_blogs)
-async def _g_cost_sheet():     await _guarded_sync("cost_sheet", sync_cost_sheet)
-async def _g_google_ads():     await _guarded_sync("google_ads", sync_google_ads)
-async def _g_google_ads_sheet(): await _guarded_sync("google_ads_sheet", sync_google_ads_sheet)
-async def _g_score_7d():       await _guarded_sync("score_7d", score_decision_outcomes_7d)
-async def _g_score_30d():      await _guarded_sync("score_30d", score_decision_outcomes_30d)
-
-
 # Schedule Configuration
 
 def setup_scheduler():
@@ -706,6 +647,7 @@ def setup_scheduler():
     Configure and start the scheduler.
 
     All cron times are Australia/Sydney (AEST/AEDT).
+    Render Professional plan (4GB RAM) — syncs can run concurrently.
 
     Sync Frequencies:
     - Shopify orders:     Every 2 hours (orders + order_items for COGS/P&L)
@@ -713,7 +655,7 @@ def setup_scheduler():
     - Google Ads (Sheet): Daily 6:00am  (campaign + product data from Google Sheets)
       OR Google Ads API:  Every hour    (when sheet mode is not configured)
     - Cost Sheet (NETT):  Daily 4:30am  (product costs from Google Sheets)
-    - GA4:                4:00am + 4:00pm (5-day window covers data delay)
+    - GA4:                4:00am + 4:00pm (covers data processing delay)
     - Search Console:     Daily 5:00am  (has 2-3 day delay)
     - Merchant Center:    Daily 2:00am  (product feed health)
     - Klaviyo:            Every hour    (campaign performance)
@@ -723,228 +665,218 @@ def setup_scheduler():
     - Caprice Pricing:    Daily 1:00pm  (pricing file import)
     """
 
-    # ── Memory-safe scheduling for Render free tier (512MB) ──
-    #
-    # Key design decisions:
-    # 1. All jobs use _g_* guarded wrappers — global lock ensures only ONE sync at a time
-    # 2. Cron jobs: misfire_grace_time=NONE (0) — if the window was missed, skip it and
-    #    wait for the next scheduled run. This prevents ALL daily jobs from firing at once
-    #    after a restart/sleep.
-    # 3. Interval jobs: deferred start (next_run_time) so they don't fire immediately on boot
-    # 4. Stale recovery handles catch-up for critical sources (shopify, search_console, etc.)
-    #
-    now = datetime.now(SYDNEY_TZ)
+    # misfire_grace_time: if a scheduled window was missed (e.g. during a deploy),
+    # fire the job immediately if it's within this grace window.
+    CRON_GRACE = 4 * 3600       # 4 hours — catch up missed daily jobs after deploy
+    INTERVAL_GRACE = 2 * 3600   # 2 hours
 
     # ── Shopify ──────────────────────────────────────────
-    # Orders only - every 2 hours (first run 10min after startup)
     scheduler.add_job(
-        _g_shopify,
+        sync_shopify,
         trigger=IntervalTrigger(hours=2),
         id='shopify_sync',
         name='Shopify Orders & Items Sync',
         replace_existing=True,
         max_instances=1,
-        next_run_time=now + timedelta(minutes=10),
+        misfire_grace_time=INTERVAL_GRACE,
     )
-    # Full sync (with products) - daily at 1am AEST
     scheduler.add_job(
-        _g_shopify_full,
+        sync_shopify_full,
         trigger=CronTrigger(hour=1, minute=0, timezone=SYDNEY_TZ),
         id='shopify_full_sync',
         name='Shopify Full Sync (with products)',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Google Ads ───────────────────────────────────────
     if settings.google_ads_sheet_id:
-        # Sheet import - daily at 6am AEST
         scheduler.add_job(
-            _g_google_ads_sheet,
+            sync_google_ads_sheet,
             trigger=CronTrigger(hour=6, minute=0, timezone=SYDNEY_TZ),
             id='google_ads_sheet_sync',
             name='Google Ads Sheet Daily Import',
             replace_existing=True,
             max_instances=1,
+            misfire_grace_time=CRON_GRACE,
         )
     else:
-        # API sync - every 2 hours (first run 20min after startup)
         scheduler.add_job(
-            _g_google_ads,
-            trigger=IntervalTrigger(hours=2),
+            sync_google_ads,
+            trigger=IntervalTrigger(hours=1),
             id='google_ads_api_sync',
-            name='Google Ads API Sync',
+            name='Google Ads API Hourly Sync',
             replace_existing=True,
             max_instances=1,
-            next_run_time=now + timedelta(minutes=20),
+            misfire_grace_time=INTERVAL_GRACE,
         )
 
     # ── Cost Sheet (NETT Master) ─────────────────────────
-    # Daily at 4:30am AEST
     scheduler.add_job(
-        _g_cost_sheet,
+        sync_cost_sheet,
         trigger=CronTrigger(hour=4, minute=30, timezone=SYDNEY_TZ),
         id='cost_sheet_sync',
         name='Cost Sheet Daily Sync',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── GA4 ──────────────────────────────────────────────
-    # Twice daily: 4am and 4pm AEST
     scheduler.add_job(
-        _g_ga4,
+        sync_ga4,
         trigger=CronTrigger(hour=4, minute=0, timezone=SYDNEY_TZ),
         id='ga4_sync_morning',
         name='GA4 Morning Sync',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
     scheduler.add_job(
-        _g_ga4,
+        sync_ga4,
         trigger=CronTrigger(hour=16, minute=0, timezone=SYDNEY_TZ),
         id='ga4_sync_afternoon',
         name='GA4 Afternoon Sync',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Search Console ───────────────────────────────────
-    # Daily at 5am AEST
     scheduler.add_job(
-        _g_search_console,
+        sync_search_console,
         trigger=CronTrigger(hour=5, minute=0, timezone=SYDNEY_TZ),
         id='search_console_sync',
         name='Search Console Daily Sync',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Merchant Center ──────────────────────────────────
-    # Daily at 2am AEST
     scheduler.add_job(
-        _g_merchant_center,
+        sync_merchant_center,
         trigger=CronTrigger(hour=2, minute=0, timezone=SYDNEY_TZ),
         id='merchant_center_sync',
         name='Merchant Center Daily Sync',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Klaviyo ──────────────────────────────────────────
-    # Every 2 hours (first run 30min after startup)
     scheduler.add_job(
-        _g_klaviyo,
-        trigger=IntervalTrigger(hours=2),
+        sync_klaviyo,
+        trigger=IntervalTrigger(hours=1),
         id='klaviyo_sync',
-        name='Klaviyo Sync',
+        name='Klaviyo Hourly Sync',
         replace_existing=True,
         max_instances=1,
-        next_run_time=now + timedelta(minutes=30),
+        misfire_grace_time=INTERVAL_GRACE,
     )
 
     # ── Hotjar/Clarity ───────────────────────────────────
-    # Daily at 6:30am AEST
     scheduler.add_job(
-        _g_hotjar,
+        sync_hotjar,
         trigger=CronTrigger(hour=6, minute=30, timezone=SYDNEY_TZ),
         id='hotjar_sync',
         name='Hotjar/Clarity Daily Sync',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── GitHub ───────────────────────────────────────────
-    # Daily at 7am AEST
     scheduler.add_job(
-        _g_github,
+        sync_github,
         trigger=CronTrigger(hour=7, minute=0, timezone=SYDNEY_TZ),
         id='github_sync',
         name='GitHub Daily Sync',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── ML Intelligence ──────────────────────────────────
-    # Daily at 3am AEST (after overnight data syncs complete)
     scheduler.add_job(
-        _g_ml,
+        run_ml_intelligence,
         trigger=CronTrigger(hour=3, minute=0, timezone=SYDNEY_TZ),
         id='ml_intelligence',
         name='ML Intelligence Daily Pipeline',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Caprice Pricing ──────────────────────────────────
-    # Daily at 1pm AEST
     scheduler.add_job(
-        _g_caprice,
+        sync_caprice_pricing,
         trigger=CronTrigger(hour=13, minute=0, timezone=SYDNEY_TZ),
         id='caprice_pricing_import',
         name='Caprice Pricing Daily Import',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Shippit ────────────────────────────────────────────
-    # Every 6 hours (first run 40min after startup)
     if settings.shippit_api_key:
         scheduler.add_job(
-            _g_shippit,
+            sync_shippit,
             trigger=IntervalTrigger(hours=6),
             id='shippit_sync',
             name='Shippit Shipping Cost Sync',
             replace_existing=True,
             max_instances=1,
-            next_run_time=now + timedelta(minutes=40),
+            misfire_grace_time=INTERVAL_GRACE,
         )
 
     # ── Competitor Blogs ─────────────────────────────────
-    # Daily at 7:30am AEST (after main syncs, before work day)
     scheduler.add_job(
-        _g_blogs,
+        sync_competitor_blogs,
         trigger=CronTrigger(hour=7, minute=30, timezone=SYDNEY_TZ),
         id='competitor_blogs_sync',
         name='Competitor Blog Daily Scrape',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Decision Outcome Scoring ──────────────────────────
-    # Daily at 4am AEST: score 7-day outcomes
     scheduler.add_job(
-        _g_score_7d,
+        score_decision_outcomes_7d,
         trigger=CronTrigger(hour=4, minute=0, timezone=SYDNEY_TZ),
         id='decision_outcomes_7d',
         name='Score 7-Day Decision Outcomes',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
-    # Daily at 4:15am AEST: score 30-day outcomes
     scheduler.add_job(
-        _g_score_30d,
+        score_decision_outcomes_30d,
         trigger=CronTrigger(hour=4, minute=15, timezone=SYDNEY_TZ),
         id='decision_outcomes_30d',
         name='Score 30-Day Decision Outcomes',
         replace_existing=True,
         max_instances=1,
+        misfire_grace_time=CRON_GRACE,
     )
 
     # ── Catch-up Guardrail ───────────────────────────────
-    # Every 4 hours, detect stale critical sources and trigger catch-up syncs.
-    # First run 20 minutes after startup to let the app stabilize.
+    # Every 3 hours, detect stale critical sources and trigger catch-up syncs.
+    # First run 5 minutes after startup.
     scheduler.add_job(
         sync_stale_connectors,
-        trigger=IntervalTrigger(hours=4),
+        trigger=IntervalTrigger(hours=3),
         id='stale_recovery_sync',
         name='Stale Connector Recovery',
         replace_existing=True,
         max_instances=1,
-        next_run_time=now + timedelta(minutes=20),
+        next_run_time=datetime.now(SYDNEY_TZ) + timedelta(minutes=5),
     )
 
-    log.info("Scheduler configured — all jobs use global sync lock (one-at-a-time)")
+    log.info("Scheduler configured with all sync jobs (timezone: Australia/Sydney)")
 
 
 def start_scheduler():
