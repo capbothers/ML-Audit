@@ -129,19 +129,20 @@ async def sync_stale_connectors():
         log.info("Stale connector recovery already running, skipping overlapping run")
         return
 
-    # GA4 excluded from stale recovery — it's too memory-heavy for catch-up
-    # on Render free tier (512MB). GA4 will still sync on its regular cron
-    # schedule (4am + 4pm AEST).
+    # Thresholds: if a source hasn't synced within this many hours, trigger catch-up.
+    # GA4 included with generous threshold — it syncs with days=3 which is manageable.
     thresholds_hours = {
         "shopify": 12,
-        "search_console": 120,
-        "merchant_center": 72,
-        "google_ads": 72,
+        "ga4": 48,
+        "search_console": 48,
+        "merchant_center": 48,
+        "google_ads": 48,
     }
 
     google_ads_sync_fn = sync_google_ads_sheet if settings.google_ads_sheet_id else sync_google_ads
     sync_map = {
         "shopify": sync_shopify,
+        "ga4": sync_ga4,
         "search_console": sync_search_console,
         "merchant_center": sync_merchant_center,
         "google_ads": google_ads_sync_fn,
@@ -182,9 +183,17 @@ async def sync_stale_connectors():
                 lag_hours = (now - status.last_successful_sync).total_seconds() / 3600.0
                 lag_display = f"{lag_hours:.1f}h stale"
 
+            # Acquire the global sync lock so we don't overlap with a cron job
+            if _sync_lock.locked():
+                log.info(f"Stale recovery: waiting for global sync lock before {source}...")
+                async with _sync_lock:
+                    pass  # just waited for previous sync to finish
+                gc.collect()
+
             log.warning(f"Stale recovery: triggering {source} sync ({lag_display})")
             try:
-                await sync_map[source]()
+                async with _sync_lock:
+                    await sync_map[source]()
             except Exception as e:
                 log.error(f"Stale recovery failed for {source}: {str(e)}")
 
