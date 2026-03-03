@@ -324,7 +324,7 @@ async def get_invite_config_status(current_user: User = Depends(_require_admin))
         "has_resend_api_key": bool(settings.resend_api_key),
         "invite_from_email": from_email,
         "invite_sender_domain": domain or None,
-        "app_base_url": settings.app_base_url,
+        "app_base_url": settings.effective_base_url,
         "notes": [
             "If sender domain is not 'resend.dev', it must be verified in Resend.",
             "If has_resend_api_key is false, set RESEND_API_KEY in your deployment environment.",

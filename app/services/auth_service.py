@@ -234,7 +234,7 @@ def send_invite_email(email: str, token: str) -> bool:
 
     resend.api_key = settings.resend_api_key
 
-    invite_url = f"{settings.app_base_url.rstrip('/')}/auth/accept-invite?token={token}"
+    invite_url = f"{settings.effective_base_url.rstrip('/')}/auth/accept-invite?token={token}"
 
     try:
         resend.Emails.send({

@@ -129,7 +129,17 @@ class Settings(BaseSettings):
     # User Invites (Resend email)
     resend_api_key: Optional[str] = None
     invite_from_email: str = "onboarding@resend.dev"
-    app_base_url: str = "http://localhost:8000"
+    app_base_url: str = ""  # Set via APP_BASE_URL or auto-detected from RENDER_EXTERNAL_URL
+    render_external_url: Optional[str] = None  # Auto-set by Render
+
+    @property
+    def effective_base_url(self) -> str:
+        """Return the best available base URL for email links etc."""
+        if self.app_base_url:
+            return self.app_base_url
+        if self.render_external_url:
+            return self.render_external_url
+        return "http://localhost:8000"
 
     # Dashboard Basic Auth (gate for the whole app)
     dash_user: str = ""
