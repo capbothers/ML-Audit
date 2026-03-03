@@ -111,6 +111,12 @@ DASHBOARDS: dict[str, DashboardDefinition] = {
         page_paths=("/caprice-upload",),
         api_prefixes=(),
     ),
+    "admin": DashboardDefinition(
+        key="admin",
+        label="Admin",
+        page_paths=("/admin",),
+        api_prefixes=(),
+    ),
 }
 
 ALL_DASHBOARD_KEYS = tuple(sorted(DASHBOARDS.keys()))

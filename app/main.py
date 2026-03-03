@@ -248,6 +248,12 @@ async def brand_portal_page():
     return FileResponse(os.path.join(static_dir, "brand_portal.html"))
 
 
+@app.get("/admin")
+async def admin_page():
+    """Serve the admin user management page"""
+    return FileResponse(os.path.join(static_dir, "admin.html"))
+
+
 @app.get("/")
 async def root():
     """Root endpoint with API information"""

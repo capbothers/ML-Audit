@@ -715,10 +715,11 @@ def setup_scheduler():
     - Caprice Pricing:    Daily 1:00pm  (pricing file import)
     """
 
-    # misfire_grace_time: if a scheduled window was missed (e.g. during a deploy),
-    # fire the job immediately if it's within this grace window.
-    CRON_GRACE = 4 * 3600       # 4 hours — catch up missed daily jobs after deploy
-    INTERVAL_GRACE = 2 * 3600   # 2 hours
+    # ── Startup cooldown ──────────────────────────────────
+    # Defer all interval jobs so they don't fire immediately on boot.
+    # Cron jobs only fire at their scheduled time (no misfire catch-up).
+    # Stale recovery handles any missed windows instead.
+    _boot = datetime.now(SYDNEY_TZ)
 
     # ── Shopify ──────────────────────────────────────────
     scheduler.add_job(
@@ -728,7 +729,8 @@ def setup_scheduler():
         name='Shopify Orders & Items Sync',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=INTERVAL_GRACE,
+        coalesce=True,
+        next_run_time=_boot + timedelta(minutes=20),
     )
     scheduler.add_job(
         _guarded(sync_shopify_full),
@@ -737,7 +739,7 @@ def setup_scheduler():
         name='Shopify Full Sync (with products)',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
 
     # ── Google Ads ───────────────────────────────────────
@@ -749,7 +751,7 @@ def setup_scheduler():
             name='Google Ads Sheet Daily Import',
             replace_existing=True,
             max_instances=1,
-            misfire_grace_time=CRON_GRACE,
+            coalesce=True,
         )
     else:
         scheduler.add_job(
@@ -759,7 +761,8 @@ def setup_scheduler():
             name='Google Ads API Hourly Sync',
             replace_existing=True,
             max_instances=1,
-            misfire_grace_time=INTERVAL_GRACE,
+            coalesce=True,
+            next_run_time=_boot + timedelta(minutes=25),
         )
 
     # ── Cost Sheet (NETT Master) ─────────────────────────
@@ -770,7 +773,7 @@ def setup_scheduler():
         name='Cost Sheet Daily Sync',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
 
     # ── GA4 ──────────────────────────────────────────────
@@ -781,7 +784,7 @@ def setup_scheduler():
         name='GA4 Morning Sync',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
     scheduler.add_job(
         _guarded(sync_ga4),
@@ -790,7 +793,7 @@ def setup_scheduler():
         name='GA4 Afternoon Sync',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
 
     # ── Search Console ───────────────────────────────────
@@ -801,7 +804,7 @@ def setup_scheduler():
         name='Search Console Daily Sync',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
 
     # ── Merchant Center ──────────────────────────────────
@@ -812,7 +815,7 @@ def setup_scheduler():
         name='Merchant Center Daily Sync',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
 
     # ── Klaviyo ──────────────────────────────────────────
@@ -823,7 +826,8 @@ def setup_scheduler():
         name='Klaviyo Hourly Sync',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=INTERVAL_GRACE,
+        coalesce=True,
+        next_run_time=_boot + timedelta(minutes=30),
     )
 
     # ── Hotjar/Clarity ───────────────────────────────────
@@ -834,7 +838,7 @@ def setup_scheduler():
         name='Hotjar/Clarity Daily Sync',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
 
     # ── GitHub ───────────────────────────────────────────
@@ -845,7 +849,7 @@ def setup_scheduler():
         name='GitHub Daily Sync',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
 
     # ── ML Intelligence ──────────────────────────────────
@@ -856,7 +860,7 @@ def setup_scheduler():
         name='ML Intelligence Daily Pipeline',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
 
     # ── Caprice Pricing ──────────────────────────────────
@@ -867,7 +871,7 @@ def setup_scheduler():
         name='Caprice Pricing Daily Import',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
 
     # ── Shippit ────────────────────────────────────────────
@@ -879,7 +883,8 @@ def setup_scheduler():
             name='Shippit Shipping Cost Sync',
             replace_existing=True,
             max_instances=1,
-            misfire_grace_time=INTERVAL_GRACE,
+            coalesce=True,
+            next_run_time=_boot + timedelta(minutes=35),
         )
 
     # ── Competitor Blogs ─────────────────────────────────
@@ -890,7 +895,7 @@ def setup_scheduler():
         name='Competitor Blog Daily Scrape',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
 
     # ── Decision Outcome Scoring ──────────────────────────
@@ -901,7 +906,7 @@ def setup_scheduler():
         name='Score 7-Day Decision Outcomes',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
     scheduler.add_job(
         _guarded(score_decision_outcomes_30d),
@@ -910,12 +915,12 @@ def setup_scheduler():
         name='Score 30-Day Decision Outcomes',
         replace_existing=True,
         max_instances=1,
-        misfire_grace_time=CRON_GRACE,
+        coalesce=True,
     )
 
     # ── Catch-up Guardrail ───────────────────────────────
     # Every 3 hours, detect stale critical sources and trigger catch-up syncs.
-    # First run 15 minutes after startup — give app time to stabilise.
+    # First run 20 minutes after startup — give app time to stabilise.
     scheduler.add_job(
         sync_stale_connectors,
         trigger=IntervalTrigger(hours=3),
@@ -923,7 +928,8 @@ def setup_scheduler():
         name='Stale Connector Recovery',
         replace_existing=True,
         max_instances=1,
-        next_run_time=datetime.now(SYDNEY_TZ) + timedelta(minutes=15),
+        coalesce=True,
+        next_run_time=_boot + timedelta(minutes=20),
     )
 
     log.info("Scheduler configured with all sync jobs (timezone: Australia/Sydney)")

@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Cass Brothers Intelligence</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        :root {
+            --ink: #1c1b1f; --ink-soft: #3d3a40; --slate: #6b6670;
+            --cass-black: #1b1b1b; --cass-cream: #f7f3ed;
+            --cass-gold: #c49a4a; --card: #ffffff;
+            --line: rgba(27,27,27,0.08);
+            --shadow: 0 18px 45px rgba(17,18,19,0.08);
+            --red: #dc2626; --green: #16a34a; --blue: #2563eb;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "IBM Plex Sans", sans-serif;
+            background: var(--cass-cream);
+            color: var(--ink);
+            min-height: 100vh;
+        }
+        .brand-bar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 28px; background: var(--cass-black); color: #f7f1e8;
+        }
+        .brand-mark {
+            display: flex; align-items: center; gap: 12px;
+            font-family: "Space Grotesk", sans-serif;
+        }
+        .brand-bar-right { display: flex; align-items: center; gap: 16px; }
+        .brand-bar-right a {
+            color: #f7f1e8; text-decoration: none; font-size: 13px; opacity: 0.7;
+            transition: opacity 0.15s;
+        }
+        .brand-bar-right a:hover { opacity: 1; }
+
+        .container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+
+        .page-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 28px; flex-wrap: wrap; gap: 16px;
+        }
+        .page-header h1 {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 26px; font-weight: 600;
+        }
+        .page-header p { color: var(--slate); font-size: 14px; margin-top: 4px; }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 20px; border: none; border-radius: 10px;
+            font-size: 14px; font-weight: 600; cursor: pointer;
+            font-family: "Space Grotesk", sans-serif;
+            transition: background 0.15s, opacity 0.15s;
+            display: inline-flex; align-items: center; gap: 6px;
+        }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-primary { background: var(--cass-black); color: #f7f1e8; }
+        .btn-primary:hover:not(:disabled) { background: #333; }
+        .btn-danger { background: var(--red); color: #fff; }
+        .btn-danger:hover:not(:disabled) { background: #b91c1c; }
+        .btn-secondary { background: #e5e5e5; color: var(--ink); }
+        .btn-secondary:hover:not(:disabled) { background: #d4d4d4; }
+        .btn-sm { padding: 6px 14px; font-size: 13px; }
+        .btn-gold { background: var(--cass-gold); color: #fff; }
+        .btn-gold:hover:not(:disabled) { background: #b0883e; }
+
+        /* Cards */
+        .card {
+            background: var(--card); border-radius: 14px;
+            box-shadow: var(--shadow); border: 1px solid var(--line);
+            padding: 24px; margin-bottom: 24px;
+        }
+        .card-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+        }
+        .card-header h2 {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 18px; font-weight: 600;
+        }
+
+        /* Table */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        thead th {
+            text-align: left; padding: 10px 12px;
+            font-size: 12px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.05em; color: var(--slate);
+            border-bottom: 2px solid var(--line);
+            white-space: nowrap;
+        }
+        tbody td {
+            padding: 12px; border-bottom: 1px solid var(--line);
+            vertical-align: middle;
+        }
+        tbody tr:hover { background: #faf9f6; }
+
+        /* Badges */
+        .badge {
+            display: inline-block; padding: 3px 10px; border-radius: 20px;
+            font-size: 12px; font-weight: 600; white-space: nowrap;
+        }
+        .badge-admin { background: #fef3c7; color: #92400e; }
+        .badge-user { background: #e0e7ff; color: #3730a3; }
+        .badge-active { background: #dcfce7; color: #166534; }
+        .badge-inactive { background: #fee2e2; color: #991b1b; }
+        .badge-dash {
+            background: #f3f4f6; color: var(--ink-soft);
+            font-size: 11px; margin: 2px 2px;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.45); z-index: 1000;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.visible { display: flex; }
+        .modal {
+            background: var(--card); border-radius: 16px;
+            padding: 32px; width: 90%; max-width: 520px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.2);
+            max-height: 90vh; overflow-y: auto;
+        }
+        .modal h2 {
+            font-family: "Space Grotesk", sans-serif;
+            font-size: 20px; font-weight: 600; margin-bottom: 20px;
+        }
+        .modal .form-group { margin-bottom: 18px; }
+        .modal .form-group label {
+            display: block; font-size: 13px; font-weight: 500;
+            color: var(--ink-soft); margin-bottom: 6px;
+        }
+        .modal .form-group input,
+        .modal .form-group select {
+            width: 100%; padding: 10px 14px;
+            border: 1px solid var(--line); border-radius: 10px;
+            font-size: 14px; font-family: "IBM Plex Sans", sans-serif;
+            color: var(--ink); background: #faf9f6; outline: none;
+        }
+        .modal .form-group input:focus,
+        .modal .form-group select:focus {
+            border-color: var(--cass-gold);
+            box-shadow: 0 0 0 3px rgba(196, 154, 74, 0.15);
+        }
+        .modal-actions {
+            display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px;
+        }
+
+        /* Dashboard checkboxes */
+        .dash-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+        }
+        .dash-check {
+            display: flex; align-items: center; gap: 8px;
+            font-size: 13px; cursor: pointer;
+        }
+        .dash-check input[type="checkbox"] {
+            width: 16px; height: 16px; accent-color: var(--cass-gold);
+            cursor: pointer;
+        }
+        .dash-toggle-all {
+            font-size: 12px; color: var(--blue); cursor: pointer;
+            text-decoration: underline; margin-bottom: 8px; display: inline-block;
+        }
+
+        /* Toast */
+        .toast {
+            position: fixed; bottom: 24px; right: 24px;
+            padding: 14px 22px; border-radius: 10px;
+            font-size: 14px; font-weight: 500; color: #fff;
+            z-index: 2000; transform: translateY(80px); opacity: 0;
+            transition: transform 0.3s, opacity 0.3s;
+        }
+        .toast.visible { transform: translateY(0); opacity: 1; }
+        .toast-success { background: var(--green); }
+        .toast-error { background: var(--red); }
+
+        /* Info banner */
+        .info-banner {
+            background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 10px;
+            padding: 14px 18px; font-size: 13px; color: #1e40af;
+            margin-bottom: 20px; display: none;
+        }
+        .info-banner.visible { display: block; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container { padding: 20px 16px; }
+            .dash-grid { grid-template-columns: 1fr; }
+            .page-header { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="brand-bar">
+    <div class="brand-mark">
+        <img src="/static/cass_logo.svg" alt="Cass Brothers" style="height:36px;">
+    </div>
+    <div class="brand-bar-right">
+        <a href="/dashboard">Dashboard</a>
+        <a href="/auth/logout" onclick="handleLogout(event)">Sign out</a>
+    </div>
+</div>
+
+<div class="container">
+    <div class="page-header">
+        <div>
+            <h1>User Management</h1>
+            <p>Manage users, roles, and dashboard access</p>
+        </div>
+        <button class="btn btn-primary" onclick="openInviteModal()">+ Invite User</button>
+    </div>
+
+    <div class="info-banner" id="invite-banner"></div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>All Users</h2>
+            <span id="user-count" style="font-size:13px;color:var(--slate)"></span>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Dashboard Access</th>
+                        <th>Last Login</th>
+                        <th style="text-align:right">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="users-tbody">
+                    <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--slate)">Loading users...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Permissions Modal -->
+<div class="modal-overlay" id="edit-modal">
+    <div class="modal">
+        <h2>Edit Permissions</h2>
+        <div id="edit-user-info" style="font-size:13px;color:var(--slate);margin-bottom:16px;"></div>
+        <div class="form-group">
+            <label for="edit-role">Role</label>
+            <select id="edit-role">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Dashboard Access</label>
+            <span class="dash-toggle-all" onclick="toggleAllDashboards('edit')">Toggle all</span>
+            <div class="dash-grid" id="edit-dash-grid"></div>
+        </div>
+        <div id="edit-error" style="color:var(--red);font-size:13px;margin-top:8px;display:none;"></div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('edit-modal')">Cancel</button>
+            <button class="btn btn-primary" id="edit-save-btn" onclick="savePermissions()">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<!-- Invite Modal -->
+<div class="modal-overlay" id="invite-modal">
+    <div class="modal">
+        <h2>Invite New User</h2>
+        <div class="form-group">
+            <label for="invite-email">Email Address</label>
+            <input type="email" id="invite-email" placeholder="user@example.com" required>
+        </div>
+        <div class="form-group">
+            <label for="invite-role">Role</label>
+            <select id="invite-role">
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Dashboard Access</label>
+            <span class="dash-toggle-all" onclick="toggleAllDashboards('invite')">Toggle all</span>
+            <div class="dash-grid" id="invite-dash-grid"></div>
+        </div>
+        <div id="invite-error" style="color:var(--red);font-size:13px;margin-top:8px;display:none;"></div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('invite-modal')">Cancel</button>
+            <button class="btn btn-gold" id="invite-send-btn" onclick="sendInvite()">Send Invite</button>
+        </div>
+    </div>
+</div>
+
+<!-- Deactivate Confirm Modal -->
+<div class="modal-overlay" id="deactivate-modal">
+    <div class="modal">
+        <h2>Deactivate User</h2>
+        <p id="deactivate-msg" style="font-size:14px;color:var(--ink-soft);margin-bottom:20px;"></p>
+        <div id="deactivate-error" style="color:var(--red);font-size:13px;margin-bottom:12px;display:none;"></div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="closeModal('deactivate-modal')">Cancel</button>
+            <button class="btn btn-danger" id="deactivate-btn" onclick="confirmDeactivate()">Deactivate</button>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+let allUsers = [];
+let allDashboards = [];
+let editUserId = null;
+let deactivateUserId = null;
+
+// ─── Init ───
+async function init() {
+    try {
+        const [usersRes, dashRes] = await Promise.all([
+            fetch('/auth/users'),
+            fetch('/auth/dashboards')
+        ]);
+
+        if (usersRes.status === 403) {
+            document.getElementById('users-tbody').innerHTML =
+                '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--red)">Admin access required. You do not have permission to view this page.</td></tr>';
+            return;
+        }
+        if (!usersRes.ok) throw new Error(`Users API returned ${usersRes.status}`);
+        if (!dashRes.ok) throw new Error(`Dashboards API returned ${dashRes.status}`);
+
+        allUsers = await usersRes.json();
+        const dashData = await dashRes.json();
+        allDashboards = dashData.dashboards || [];
+
+        renderUsers();
+        buildDashCheckboxes('edit-dash-grid');
+        buildDashCheckboxes('invite-dash-grid');
+        checkInviteConfig();
+    } catch (err) {
+        console.error('Admin init failed:', err);
+        document.getElementById('users-tbody').innerHTML =
+            `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--red)">Failed to load: ${err.message}</td></tr>`;
+    }
+}
+
+// ─── Render users table ───
+function renderUsers() {
+    const tbody = document.getElementById('users-tbody');
+    document.getElementById('user-count').textContent = `${allUsers.length} user${allUsers.length !== 1 ? 's' : ''}`;
+
+    if (!allUsers.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--slate)">No users found</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = allUsers.map(u => {
+        const roleBadge = u.role === 'admin'
+            ? '<span class="badge badge-admin">Admin</span>'
+            : '<span class="badge badge-user">User</span>';
+        const statusBadge = u.is_active
+            ? '<span class="badge badge-active">Active</span>'
+            : '<span class="badge badge-inactive">Inactive</span>';
+
+        let dashHtml;
+        if (u.role === 'admin') {
+            dashHtml = '<span style="font-size:12px;color:var(--slate)">All (admin)</span>';
+        } else if (u.dashboard_access === null) {
+            dashHtml = '<span style="font-size:12px;color:var(--slate)">All dashboards</span>';
+        } else if (u.dashboard_access.length === 0) {
+            dashHtml = '<span style="font-size:12px;color:var(--red)">None</span>';
+        } else {
+            dashHtml = u.dashboard_access.map(d => {
+                const def = allDashboards.find(x => x.key === d);
+                return `<span class="badge badge-dash">${def ? def.label : d}</span>`;
+            }).join(' ');
+        }
+
+        const lastLogin = u.last_login
+            ? new Date(u.last_login).toLocaleDateString('en-AU', { day:'numeric', month:'short', year:'numeric' })
+            : '<span style="color:var(--slate)">Never</span>';
+
+        const actions = u.is_active
+            ? `<button class="btn btn-sm btn-secondary" onclick="openEditModal(${u.id})">Edit</button>
+               <button class="btn btn-sm btn-danger" onclick="openDeactivateModal(${u.id})" style="margin-left:6px">Deactivate</button>`
+            : `<span style="font-size:12px;color:var(--slate)">Deactivated</span>`;
+
+        return `<tr>
+            <td>
+                <div style="font-weight:500">${esc(u.email)}</div>
+                ${u.display_name ? `<div style="font-size:12px;color:var(--slate)">${esc(u.display_name)}</div>` : ''}
+            </td>
+            <td>${roleBadge}</td>
+            <td>${statusBadge}</td>
+            <td style="max-width:260px">${dashHtml}</td>
+            <td style="white-space:nowrap">${lastLogin}</td>
+            <td style="text-align:right;white-space:nowrap">${actions}</td>
+        </tr>`;
+    }).join('');
+}
+
+// ─── Dashboard checkboxes ───
+function buildDashCheckboxes(containerId) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = allDashboards.map(d =>
+        `<label class="dash-check">
+            <input type="checkbox" value="${d.key}" data-group="${containerId}">
+            ${esc(d.label)}
+        </label>`
+    ).join('');
+}
+
+function toggleAllDashboards(prefix) {
+    const boxes = document.querySelectorAll(`#${prefix}-dash-grid input[type="checkbox"]`);
+    const allChecked = Array.from(boxes).every(b => b.checked);
+    boxes.forEach(b => b.checked = !allChecked);
+}
+
+function getCheckedDashboards(containerId) {
+    return Array.from(document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`))
+        .map(cb => cb.value);
+}
+
+function setCheckedDashboards(containerId, keys) {
+    document.querySelectorAll(`#${containerId} input[type="checkbox"]`).forEach(cb => {
+        cb.checked = keys === null || keys.includes(cb.value);
+    });
+}
+
+// ─── Edit permissions ───
+function openEditModal(userId) {
+    const user = allUsers.find(u => u.id === userId);
+    if (!user) return;
+    editUserId = userId;
+
+    document.getElementById('edit-user-info').textContent = user.email;
+    document.getElementById('edit-role').value = user.role || 'user';
+    setCheckedDashboards('edit-dash-grid', user.dashboard_access);
+    document.getElementById('edit-error').style.display = 'none';
+
+    document.getElementById('edit-modal').classList.add('visible');
+}
+
+async function savePermissions() {
+    const btn = document.getElementById('edit-save-btn');
+    const errEl = document.getElementById('edit-error');
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+
+    const role = document.getElementById('edit-role').value;
+    const dashboards = getCheckedDashboards('edit-dash-grid');
+    const allChecked = dashboards.length === allDashboards.length;
+
+    try {
+        const res = await fetch(`/auth/users/${editUserId}/permissions`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                role: role,
+                dashboard_access: allChecked ? null : dashboards
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to update');
+
+        // Update local data
+        const idx = allUsers.findIndex(u => u.id === editUserId);
+        if (idx !== -1) allUsers[idx] = data.user;
+        renderUsers();
+        closeModal('edit-modal');
+        showToast('Permissions updated', 'success');
+    } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Save Changes';
+}
+
+// ─── Deactivate ───
+function openDeactivateModal(userId) {
+    const user = allUsers.find(u => u.id === userId);
+    if (!user) return;
+    deactivateUserId = userId;
+
+    document.getElementById('deactivate-msg').textContent =
+        `Are you sure you want to deactivate ${user.email}? They will no longer be able to sign in.`;
+    document.getElementById('deactivate-error').style.display = 'none';
+
+    document.getElementById('deactivate-modal').classList.add('visible');
+}
+
+async function confirmDeactivate() {
+    const btn = document.getElementById('deactivate-btn');
+    const errEl = document.getElementById('deactivate-error');
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Deactivating...';
+
+    try {
+        const res = await fetch(`/auth/users/${deactivateUserId}`, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to deactivate');
+
+        // Update local data
+        const idx = allUsers.findIndex(u => u.id === deactivateUserId);
+        if (idx !== -1) allUsers[idx].is_active = false;
+        renderUsers();
+        closeModal('deactivate-modal');
+        showToast('User deactivated', 'success');
+    } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Deactivate';
+}
+
+// ─── Invite ───
+function openInviteModal() {
+    document.getElementById('invite-email').value = '';
+    document.getElementById('invite-role').value = 'user';
+    setCheckedDashboards('invite-dash-grid', null);
+    document.getElementById('invite-error').style.display = 'none';
+    document.getElementById('invite-modal').classList.add('visible');
+    setTimeout(() => document.getElementById('invite-email').focus(), 100);
+}
+
+async function sendInvite() {
+    const btn = document.getElementById('invite-send-btn');
+    const errEl = document.getElementById('invite-error');
+    errEl.style.display = 'none';
+
+    const email = document.getElementById('invite-email').value.trim();
+    if (!email) { errEl.textContent = 'Email is required'; errEl.style.display = 'block'; return; }
+
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    const role = document.getElementById('invite-role').value;
+    const dashboards = getCheckedDashboards('invite-dash-grid');
+    const allChecked = dashboards.length === allDashboards.length;
+
+    try {
+        const res = await fetch('/auth/invite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: email,
+                role: role,
+                dashboard_access: allChecked ? null : dashboards
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to send invite');
+
+        closeModal('invite-modal');
+        showToast(`Invite sent to ${email}`, 'success');
+    } catch (err) {
+        errEl.textContent = err.message;
+        errEl.style.display = 'block';
+    }
+    btn.disabled = false;
+    btn.textContent = 'Send Invite';
+}
+
+// ─── Invite config check ───
+async function checkInviteConfig() {
+    try {
+        const res = await fetch('/auth/invite-config');
+        if (!res.ok) return;
+        const cfg = await res.json();
+        const issues = [];
+        if (!cfg.has_resend_api_key) issues.push('RESEND_API_KEY is not configured');
+        if (!cfg.invite_from_email) issues.push('INVITE_FROM_EMAIL is not set');
+        if (cfg.app_base_url === 'http://localhost:8000') issues.push('APP_BASE_URL is still localhost');
+
+        if (issues.length) {
+            const banner = document.getElementById('invite-banner');
+            banner.innerHTML = '<strong>Invite email setup:</strong> ' + issues.join(' &bull; ');
+            banner.classList.add('visible');
+        }
+    } catch (e) { /* ignore */ }
+}
+
+// ─── Helpers ───
+function closeModal(id) { document.getElementById(id).classList.remove('visible'); }
+
+function showToast(msg, type) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = `toast toast-${type} visible`;
+    setTimeout(() => t.classList.remove('visible'), 3000);
+}
+
+function esc(s) {
+    if (!s) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function handleLogout(e) {
+    e.preventDefault();
+    fetch('/auth/logout', { method: 'POST' }).finally(() => window.location.href = '/auth/login');
+}
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.addEventListener('click', e => {
+        if (e.target === overlay) overlay.classList.remove('visible');
+    });
+});
+
+// Close modals on Escape key
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.modal-overlay.visible').forEach(m => m.classList.remove('visible'));
+    }
+});
+
+init();
+</script>
+</body>
+</html>
