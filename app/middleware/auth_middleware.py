@@ -5,6 +5,12 @@ from starlette.responses import JSONResponse, RedirectResponse
 
 from app.models.base import SessionLocal
 from app.services import auth_service
+from app.services.authorization_service import (
+    PAGE_PATH_TO_DASHBOARD,
+    default_dashboard_for_user,
+    required_dashboard_for_path,
+    user_has_dashboard_access,
+)
 
 # Paths that never require authentication
 PUBLIC_PREFIXES = (
@@ -19,14 +25,8 @@ PUBLIC_PREFIXES = (
     "/sync",                # Sync endpoints — protected by Basic Auth only
 )
 
-# Dashboard (HTML) paths — unauthenticated users get redirected to login
-DASHBOARD_PATHS = {
-    "/", "/dashboard", "/inventory", "/seo-dashboard", "/performance",
-    "/pricing-intel", "/customer-intelligence", "/merchant-center-intel",
-    "/strategic-intelligence", "/finance-dashboard", "/ads-intelligence",
-    "/site-intelligence", "/brand-intelligence", "/brand-portal",
-    "/caprice-upload",
-}
+# Dashboard (HTML) paths - unauthenticated users get redirected to login
+DASHBOARD_PATHS = {"/", *PAGE_PATH_TO_DASHBOARD.keys()}
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -54,6 +54,18 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if user:
             # Attach user to request state for downstream use
             request.state.user = user
+
+            dashboard_key = required_dashboard_for_path(path)
+            if dashboard_key and not user_has_dashboard_access(user, dashboard_key):
+                if path in PAGE_PATH_TO_DASHBOARD:
+                    target = default_dashboard_for_user(user)
+                    if target != path:
+                        return RedirectResponse(url=target, status_code=302)
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "You do not have access to this dashboard"},
+                )
+
             return await call_next(request)
 
         # Not authenticated — decide response type

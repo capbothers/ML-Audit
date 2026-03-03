@@ -8,10 +8,20 @@ from sqlalchemy.orm import Session
 
 from app.models.user import User, UserSession, UserInvite
 from app.config import get_settings
+from app.services.authorization_service import (
+    ROLE_ADMIN,
+    ROLE_USER,
+    normalize_dashboard_access,
+    normalize_role,
+)
 
 logger = logging.getLogger(__name__)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+class InviteEmailError(Exception):
+    """Raised when invite email cannot be sent."""
 
 
 def hash_password(plain: str) -> str:
@@ -72,12 +82,23 @@ def cleanup_expired(db: Session) -> int:
     return count
 
 
-def create_user(db: Session, email: str, password: str, display_name: str | None = None) -> User:
+def create_user(
+    db: Session,
+    email: str,
+    password: str,
+    display_name: str | None = None,
+    role: str = ROLE_USER,
+    dashboard_access: list[str] | None = None,
+) -> User:
     """Create a new user account."""
+    normalized_role = normalize_role(role)
+    normalized_dashboards = normalize_dashboard_access(dashboard_access)
     user = User(
         email=email.lower().strip(),
         password_hash=hash_password(password),
         display_name=display_name,
+        role=normalized_role,
+        dashboard_access=normalized_dashboards,
     )
     db.add(user)
     db.commit()
@@ -86,27 +107,67 @@ def create_user(db: Session, email: str, password: str, display_name: str | None
 
 
 def seed_initial_user(db: Session) -> None:
-    """Create the first admin user from env vars if no users exist."""
+    """Create or repair admin access from env vars."""
     settings = get_settings()
     if not settings.initial_admin_email or not settings.initial_admin_password:
         return
-    # Skip if any users already exist
-    if db.query(User).first():
-        return
-    create_user(db, settings.initial_admin_email, settings.initial_admin_password, "Admin")
     from app.utils.logger import log
-    log.info(f"Seeded initial admin user: {settings.initial_admin_email}")
+
+    # First run: no users yet, create configured admin.
+    if not db.query(User).first():
+        create_user(
+            db,
+            settings.initial_admin_email,
+            settings.initial_admin_password,
+            "Admin",
+            role=ROLE_ADMIN,
+            dashboard_access=None,
+        )
+        log.info(f"Seeded initial admin user: {settings.initial_admin_email}")
+        return
+
+    # Existing deployments: ensure at least one active admin exists.
+    has_admin = (
+        db.query(User)
+        .filter(User.is_active == True, User.role == ROLE_ADMIN)  # noqa: E712
+        .first()
+    )
+    if has_admin:
+        return
+
+    preferred = (
+        db.query(User)
+        .filter(User.email == settings.initial_admin_email.lower().strip(), User.is_active == True)  # noqa: E712
+        .first()
+    )
+    fallback = db.query(User).filter(User.is_active == True).order_by(User.created_at.asc()).first()  # noqa: E712
+    promoted = preferred or fallback
+    if promoted:
+        promoted.role = ROLE_ADMIN
+        promoted.dashboard_access = None
+        db.commit()
+        log.warning(f"Promoted user to admin to restore access controls: {promoted.email}")
 
 
 # ── Invite system ────────────────────────────────────────────
 
-def create_invite(db: Session, email: str, invited_by: int) -> UserInvite:
+def create_invite(
+    db: Session,
+    email: str,
+    invited_by: int,
+    role: str = ROLE_USER,
+    dashboard_access: list[str] | None = None,
+) -> UserInvite:
     """Create a new invite token for the given email (48h expiry)."""
+    normalized_role = normalize_role(role)
+    normalized_dashboards = normalize_dashboard_access(dashboard_access)
     token = secrets.token_urlsafe(32)
     invite = UserInvite(
         email=email.lower().strip(),
         token=token,
         invited_by=invited_by,
+        role=normalized_role,
+        dashboard_access=normalized_dashboards,
         expires_at=datetime.utcnow() + timedelta(hours=48),
     )
     db.add(invite)
@@ -143,6 +204,8 @@ def accept_invite(db: Session, token: str, password: str) -> User:
     user = User(
         email=invite.email,
         password_hash=hash_password(password),
+        role=invite.role or ROLE_USER,
+        dashboard_access=invite.dashboard_access,
     )
     db.add(user)
     invite.accepted_at = datetime.utcnow()
@@ -152,13 +215,16 @@ def accept_invite(db: Session, token: str, password: str) -> User:
 
 
 def send_invite_email(email: str, token: str) -> bool:
-    """Send the invite email via Resend. Returns True on success."""
+    """Send invite email and raise InviteEmailError on failure."""
     settings = get_settings()
     if not settings.resend_api_key:
-        logger.error("RESEND_API_KEY not configured — cannot send invite")
-        return False
+        raise InviteEmailError("RESEND_API_KEY is missing")
 
-    import resend
+    try:
+        import resend
+    except Exception as exc:
+        raise InviteEmailError("Resend client is not available in runtime") from exc
+
     resend.api_key = settings.resend_api_key
 
     invite_url = f"{settings.app_base_url.rstrip('/')}/auth/accept-invite?token={token}"
@@ -188,4 +254,4 @@ def send_invite_email(email: str, token: str) -> bool:
         return True
     except Exception as exc:
         logger.error(f"Failed to send invite email to {email}: {exc}")
-        return False
+        raise InviteEmailError(str(exc)) from exc
