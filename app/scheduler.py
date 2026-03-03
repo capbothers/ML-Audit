@@ -12,6 +12,9 @@ import asyncio
 from typing import Optional
 import time
 
+import gc
+import psutil
+
 from app.config import get_settings
 from app.utils.logger import log
 
@@ -25,12 +28,39 @@ _stale_recovery_lock = asyncio.Lock()
 # Even on Professional (4GB), multiple heavy syncs can stack memory.
 _sync_semaphore = asyncio.Semaphore(1)
 
+# Memory circuit breaker: skip sync if RSS exceeds this fraction of total RAM.
+_MEMORY_CEILING_PCT = 75
+
+
+def _check_memory(label: str) -> bool:
+    """Return True if memory usage is below the ceiling, False to skip."""
+    try:
+        proc = psutil.Process()
+        rss_mb = proc.memory_info().rss / (1024 ** 2)
+        total_mb = psutil.virtual_memory().total / (1024 ** 2)
+        pct = (rss_mb / total_mb) * 100
+        if pct >= _MEMORY_CEILING_PCT:
+            log.warning(
+                f"Memory circuit breaker: skipping {label} "
+                f"({rss_mb:.0f}MB / {total_mb:.0f}MB = {pct:.0f}% >= {_MEMORY_CEILING_PCT}%)"
+            )
+            return False
+        return True
+    except Exception:
+        return True  # fail open — don't block syncs if psutil breaks
+
 
 def _guarded(sync_fn):
-    """Wrap a sync coroutine so it acquires the concurrency semaphore."""
+    """Wrap a sync coroutine with semaphore + memory circuit breaker."""
     async def wrapper():
         async with _sync_semaphore:
-            await sync_fn()
+            if not _check_memory(sync_fn.__name__):
+                gc.collect()
+                return
+            try:
+                await sync_fn()
+            finally:
+                gc.collect()
     wrapper.__name__ = sync_fn.__name__
     wrapper.__qualname__ = sync_fn.__qualname__
     return wrapper
@@ -175,7 +205,11 @@ async def sync_stale_connectors():
             log.warning(f"Stale recovery: triggering {source} sync ({lag_display})")
             try:
                 async with _sync_semaphore:
+                    if not _check_memory(f"stale_recovery:{source}"):
+                        gc.collect()
+                        continue
                     await sync_map[source]()
+                    gc.collect()
             except Exception as e:
                 log.error(f"Stale recovery failed for {source}: {str(e)}")
 
