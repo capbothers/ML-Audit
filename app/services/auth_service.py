@@ -107,14 +107,18 @@ def create_user(
 
 
 def seed_initial_user(db: Session) -> None:
-    """Create or repair admin access from env vars."""
-    settings = get_settings()
-    if not settings.initial_admin_email or not settings.initial_admin_password:
-        return
-    from app.utils.logger import log
+    """Create or repair admin access from env vars.
 
-    # First run: no users yet, create configured admin.
-    if not db.query(User).first():
+    Safety net: if no admin exists at all, promote the oldest active user
+    even if env vars are not configured — prevents total lockout after
+    the role column is added to an existing deployment.
+    """
+    from app.utils.logger import log
+    settings = get_settings()
+    has_env = bool(settings.initial_admin_email and settings.initial_admin_password)
+
+    # First run: no users yet, create configured admin (requires env vars).
+    if has_env and not db.query(User).first():
         create_user(
             db,
             settings.initial_admin_email,
@@ -135,18 +139,21 @@ def seed_initial_user(db: Session) -> None:
     if has_admin:
         return
 
-    preferred = (
-        db.query(User)
-        .filter(User.email == settings.initial_admin_email.lower().strip(), User.is_active == True)  # noqa: E712
-        .first()
-    )
+    # No admin exists — promote someone to prevent lockout.
+    preferred = None
+    if has_env:
+        preferred = (
+            db.query(User)
+            .filter(User.email == settings.initial_admin_email.lower().strip(), User.is_active == True)  # noqa: E712
+            .first()
+        )
     fallback = db.query(User).filter(User.is_active == True).order_by(User.created_at.asc()).first()  # noqa: E712
     promoted = preferred or fallback
     if promoted:
         promoted.role = ROLE_ADMIN
         promoted.dashboard_access = None
         db.commit()
-        log.warning(f"Promoted user to admin to restore access controls: {promoted.email}")
+        log.warning(f"No admin found — promoted {promoted.email} to admin to prevent lockout")
 
 
 # ── Invite system ────────────────────────────────────────────
