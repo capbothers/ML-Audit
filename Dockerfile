@@ -24,12 +24,12 @@ COPY credentials/ ./credentials/
 # Create necessary directories
 RUN mkdir -p logs models data
 
-# Expose port
-EXPOSE 8000
+# Expose port (Render sets PORT env var, default 10000)
+EXPOSE ${PORT:-10000}
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-  CMD curl -f http://localhost:8000/health || exit 1
+# Health check — use PORT env var so it matches what uvicorn listens on
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -f http://localhost:${PORT:-10000}/health || exit 1
 
-# Run application
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run application — must listen on $PORT for Render
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-10000}

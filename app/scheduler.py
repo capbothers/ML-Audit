@@ -21,9 +21,9 @@ settings = get_settings()
 scheduler = AsyncIOScheduler()
 _stale_recovery_lock = asyncio.Lock()
 
-# Limit concurrent sync jobs to 2 — even on Professional (4GB) plan,
-# 17+ jobs firing simultaneously after a deploy will OOM.
-_sync_semaphore = asyncio.Semaphore(2)
+# Limit concurrent sync jobs to 1 — strictly sequential to prevent OOM.
+# Even on Professional (4GB), multiple heavy syncs can stack memory.
+_sync_semaphore = asyncio.Semaphore(1)
 
 
 def _guarded(sync_fn):
@@ -663,7 +663,7 @@ def setup_scheduler():
     Configure and start the scheduler.
 
     All cron times are Australia/Sydney (AEST/AEDT).
-    Render Professional plan (4GB RAM) — max 2 concurrent syncs via semaphore.
+    Render Professional plan (4GB RAM) — strictly sequential syncs via semaphore.
 
     Sync Frequencies:
     - Shopify orders:     Every 2 hours (orders + order_items for COGS/P&L)
@@ -881,7 +881,7 @@ def setup_scheduler():
 
     # ── Catch-up Guardrail ───────────────────────────────
     # Every 3 hours, detect stale critical sources and trigger catch-up syncs.
-    # First run 5 minutes after startup.
+    # First run 15 minutes after startup — give app time to stabilise.
     scheduler.add_job(
         sync_stale_connectors,
         trigger=IntervalTrigger(hours=3),
@@ -889,7 +889,7 @@ def setup_scheduler():
         name='Stale Connector Recovery',
         replace_existing=True,
         max_instances=1,
-        next_run_time=datetime.now(SYDNEY_TZ) + timedelta(minutes=5),
+        next_run_time=datetime.now(SYDNEY_TZ) + timedelta(minutes=15),
     )
 
     log.info("Scheduler configured with all sync jobs (timezone: Australia/Sydney)")
