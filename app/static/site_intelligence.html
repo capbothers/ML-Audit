@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Site Intelligence - Cass Brothers</title>
+    <title>Website Issues - Cass Brothers</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
 
@@ -643,7 +643,7 @@
             <a class="nav-item" href="/dashboard"><span></span> Overview</a>
             <a class="nav-item" href="/performance"><span></span> Performance</a>
             <a class="nav-item" href="/seo-dashboard"><span></span> SEO &amp; Content</a>
-            <a class="nav-item" href="/ads-intelligence"><span></span> Ads Intelligence</a>
+            <a class="nav-item" href="/ads-intelligence"><span></span> Google Ads</a>
             <a class="nav-item" href="/finance-dashboard"><span></span> Finance</a>
             <a class="nav-item" href="/inventory"><span></span> Inventory</a>
             <a class="nav-item" href="/stock-worthiness"><span></span> Stock Worthiness</a>
@@ -651,8 +651,8 @@
             <a class="nav-item" href="/customer-intelligence"><span></span> Customer Intel</a>
             <a class="nav-item" href="/merchant-center-intel"><span></span> Merchant Center</a>
             <a class="nav-item" href="/strategic-intelligence"><span></span> Intelligence Brief</a>
-            <a class="nav-item active" href="/site-intelligence"><span></span> Site Intelligence</a>
-            <a class="nav-item" href="/brand-intelligence"><span></span> Brand Intelligence</a>
+            <a class="nav-item active" href="/site-intelligence"><span></span> Website Issues</a>
+            <a class="nav-item" href="/brand-intelligence"><span></span> Brand Report</a>
             <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
                 <a class="nav-item" href="/admin" id="admin-nav-link" style="opacity:0.6;display:none"><span></span> Admin</a>
                 <a class="nav-item" href="#" onclick="openInviteModal();return false" style="opacity:0.6"><span></span> Invite User</a>
@@ -663,7 +663,7 @@
         <section class="main-area">
             <div class="overview">
                 <div>
-                    <h1>Site Intelligence</h1>
+                    <h1>Website Issues</h1>
                     <p class="time-pill" id="last-refresh">Loading...</p>
                 </div>
                 <div style="display:flex;align-items:center;gap:12px">
@@ -1962,8 +1962,8 @@
             const store = issueStore[currentDetailListId];
             if (!store || currentDetailIdx === null) return;
             const issue = store.issues[currentDetailIdx];
-            const title = '[Site Intelligence] ' + (issue.title || issue.check_name || 'Code issue');
-            const body = '## Auto-detected by Site Intelligence\n\n**Severity:** ' + (issue.severity || 'info') + '\n**Category:** ' + (issue.category || 'unknown') + '\n**File:** `' + (issue.file_path || 'N/A') + (issue.line_number ? ':' + issue.line_number : '') + '`\n\n### Description\n' + (issue.description || 'No description') + '\n\n### Recommendation\n' + (issue.recommendation || 'Review and fix') + '\n\n_Created from Site Intelligence dashboard._';
+            const title = '[Website Issues] ' + (issue.title || issue.check_name || 'Code issue');
+            const body = '## Auto-detected by Website Issues\n\n**Severity:** ' + (issue.severity || 'info') + '\n**Category:** ' + (issue.category || 'unknown') + '\n**File:** `' + (issue.file_path || 'N/A') + (issue.line_number ? ':' + issue.line_number : '') + '`\n\n### Description\n' + (issue.description || 'No description') + '\n\n### Recommendation\n' + (issue.recommendation || 'Review and fix') + '\n\n_Created from Website Issues dashboard._';
             if (!confirm('Create GitHub issue: "' + title + '"?')) return;
             btn.disabled = true; btn.textContent = 'Creating...';
             try {

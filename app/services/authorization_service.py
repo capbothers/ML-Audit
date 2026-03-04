@@ -77,19 +77,19 @@ DASHBOARDS: dict[str, DashboardDefinition] = {
     ),
     "ads": DashboardDefinition(
         key="ads",
-        label="Ads Intelligence",
+        label="Google Ads",
         page_paths=("/ads-intelligence",),
         api_prefixes=("/ads",),
     ),
     "site_intelligence": DashboardDefinition(
         key="site_intelligence",
-        label="Site Intelligence",
+        label="Website Issues",
         page_paths=("/site-intelligence",),
         api_prefixes=("/site-health", "/data-quality", "/redirects", "/code"),
     ),
     "brand_intelligence": DashboardDefinition(
         key="brand_intelligence",
-        label="Brand Intelligence",
+        label="Brand Report",
         page_paths=("/brand-intelligence",),
         api_prefixes=("/brands",),
     ),
