@@ -283,6 +283,11 @@ class ShopifyConnector(BaseConnector):
                 log.info(f"Fetching customers page {page}: got {len(customers)} customers")
 
                 for customer in customers:
+                    # Shopify deprecated accepts_marketing → email_marketing_consent
+                    consent = getattr(customer, 'email_marketing_consent', None) or {}
+                    accepts = getattr(customer, 'accepts_marketing', None)
+                    if accepts is None:
+                        accepts = consent.get('state') == 'subscribed' if isinstance(consent, dict) else False
                     all_customers.append({
                         "id": customer.id,
                         "email": customer.email,
@@ -293,7 +298,7 @@ class ShopifyConnector(BaseConnector):
                         "created_at": customer.created_at,
                         "updated_at": customer.updated_at,
                         "state": customer.state,
-                        "accepts_marketing": customer.accepts_marketing,
+                        "accepts_marketing": accepts,
                     })
 
                 if customers.has_next_page():
@@ -504,6 +509,12 @@ class ShopifyConnector(BaseConnector):
                             'zip': getattr(addr, 'zip', None),
                         }
 
+                    # Shopify deprecated accepts_marketing → email_marketing_consent
+                    consent2 = getattr(customer, 'email_marketing_consent', None) or {}
+                    accepts2 = getattr(customer, 'accepts_marketing', None)
+                    if accepts2 is None:
+                        accepts2 = consent2.get('state') == 'subscribed' if isinstance(consent2, dict) else False
+
                     all_customers.append({
                         'id': customer.id,
                         'email': getattr(customer, 'email', None),
@@ -516,7 +527,7 @@ class ShopifyConnector(BaseConnector):
                         'updated_at': getattr(customer, 'updated_at', None),
                         'state': getattr(customer, 'state', None),
                         'verified_email': getattr(customer, 'verified_email', False),
-                        'accepts_marketing': getattr(customer, 'accepts_marketing', False),
+                        'accepts_marketing': accepts2,
                         'marketing_opt_in_level': getattr(customer, 'marketing_opt_in_level', None),
                         'tags': getattr(customer, 'tags', None),
                         'default_address': default_address,

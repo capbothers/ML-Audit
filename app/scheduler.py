@@ -5,8 +5,8 @@ Uses APScheduler to run connector syncs at optimal intervals.
 """
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.interval import IntervalTrigger
-from datetime import datetime, timedelta
+
+from datetime import datetime
 from zoneinfo import ZoneInfo
 import asyncio
 from typing import Optional
@@ -697,40 +697,38 @@ def setup_scheduler():
     Configure and start the scheduler.
 
     All cron times are Australia/Sydney (AEST/AEDT).
-    Render Professional plan (4GB RAM) — strictly sequential syncs via semaphore.
+    Render Starter plan (512 MB) — ALL syncs run overnight only (8pm-8am AEST)
+    to avoid OOM/502 during business hours.  Strictly sequential via semaphore.
 
-    Sync Frequencies:
-    - Shopify orders:     Every 2 hours (orders + order_items for COGS/P&L)
-    - Shopify full:       Daily 1:00am  (includes products/variants catalog)
-    - Google Ads (Sheet): Daily 6:00am  (campaign + product data from Google Sheets)
-      OR Google Ads API:  Every hour    (when sheet mode is not configured)
-    - Cost Sheet (NETT):  Daily 4:30am  (product costs from Google Sheets)
-    - GA4:                4:00am + 4:00pm (covers data processing delay)
-    - Search Console:     Daily 5:00am  (has 2-3 day delay)
-    - Merchant Center:    Daily 2:00am  (product feed health)
-    - Klaviyo:            Every hour    (campaign performance)
-    - Hotjar/Clarity:     Daily 6:30am  (behavior data)
-    - GitHub:             Daily 7:00am  (theme commits)
-    - ML Intelligence:    Daily 3:00am  (after overnight syncs)
-    - Caprice Pricing:    Daily 1:00pm  (pricing file import)
+    Sync Frequencies (overnight only):
+    - Shopify orders:     9pm, 11pm, 5am, 7am  (4x/night, orders + order_items)
+    - Shopify full:       1:00am               (includes products/variants catalog)
+    - Google Ads (Sheet): 6:00am               (campaign + product data from Sheets)
+      OR Google Ads API:  9:30pm, 12:30am, 3:30am, 6:30am (4x/night)
+    - Cost Sheet (NETT):  4:30am               (product costs from Google Sheets)
+    - GA4:                4:00am + 8:00pm      (covers data processing delay)
+    - Search Console:     5:00am               (has 2-3 day delay)
+    - Merchant Center:    2:00am               (product feed health)
+    - Klaviyo:            8:30pm, 11:30pm, 2:30am, 5:30am (4x/night)
+    - Hotjar/Clarity:     6:30am               (behavior data)
+    - GitHub:             7:00am               (theme commits)
+    - ML Intelligence:    3:00am               (after overnight syncs)
+    - Caprice Pricing:    1:00pm               (pricing file import — lightweight)
+    - Shippit:            10pm, 4am            (2x/night)
+    - Stale recovery:     3:30am, 9pm          (catch-up guardrail)
     """
 
-    # ── Startup cooldown ──────────────────────────────────
-    # Defer all interval jobs so they don't fire immediately on boot.
-    # Cron jobs only fire at their scheduled time (no misfire catch-up).
-    # Stale recovery handles any missed windows instead.
-    _boot = datetime.now(SYDNEY_TZ)
-
     # ── Shopify ──────────────────────────────────────────
+    # Overnight-only to avoid OOM/502 during business hours (512 MB Starter plan).
+    # 4 runs overnight (~2h apart): 9pm, 11pm, 5am, 7am AEST
     scheduler.add_job(
         _guarded(sync_shopify),
-        trigger=IntervalTrigger(hours=2),
+        trigger=CronTrigger(hour='21,23,5,7', minute=0, timezone=SYDNEY_TZ),
         id='shopify_sync',
         name='Shopify Orders & Items Sync',
         replace_existing=True,
         max_instances=1,
         coalesce=True,
-        next_run_time=_boot + timedelta(minutes=20),
     )
     scheduler.add_job(
         _guarded(sync_shopify_full),
@@ -754,15 +752,15 @@ def setup_scheduler():
             coalesce=True,
         )
     else:
+        # Overnight-only: 9:30pm, 12:30am, 3:30am, 6:30am AEST
         scheduler.add_job(
             _guarded(sync_google_ads),
-            trigger=IntervalTrigger(hours=1),
+            trigger=CronTrigger(hour='21,0,3,6', minute=30, timezone=SYDNEY_TZ),
             id='google_ads_api_sync',
-            name='Google Ads API Hourly Sync',
+            name='Google Ads API Overnight Sync',
             replace_existing=True,
             max_instances=1,
             coalesce=True,
-            next_run_time=_boot + timedelta(minutes=25),
         )
 
     # ── Cost Sheet (NETT Master) ─────────────────────────
@@ -788,9 +786,9 @@ def setup_scheduler():
     )
     scheduler.add_job(
         _guarded(sync_ga4),
-        trigger=CronTrigger(hour=16, minute=0, timezone=SYDNEY_TZ),
-        id='ga4_sync_afternoon',
-        name='GA4 Afternoon Sync',
+        trigger=CronTrigger(hour=20, minute=0, timezone=SYDNEY_TZ),
+        id='ga4_sync_evening',
+        name='GA4 Evening Sync',
         replace_existing=True,
         max_instances=1,
         coalesce=True,
@@ -819,15 +817,15 @@ def setup_scheduler():
     )
 
     # ── Klaviyo ──────────────────────────────────────────
+    # Overnight-only: 8:30pm, 11:30pm, 2:30am, 5:30am AEST
     scheduler.add_job(
         _guarded(sync_klaviyo),
-        trigger=IntervalTrigger(hours=1),
+        trigger=CronTrigger(hour='20,23,2,5', minute=30, timezone=SYDNEY_TZ),
         id='klaviyo_sync',
-        name='Klaviyo Hourly Sync',
+        name='Klaviyo Overnight Sync',
         replace_existing=True,
         max_instances=1,
         coalesce=True,
-        next_run_time=_boot + timedelta(minutes=30),
     )
 
     # ── Hotjar/Clarity ───────────────────────────────────
@@ -876,15 +874,15 @@ def setup_scheduler():
 
     # ── Shippit ────────────────────────────────────────────
     if settings.shippit_api_key:
+        # Overnight-only: 10pm, 4am AEST
         scheduler.add_job(
             _guarded(sync_shippit),
-            trigger=IntervalTrigger(hours=6),
+            trigger=CronTrigger(hour='22,4', minute=0, timezone=SYDNEY_TZ),
             id='shippit_sync',
-            name='Shippit Shipping Cost Sync',
+            name='Shippit Overnight Sync',
             replace_existing=True,
             max_instances=1,
             coalesce=True,
-            next_run_time=_boot + timedelta(minutes=35),
         )
 
     # ── Competitor Blogs ─────────────────────────────────
@@ -919,27 +917,25 @@ def setup_scheduler():
     )
 
     # ── Catch-up Guardrail ───────────────────────────────
-    # Every 3 hours, detect stale critical sources and trigger catch-up syncs.
-    # First run 20 minutes after startup — give app time to stabilise.
+    # Overnight-only: 3:30am (catches overnight failures) + 9pm (before nightly cycle)
     scheduler.add_job(
         sync_stale_connectors,
-        trigger=IntervalTrigger(hours=3),
+        trigger=CronTrigger(hour='3,21', minute=30, timezone=SYDNEY_TZ),
         id='stale_recovery_sync',
         name='Stale Connector Recovery',
         replace_existing=True,
         max_instances=1,
         coalesce=True,
-        next_run_time=_boot + timedelta(minutes=20),
     )
 
-    log.info("Scheduler configured with all sync jobs (timezone: Australia/Sydney)")
+    log.info("Scheduler configured — all syncs overnight only 8pm-8am AEST (timezone: Australia/Sydney)")
 
 
 def start_scheduler():
     """Start the scheduler"""
     setup_scheduler()
     scheduler.start()
-    log.info("Scheduler started — stale recovery will run in 20 minutes")
+    log.info("Scheduler started — all syncs overnight only (8pm-8am AEST), no post-boot syncs")
 
 
 def stop_scheduler():
