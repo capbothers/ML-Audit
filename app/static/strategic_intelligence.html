@@ -373,31 +373,39 @@ body {
     padding: 40px 50px; text-align: center;
     box-shadow: var(--shadow-lg);
 }
-.finger-press-loader {
-    position: relative; width: 60px; height: 80px; margin: 0 auto 16px;
+.shopify-hand-loader {
+    position: relative; width: 100px; height: 100px; margin: 0 auto 16px;
 }
-.button-base {
-    position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
-    width: 40px; height: 20px; background: #008060; border-radius: 8px;
-    box-shadow: 0 4px 0 #005e46; animation: button-sink 1s infinite ease-in-out;
+.green-button {
+    position: absolute; bottom: 10px; left: 30px;
+    width: 40px; height: 12px; background: #008060; border-radius: 6px;
+    box-shadow: 0 4px 0 #005e46; animation: btn-depress 1.2s infinite ease-in-out;
 }
-.finger-press-loader .finger {
-    position: absolute; top: 0; left: 50%; width: 16px; height: 40px;
-    background: #ffdbac; border-radius: 10px 10px 4px 4px;
-    transform: translateX(-50%); animation: finger-push 1s infinite ease-in-out;
+.hand-container {
+    position: absolute; top: 0; right: 0;
+    transform: rotate(-25deg); animation: hand-push 1.2s infinite ease-in-out;
 }
-.finger-press-loader .finger::after {
-    content: ''; position: absolute; top: 4px; left: 3px;
-    width: 10px; height: 10px; background: rgba(255,255,255,0.4);
-    border-radius: 50% 50% 2px 2px;
+.index-finger {
+    position: relative; width: 18px; height: 45px;
+    background: #f3c99d; border-radius: 10px 10px 4px 4px; z-index: 2;
 }
-@keyframes finger-push {
-    0%, 100% { transform: translate(-50%, 0); }
-    50% { transform: translate(-50%, 25px); }
+.fingernail {
+    position: absolute; bottom: 4px; left: 4px;
+    width: 10px; height: 8px; background: rgba(255,255,255,0.5);
+    border-radius: 2px 2px 6px 6px;
 }
-@keyframes button-sink {
-    0%, 100% { transform: translateX(-50%) scale(1); box-shadow: 0 4px 0 #005e46; }
-    50% { transform: translateX(-50%) scale(0.95); box-shadow: 0 1px 0 #005e46; }
+.hand-palm {
+    position: absolute; top: -10px; right: -15px;
+    width: 40px; height: 35px; background: #f3c99d;
+    border-radius: 12px; transform: rotate(15deg); z-index: 1;
+}
+@keyframes hand-push {
+    0%, 100% { transform: translate(0, 0) rotate(-25deg); }
+    50% { transform: translate(-15px, 35px) rotate(-15deg); }
+}
+@keyframes btn-depress {
+    0%, 45%, 100% { transform: scale(1); box-shadow: 0 4px 0 #005e46; }
+    50% { transform: scale(0.9); box-shadow: 0 1px 0 #005e46; }
 }
 .loading-text {
     font-family: "Space Grotesk"; font-size: 15px; font-weight: 600;
@@ -721,7 +729,7 @@ body {
 <!-- Loading Overlay -->
 <div class="loading-overlay" id="loadingOverlay">
     <div class="loading-box">
-        <div class="finger-press-loader"><div class="finger"></div><div class="button-base"></div></div>
+        <div class="shopify-hand-loader"><div class="hand-container"><div class="index-finger"><div class="fingernail"></div></div><div class="hand-palm"></div></div><div class="green-button"></div></div>
         <div class="loading-text" id="loadingText">Generating Intelligence Brief...</div>
         <div class="loading-sub">Collecting data from 16 modules + running AI analysis</div>
     </div>

@@ -339,32 +339,40 @@
         /* Loading */
         .loading { text-align: center; padding: 40px; color: var(--slate); }
 
-        .finger-press-loader {
-            position: relative; width: 48px; height: 64px;
+        .shopify-hand-loader {
+            position: relative; width: 70px; height: 70px;
             display: inline-block; vertical-align: middle;
         }
-        .button-base {
-            position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
-            width: 32px; height: 16px; background: #008060; border-radius: 6px;
-            box-shadow: 0 3px 0 #005e46; animation: button-sink 1s infinite ease-in-out;
+        .green-button {
+            position: absolute; bottom: 7px; left: 21px;
+            width: 28px; height: 9px; background: #008060; border-radius: 5px;
+            box-shadow: 0 3px 0 #005e46; animation: btn-depress 1.2s infinite ease-in-out;
         }
-        .finger-press-loader .finger {
-            position: absolute; top: 0; left: 50%; width: 13px; height: 32px;
-            background: #ffdbac; border-radius: 8px 8px 3px 3px;
-            transform: translateX(-50%); animation: finger-push 1s infinite ease-in-out;
+        .hand-container {
+            position: absolute; top: 0; right: 0;
+            transform: rotate(-25deg); animation: hand-push 1.2s infinite ease-in-out;
         }
-        .finger-press-loader .finger::after {
-            content: ''; position: absolute; top: 3px; left: 2px;
-            width: 9px; height: 8px; background: rgba(255,255,255,0.4);
-            border-radius: 50% 50% 2px 2px;
+        .index-finger {
+            position: relative; width: 13px; height: 32px;
+            background: #f3c99d; border-radius: 7px 7px 3px 3px; z-index: 2;
         }
-        @keyframes finger-push {
-            0%, 100% { transform: translate(-50%, 0); }
-            50% { transform: translate(-50%, 20px); }
+        .fingernail {
+            position: absolute; bottom: 3px; left: 3px;
+            width: 7px; height: 6px; background: rgba(255,255,255,0.5);
+            border-radius: 2px 2px 4px 4px;
         }
-        @keyframes button-sink {
-            0%, 100% { transform: translateX(-50%) scale(1); box-shadow: 0 3px 0 #005e46; }
-            50% { transform: translateX(-50%) scale(0.95); box-shadow: 0 1px 0 #005e46; }
+        .hand-palm {
+            position: absolute; top: -7px; right: -11px;
+            width: 28px; height: 25px; background: #f3c99d;
+            border-radius: 9px; transform: rotate(15deg); z-index: 1;
+        }
+        @keyframes hand-push {
+            0%, 100% { transform: translate(0, 0) rotate(-25deg); }
+            50% { transform: translate(-11px, 25px) rotate(-15deg); }
+        }
+        @keyframes btn-depress {
+            0%, 45%, 100% { transform: scale(1); box-shadow: 0 3px 0 #005e46; }
+            50% { transform: scale(0.9); box-shadow: 0 1px 0 #005e46; }
         }
 
         /* Refresh button */
@@ -827,7 +835,7 @@
                     </div>
                     <div class="section-body" id="dq-body">
                         <div class="issue-list" id="dq-list">
-                            <div class="loading"><div class="finger-press-loader"><div class="finger"></div><div class="button-base"></div></div><br>Loading data quality...</div>
+                            <div class="loading"><div class="shopify-hand-loader"><div class="hand-container"><div class="index-finger"><div class="fingernail"></div></div><div class="hand-palm"></div></div><div class="green-button"></div></div><br>Loading data quality...</div>
                         </div>
                     </div>
                 </div>
@@ -840,7 +848,7 @@
                     </div>
                     <div class="section-body" id="sp-body">
                         <div class="issue-list" id="sp-list">
-                            <div class="loading"><div class="finger-press-loader"><div class="finger"></div><div class="button-base"></div></div><br>Loading site performance...</div>
+                            <div class="loading"><div class="shopify-hand-loader"><div class="hand-container"><div class="index-finger"><div class="fingernail"></div></div><div class="hand-palm"></div></div><div class="green-button"></div></div><br>Loading site performance...</div>
                         </div>
                     </div>
                 </div>
@@ -853,7 +861,7 @@
                     </div>
                     <div class="section-body" id="ch-body">
                         <div class="issue-list" id="ch-list">
-                            <div class="loading"><div class="finger-press-loader"><div class="finger"></div><div class="button-base"></div></div><br>Loading code health...</div>
+                            <div class="loading"><div class="shopify-hand-loader"><div class="hand-container"><div class="index-finger"><div class="fingernail"></div></div><div class="hand-palm"></div></div><div class="green-button"></div></div><br>Loading code health...</div>
                         </div>
                     </div>
                 </div>
@@ -866,7 +874,7 @@
                     </div>
                     <div class="section-body" id="rh-body">
                         <div class="issue-list" id="rh-list">
-                            <div class="loading"><div class="finger-press-loader"><div class="finger"></div><div class="button-base"></div></div><br>Loading redirect health...</div>
+                            <div class="loading"><div class="shopify-hand-loader"><div class="hand-container"><div class="index-finger"><div class="fingernail"></div></div><div class="hand-palm"></div></div><div class="green-button"></div></div><br>Loading redirect health...</div>
                         </div>
                     </div>
                 </div>
