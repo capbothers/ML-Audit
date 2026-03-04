@@ -339,40 +339,28 @@
         /* Loading */
         .loading { text-align: center; padding: 40px; color: var(--slate); }
 
-        .shopify-hand-loader {
-            position: relative; width: 70px; height: 70px;
-            display: inline-block; vertical-align: middle;
+        .unreal-loader-container {
+            display: inline-flex; flex-direction: column; align-items: center;
+            vertical-align: middle;
         }
-        .green-button {
-            position: absolute; bottom: 7px; left: 21px;
-            width: 28px; height: 9px; background: #008060; border-radius: 5px;
-            box-shadow: 0 3px 0 #005e46; animation: btn-depress 1.2s infinite ease-in-out;
+        .unreal-button {
+            position: relative; width: 56px; height: 24px; background: #145a32;
+            border-radius: 8px; display: flex; justify-content: center; align-items: flex-start;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.5), 0 1px 1px rgba(255,255,255,0.1);
         }
-        .hand-container {
-            position: absolute; top: 0; right: 0;
-            transform: rotate(-25deg); animation: hand-push 1.2s infinite ease-in-out;
+        .button-surface {
+            width: 100%; height: 100%; background: linear-gradient(145deg, #2ecc71, #27ae60);
+            border-radius: 7px; position: relative; top: -4px; display: flex; justify-content: center;
+            box-shadow: 0 6px 0 #145a32, 0 8px 14px rgba(46,204,113,0.4), inset 0 1px 1px rgba(255,255,255,0.3);
+            animation: hyper-press 1.5s infinite cubic-bezier(0.45, 0.05, 0.55, 0.95);
         }
-        .index-finger {
-            position: relative; width: 13px; height: 32px;
-            background: #f3c99d; border-radius: 7px 7px 3px 3px; z-index: 2;
+        .inner-glow {
+            width: 80%; height: 40%; background: linear-gradient(to bottom, rgba(255,255,255,0.3), transparent);
+            border-radius: 5px; margin-top: 2px;
         }
-        .fingernail {
-            position: absolute; bottom: 3px; left: 3px;
-            width: 7px; height: 6px; background: rgba(255,255,255,0.5);
-            border-radius: 2px 2px 4px 4px;
-        }
-        .hand-palm {
-            position: absolute; top: -7px; right: -11px;
-            width: 28px; height: 25px; background: #f3c99d;
-            border-radius: 9px; transform: rotate(15deg); z-index: 1;
-        }
-        @keyframes hand-push {
-            0%, 100% { transform: translate(0, 0) rotate(-25deg); }
-            50% { transform: translate(-11px, 25px) rotate(-15deg); }
-        }
-        @keyframes btn-depress {
-            0%, 45%, 100% { transform: scale(1); box-shadow: 0 3px 0 #005e46; }
-            50% { transform: scale(0.9); box-shadow: 0 1px 0 #005e46; }
+        @keyframes hyper-press {
+            0%, 100% { transform: translateY(0); box-shadow: 0 6px 0 #145a32, 0 8px 14px rgba(46,204,113,0.4), inset 0 1px 1px rgba(255,255,255,0.3); }
+            50% { transform: translateY(4px); box-shadow: 0 2px 0 #145a32, 0 4px 8px rgba(46,204,113,0.4), inset 0 1px 1px rgba(255,255,255,0.3); }
         }
 
         /* Refresh button */
@@ -835,7 +823,7 @@
                     </div>
                     <div class="section-body" id="dq-body">
                         <div class="issue-list" id="dq-list">
-                            <div class="loading"><div class="shopify-hand-loader"><div class="hand-container"><div class="index-finger"><div class="fingernail"></div></div><div class="hand-palm"></div></div><div class="green-button"></div></div><br>Loading data quality...</div>
+                            <div class="loading"><div class="unreal-loader-container"><div class="unreal-button"><div class="button-surface"><div class="inner-glow"></div></div></div></div><br>Loading data quality...</div>
                         </div>
                     </div>
                 </div>
@@ -848,7 +836,7 @@
                     </div>
                     <div class="section-body" id="sp-body">
                         <div class="issue-list" id="sp-list">
-                            <div class="loading"><div class="shopify-hand-loader"><div class="hand-container"><div class="index-finger"><div class="fingernail"></div></div><div class="hand-palm"></div></div><div class="green-button"></div></div><br>Loading site performance...</div>
+                            <div class="loading"><div class="unreal-loader-container"><div class="unreal-button"><div class="button-surface"><div class="inner-glow"></div></div></div></div><br>Loading site performance...</div>
                         </div>
                     </div>
                 </div>
@@ -861,7 +849,7 @@
                     </div>
                     <div class="section-body" id="ch-body">
                         <div class="issue-list" id="ch-list">
-                            <div class="loading"><div class="shopify-hand-loader"><div class="hand-container"><div class="index-finger"><div class="fingernail"></div></div><div class="hand-palm"></div></div><div class="green-button"></div></div><br>Loading code health...</div>
+                            <div class="loading"><div class="unreal-loader-container"><div class="unreal-button"><div class="button-surface"><div class="inner-glow"></div></div></div></div><br>Loading code health...</div>
                         </div>
                     </div>
                 </div>
@@ -874,7 +862,7 @@
                     </div>
                     <div class="section-body" id="rh-body">
                         <div class="issue-list" id="rh-list">
-                            <div class="loading"><div class="shopify-hand-loader"><div class="hand-container"><div class="index-finger"><div class="fingernail"></div></div><div class="hand-palm"></div></div><div class="green-button"></div></div><br>Loading redirect health...</div>
+                            <div class="loading"><div class="unreal-loader-container"><div class="unreal-button"><div class="button-surface"><div class="inner-glow"></div></div></div></div><br>Loading redirect health...</div>
                         </div>
                     </div>
                 </div>

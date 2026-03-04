@@ -373,45 +373,38 @@ body {
     padding: 40px 50px; text-align: center;
     box-shadow: var(--shadow-lg);
 }
-.shopify-hand-loader {
-    position: relative; width: 100px; height: 100px; margin: 0 auto 16px;
+.unreal-loader-container {
+    display: flex; flex-direction: column; align-items: center; padding: 0;
 }
-.green-button {
-    position: absolute; bottom: 10px; left: 30px;
-    width: 40px; height: 12px; background: #008060; border-radius: 6px;
-    box-shadow: 0 4px 0 #005e46; animation: btn-depress 1.2s infinite ease-in-out;
+.unreal-button {
+    position: relative; width: 80px; height: 35px; background: #145a32;
+    border-radius: 12px; display: flex; justify-content: center; align-items: flex-start;
+    box-shadow: inset 0 2px 5px rgba(0,0,0,0.5), 0 1px 1px rgba(255,255,255,0.1);
 }
-.hand-container {
-    position: absolute; top: 0; right: 0;
-    transform: rotate(-25deg); animation: hand-push 1.2s infinite ease-in-out;
+.button-surface {
+    width: 100%; height: 100%; background: linear-gradient(145deg, #2ecc71, #27ae60);
+    border-radius: 10px; position: relative; top: -6px; display: flex; justify-content: center;
+    box-shadow: 0 8px 0 #145a32, 0 12px 20px rgba(46,204,113,0.4), inset 0 1px 1px rgba(255,255,255,0.3);
+    animation: hyper-press 1.5s infinite cubic-bezier(0.45, 0.05, 0.55, 0.95);
 }
-.index-finger {
-    position: relative; width: 18px; height: 45px;
-    background: #f3c99d; border-radius: 10px 10px 4px 4px; z-index: 2;
-}
-.fingernail {
-    position: absolute; bottom: 4px; left: 4px;
-    width: 10px; height: 8px; background: rgba(255,255,255,0.5);
-    border-radius: 2px 2px 6px 6px;
-}
-.hand-palm {
-    position: absolute; top: -10px; right: -15px;
-    width: 40px; height: 35px; background: #f3c99d;
-    border-radius: 12px; transform: rotate(15deg); z-index: 1;
-}
-@keyframes hand-push {
-    0%, 100% { transform: translate(0, 0) rotate(-25deg); }
-    50% { transform: translate(-15px, 35px) rotate(-15deg); }
-}
-@keyframes btn-depress {
-    0%, 45%, 100% { transform: scale(1); box-shadow: 0 4px 0 #005e46; }
-    50% { transform: scale(0.9); box-shadow: 0 1px 0 #005e46; }
+.inner-glow {
+    width: 80%; height: 40%; background: linear-gradient(to bottom, rgba(255,255,255,0.3), transparent);
+    border-radius: 8px; margin-top: 2px;
 }
 .loading-text {
-    font-family: "Space Grotesk"; font-size: 15px; font-weight: 600;
-    color: var(--ink);
+    margin-top: 20px; font-family: "Space Grotesk", -apple-system, sans-serif;
+    font-weight: 600; color: #2ecc71; letter-spacing: 0.5px;
+    text-transform: uppercase; font-size: 12px; animation: pulse-text 1.5s infinite;
 }
-.loading-sub { font-size: 12px; color: var(--slate); margin-top: 6px; }
+.loading-sub { font-size: 11px; color: var(--slate); margin-top: 6px; }
+@keyframes hyper-press {
+    0%, 100% { transform: translateY(0); box-shadow: 0 8px 0 #145a32, 0 12px 20px rgba(46,204,113,0.4), inset 0 1px 1px rgba(255,255,255,0.3); }
+    50% { transform: translateY(6px); box-shadow: 0 2px 0 #145a32, 0 5px 10px rgba(46,204,113,0.4), inset 0 1px 1px rgba(255,255,255,0.3); }
+}
+@keyframes pulse-text {
+    0%, 100% { opacity: 0.6; transform: scale(0.98); }
+    50% { opacity: 1; transform: scale(1); }
+}
 
 /* ── Data Quality Bar ── */
 .dq-bar {
@@ -729,9 +722,11 @@ body {
 <!-- Loading Overlay -->
 <div class="loading-overlay" id="loadingOverlay">
     <div class="loading-box">
-        <div class="shopify-hand-loader"><div class="hand-container"><div class="index-finger"><div class="fingernail"></div></div><div class="hand-palm"></div></div><div class="green-button"></div></div>
-        <div class="loading-text" id="loadingText">Generating Intelligence Brief...</div>
-        <div class="loading-sub">Collecting data from 16 modules + running AI analysis</div>
+        <div class="unreal-loader-container">
+            <div class="unreal-button"><div class="button-surface"><div class="inner-glow"></div></div></div>
+            <div class="loading-text" id="loadingText">Generating Intelligence Brief...</div>
+            <div class="loading-sub">Collecting data from 16 modules + running AI analysis</div>
+        </div>
     </div>
 </div>
 
