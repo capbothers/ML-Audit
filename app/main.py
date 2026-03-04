@@ -5,7 +5,7 @@ Main FastAPI application
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from contextlib import asynccontextmanager
 import os
 
@@ -256,7 +256,13 @@ async def admin_page():
 
 @app.get("/")
 async def root():
-    """Root endpoint with API information"""
+    """Redirect to dashboard"""
+    return RedirectResponse(url="/dashboard")
+
+
+@app.get("/api-info")
+async def api_info():
+    """API information endpoint"""
     return {
         "app": settings.app_name,
         "version": __version__,
