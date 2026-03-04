@@ -410,7 +410,7 @@
             <a class="nav-item" href="/site-intelligence"><span></span> Site Intelligence</a>
             <a class="nav-item" href="/brand-intelligence"><span></span> Brand Intelligence</a>
             <div style="border-top:1px solid rgba(27,27,27,0.08);margin-top:16px;padding-top:12px">
-                <a class="nav-item" href="/admin" style="opacity:0.6"><span></span> Admin</a>
+                <a class="nav-item" href="/admin" id="admin-nav-link" style="opacity:0.6;display:none"><span></span> Admin</a>
                 <a class="nav-item" href="#" onclick="openInviteModal();return false" style="opacity:0.6"><span></span> Invite User</a>
                 <a class="nav-item" href="#" onclick="fetch('/auth/logout',{method:'POST'}).then(()=>location.href='/auth/login');return false" style="opacity:0.6"><span></span> Logout</a>
             </div>
@@ -2436,5 +2436,6 @@ async function sendInvite(){
 }
 document.getElementById('invite-modal').addEventListener('click',function(e){if(e.target===this)closeInviteModal()});
 </script>
+<script>fetch("/auth/me").then(r=>r.ok?r.json():null).then(u=>{if(u&&u.role==="admin"){var el=document.getElementById("admin-nav-link");if(el)el.style.display=""}}).catch(()=>{})</script>
 </body>
 </html>
