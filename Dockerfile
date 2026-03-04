@@ -19,7 +19,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY app/ ./app/
-COPY credentials/ ./credentials/
+
+# Create credentials dir (actual files are bootstrapped from env vars at runtime)
+RUN mkdir -p credentials
 
 # Create necessary directories
 RUN mkdir -p logs models data
