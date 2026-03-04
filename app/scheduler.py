@@ -939,7 +939,7 @@ def start_scheduler():
     """Start the scheduler"""
     setup_scheduler()
     scheduler.start()
-    log.info("Scheduler started — stale recovery will run in 15 minutes")
+    log.info("Scheduler started — stale recovery will run in 20 minutes")
 
 
 def stop_scheduler():
