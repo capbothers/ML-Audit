@@ -923,6 +923,7 @@
                 <button class="tab-btn active" data-tab="overview">Overview</button>
                 <button class="tab-btn" data-tab="brand-report">Brand Report</button>
                 <button class="tab-btn" data-tab="sku-lookup">SKU Lookup</button>
+                <button class="tab-btn" data-tab="upload">Upload Data</button>
             </div>
 
             <!-- ===== TAB: Overview ===== -->
@@ -1255,6 +1256,66 @@
                     </div>
                     <div id="skuDetail">
                         <div class="empty-state">Search for a SKU above to view full pricing intelligence.</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== TAB: Upload Data ===== -->
+            <div class="tab-content" id="tab-upload">
+                <div class="card full-width" style="max-width:700px;margin:0 auto;">
+                    <div class="card-header">
+                        <h3>Upload Caprice Pricing Files</h3>
+                        <div class="card-badge">.xlsx · bulk import</div>
+                    </div>
+                    <p style="font-size:13px;color:var(--slate);margin-bottom:20px;">Drop your Caprice pricing log files here and they'll be imported into the database immediately.</p>
+
+                    <!-- Drop zone -->
+                    <div id="upDropZone" style="border:2px dashed var(--line);border-radius:14px;padding:40px 24px;text-align:center;background:var(--cass-cream);cursor:pointer;transition:all 0.2s;" onclick="document.getElementById('upFileInput').click()">
+                        <div style="font-size:36px;opacity:0.4;margin-bottom:10px;">&#128196;</div>
+                        <div style="font-size:15px;color:var(--ink-soft);margin-bottom:4px;">Drop .xlsx files here or click to browse</div>
+                        <div style="font-size:12px;color:var(--slate);">Accepts capricelog-DDMMYYYY.xlsx files</div>
+                    </div>
+                    <input type="file" id="upFileInput" multiple accept=".xlsx" style="display:none" onchange="upAddFiles(this.files)">
+
+                    <!-- File list -->
+                    <div id="upFileList" style="margin-top:14px;"></div>
+
+                    <!-- Buttons -->
+                    <div style="display:flex;gap:10px;margin-top:18px;">
+                        <button class="btn-primary" id="upUploadBtn" disabled onclick="upUploadAll()" style="padding:10px 24px;border-radius:12px;border:none;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;background:var(--cass-moss);color:#f7f1e8;opacity:0.4;">Upload &amp; Import</button>
+                        <button id="upClearBtn" onclick="upClearFiles()" style="display:none;padding:10px 24px;border-radius:12px;border:none;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;background:var(--line);color:var(--ink-soft);">Clear</button>
+                    </div>
+
+                    <!-- Progress -->
+                    <div id="upProgressWrap" style="margin-top:18px;display:none;">
+                        <div style="width:100%;height:8px;background:var(--line);border-radius:4px;overflow:hidden;">
+                            <div id="upProgressBar" style="height:100%;background:var(--cass-teal);border-radius:4px;transition:width 0.3s;width:0%;"></div>
+                        </div>
+                        <div id="upProgressText" style="font-size:12px;color:var(--slate);margin-top:6px;">Uploading...</div>
+                    </div>
+
+                    <!-- Results -->
+                    <div id="upResults" style="margin-top:20px;"></div>
+
+                    <!-- Recent imports log -->
+                    <div style="margin-top:32px;">
+                        <h3 style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600;margin-bottom:12px;">Recent Imports</h3>
+                        <div class="table-scroll">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>File</th>
+                                        <th>Pricing Date</th>
+                                        <th>Status</th>
+                                        <th class="num">Rows</th>
+                                        <th>Imported At</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="upLogTable">
+                                    <tr><td colspan="5" style="text-align:center;color:var(--slate);padding:20px;">Loading...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2087,6 +2148,153 @@
     </div>
 </div>
 <script>
+/* ============================================================
+   Upload Tab
+   ============================================================ */
+(function() {
+    let upFiles = [];
+
+    const dropZone = document.getElementById('upDropZone');
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = 'var(--cass-gold)'; dropZone.style.background = 'var(--amber-bg)'; });
+    dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = 'var(--line)'; dropZone.style.background = 'var(--cass-cream)'; });
+    dropZone.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZone.style.borderColor = 'var(--line)';
+        dropZone.style.background = 'var(--cass-cream)';
+        upAddFiles(e.dataTransfer.files);
+    });
+
+    window.upAddFiles = function(fileList) {
+        for (const f of fileList) {
+            if (!f.name.endsWith('.xlsx')) continue;
+            if (upFiles.some(s => s.name === f.name)) continue;
+            upFiles.push(f);
+        }
+        upRender();
+    };
+
+    window.upClearFiles = function() {
+        upFiles = [];
+        upRender();
+        document.getElementById('upResults').innerHTML = '';
+    };
+
+    function upRender() {
+        const el = document.getElementById('upFileList');
+        const btn = document.getElementById('upUploadBtn');
+        const clr = document.getElementById('upClearBtn');
+        if (!upFiles.length) {
+            el.innerHTML = '';
+            btn.disabled = true;
+            btn.style.opacity = '0.4';
+            btn.style.cursor = 'default';
+            clr.style.display = 'none';
+            dropZone.style.borderColor = 'var(--line)';
+            dropZone.style.borderStyle = 'dashed';
+            return;
+        }
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+        clr.style.display = 'inline-block';
+        dropZone.style.borderColor = 'var(--cass-teal)';
+        dropZone.style.borderStyle = 'solid';
+        el.innerHTML = upFiles.map((f, i) => `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--stone,#f5f2ec);border-radius:10px;margin-bottom:6px;font-size:13px;">
+                <div><span style="font-weight:600;">${f.name}</span> <span style="color:var(--slate);font-size:12px;">(${(f.size/1024/1024).toFixed(1)} MB)</span></div>
+                <button onclick="upRemove(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0 4px;">&times;</button>
+            </div>`).join('');
+    }
+
+    window.upRemove = function(idx) { upFiles.splice(idx, 1); upRender(); };
+
+    window.upUploadAll = async function() {
+        const btn = document.getElementById('upUploadBtn');
+        const prog = document.getElementById('upProgressWrap');
+        const bar = document.getElementById('upProgressBar');
+        const txt = document.getElementById('upProgressText');
+        const res = document.getElementById('upResults');
+
+        btn.disabled = true;
+        prog.style.display = 'block';
+        res.innerHTML = '';
+
+        const total = upFiles.length;
+        let done = 0;
+
+        for (const file of upFiles) {
+            txt.textContent = `Uploading ${file.name} (${done + 1}/${total})...`;
+            bar.style.width = ((done / total) * 100) + '%';
+
+            const fd = new FormData();
+            fd.append('file', file);
+
+            try {
+                const r = await fetch('/sync/caprice/upload', { method: 'POST', body: fd });
+                const d = await r.json();
+                if (r.ok && d.success) {
+                    const rows = d.rows_imported || 0;
+                    const msg = rows > 0 ? `${rows.toLocaleString()} rows imported for ${d.pricing_date || ''}` : (d.message || 'Import complete');
+                    res.innerHTML += `<div style="background:#fff;border-radius:12px;padding:14px 18px;border:1px solid var(--line);border-left:4px solid var(--green);margin-bottom:8px;box-shadow:var(--shadow);">
+                        <div style="font-weight:600;font-size:14px;">${file.name}</div>
+                        <div style="font-size:13px;color:var(--slate);margin-top:4px;">${msg}</div>
+                    </div>`;
+                } else {
+                    res.innerHTML += `<div style="background:#fff;border-radius:12px;padding:14px 18px;border:1px solid var(--line);border-left:4px solid var(--red);margin-bottom:8px;box-shadow:var(--shadow);">
+                        <div style="font-weight:600;font-size:14px;">${file.name}</div>
+                        <div style="font-size:12px;color:var(--red);margin-top:4px;">${d.detail || 'Unknown error'}</div>
+                    </div>`;
+                }
+            } catch (err) {
+                res.innerHTML += `<div style="background:#fff;border-radius:12px;padding:14px 18px;border:1px solid var(--line);border-left:4px solid var(--red);margin-bottom:8px;box-shadow:var(--shadow);">
+                    <div style="font-weight:600;font-size:14px;">${file.name}</div>
+                    <div style="font-size:12px;color:var(--red);margin-top:4px;">${err.message}</div>
+                </div>`;
+            }
+
+            done++;
+            bar.style.width = ((done / total) * 100) + '%';
+        }
+
+        txt.textContent = `All ${done} file${done !== 1 ? 's' : ''} processed.`;
+        upFiles = [];
+        upRender();
+        upLoadLog();
+    };
+
+    async function upLoadLog() {
+        try {
+            const r = await fetch('/sync/caprice/log?limit=20');
+            const d = await r.json();
+            const tbody = document.getElementById('upLogTable');
+            if (!d.logs || !d.logs.length) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--slate);padding:20px;">No imports yet</td></tr>';
+                return;
+            }
+            tbody.innerHTML = d.logs.map(e => {
+                const cls = e.status === 'success' ? 'badge-success' : e.status === 'failed' ? 'badge-failed' : 'badge-skipped';
+                const bgMap = { 'badge-success': 'var(--green-bg)', 'badge-failed': 'var(--red-bg)', 'badge-skipped': 'var(--amber-bg)' };
+                const clrMap = { 'badge-success': 'var(--green)', 'badge-failed': 'var(--red)', 'badge-skipped': 'var(--amber)' };
+                const dt = e.imported_at ? new Date(e.imported_at).toLocaleString() : '';
+                return `<tr>
+                    <td>${e.filename}</td>
+                    <td>${e.pricing_date || '-'}</td>
+                    <td><span style="padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${bgMap[cls]};color:${clrMap[cls]};">${e.status}</span></td>
+                    <td class="num">${(e.rows_imported || 0).toLocaleString()}</td>
+                    <td>${dt}</td>
+                </tr>`;
+            }).join('');
+        } catch (err) { console.error('Failed to load upload log:', err); }
+    }
+
+    // Load log when tab is first activated
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        if (btn.dataset.tab === 'upload') {
+            btn.addEventListener('click', upLoadLog);
+        }
+    });
+})();
+
 function openInviteModal(){
     var m=document.getElementById('invite-modal');m.style.display='flex';
     document.getElementById('invite-email').value='';
