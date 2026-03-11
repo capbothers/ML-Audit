@@ -1447,29 +1447,37 @@ def import_google_ads_from_sheet(
             tab_name="Product Data",
         )
 
-        if not campaign_result.get("success"):
-            raise HTTPException(status_code=500, detail=campaign_result.get("error", "Unknown error"))
+        from app.services.data_sync_service import SyncResult, update_data_sync_status
+        started_at = datetime.utcnow()
 
-        # Update DataSyncStatus so freshness checks see google_ads as current
+        if not campaign_result.get("success"):
+            err = campaign_result.get("error", "Unknown error")
+            try:
+                update_data_sync_status(SyncResult(
+                    source="google_ads", sync_type="sheet", status="failed",
+                    error_message=err, started_at=started_at, completed_at=datetime.utcnow(),
+                ))
+            except Exception:
+                pass
+            raise HTTPException(status_code=500, detail=err)
+
+        # Update DataSyncStatus via the shared path so all fields are populated correctly
         try:
-            from app.models.data_quality import DataSyncStatus
-            from app.models.base import SessionLocal
-            _db = SessionLocal()
-            status_row = _db.query(DataSyncStatus).filter(
-                DataSyncStatus.source_name == 'google_ads'
-            ).first()
-            if status_row:
-                status_row.last_successful_sync = datetime.utcnow()
-                status_row.records_synced = campaign_result.get('rows_imported', 0)
-            else:
-                status_row = DataSyncStatus(
-                    source_name='google_ads',
-                    last_successful_sync=datetime.utcnow(),
-                    records_synced=campaign_result.get('rows_imported', 0),
-                )
-                _db.add(status_row)
-            _db.commit()
-            _db.close()
+            update_data_sync_status(SyncResult(
+                source="google_ads",
+                sync_type="sheet",
+                status="success",
+                records_created=(
+                    campaign_result.get("rows_created", 0) +
+                    product_result.get("rows_created", 0)
+                ),
+                records_updated=(
+                    campaign_result.get("rows_updated", 0) +
+                    product_result.get("rows_updated", 0)
+                ),
+                started_at=started_at,
+                completed_at=datetime.utcnow(),
+            ))
         except Exception as status_err:
             log.warning(f"Failed to update google_ads sync status: {status_err}")
 

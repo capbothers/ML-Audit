@@ -54,8 +54,8 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     restart: unless-stopped
 
-  # Celery Worker (for background tasks)
-  celery_worker:
+  # APScheduler worker (owns all background sync jobs — mirrors Render worker dyno)
+  worker:
     build: .
     environment:
       DATABASE_URL: postgresql://ml_audit_user:${DB_PASSWORD:-changeme}@db:5432/ml_audit
@@ -67,25 +67,11 @@ services:
       - ./models:/app/models
       - ./logs:/app/logs
     depends_on:
-      - db
-      - redis
-    command: celery -A app.celery worker --loglevel=info
-    restart: unless-stopped
-
-  # Celery Beat (scheduler)
-  celery_beat:
-    build: .
-    environment:
-      DATABASE_URL: postgresql://ml_audit_user:${DB_PASSWORD:-changeme}@db:5432/ml_audit
-      REDIS_URL: redis://redis:6379/0
-    env_file:
-      - .env
-    volumes:
-      - ./credentials:/app/credentials:ro
-    depends_on:
-      - db
-      - redis
-    command: celery -A app.celery beat --loglevel=info
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python worker.py
     restart: unless-stopped
 
 volumes:

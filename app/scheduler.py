@@ -160,13 +160,9 @@ async def sync_stale_connectors():
         log.info("Stale connector recovery already running, skipping overlapping run")
         return
 
-    thresholds_hours = {
-        "shopify": 6,
-        "ga4": 24,
-        "search_console": 24,
-        "merchant_center": 24,
-        "google_ads": 24,
-    }
+    from app.freshness import STALE_THRESHOLDS
+    thresholds_hours = {k: STALE_THRESHOLDS[k] for k in
+                        ("shopify", "ga4", "search_console", "merchant_center", "google_ads")}
 
     google_ads_sync_fn = sync_google_ads_sheet if settings.google_ads_sheet_id else sync_google_ads
     sync_map = {
