@@ -1930,8 +1930,9 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
         for name in module_meta.get('succeeded', []):
             deps = _MODULE_DATA_DEPS.get(name, [])
             for dep in deps:
-                info = freshness.get(dep, {})
-                if info.get('is_stale', True) and dep in freshness:
+                fkey = _dep_to_freshness_key(dep)
+                info = freshness.get(fkey, {})
+                if info.get('is_stale', True) and fkey in freshness:
                     stale.append({
                         'module': name, 'source': dep,
                         'lag_hours': info.get('lag_hours'),
