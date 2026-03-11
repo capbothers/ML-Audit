@@ -1,7 +1,8 @@
 """
 Data synchronization endpoints
 """
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Security, UploadFile, File
+from fastapi.security.api_key import APIKeyHeader
 from typing import Optional, List
 from datetime import datetime, timedelta
 from app.models.base import SessionLocal
@@ -11,8 +12,27 @@ from app.models.google_ads_import import GoogleAdsImportLog
 from app.utils.logger import log
 from app.utils.cache import clear_cache, clear_for_source
 from app.utils.response_cache import response_cache
+import secrets
 
-router = APIRouter(prefix="/sync", tags=["sync"])
+_sync_key_header = APIKeyHeader(name="X-Sync-Key", auto_error=False)
+
+
+def verify_sync_key(key: Optional[str] = Security(_sync_key_header)) -> None:
+    """Require X-Sync-Key header to match SYNC_API_KEY env var.
+
+    If SYNC_API_KEY is not configured the endpoint is open (dev default).
+    Set it in Render env vars to enforce auth in production.
+    """
+    from app.config import get_settings
+    expected = get_settings().sync_api_key
+    if not expected:
+        log.warning("SYNC_API_KEY not set — /sync endpoints are open to unauthenticated callers")
+        return
+    if not key or not secrets.compare_digest(key, expected):
+        raise HTTPException(status_code=401, detail="Invalid or missing X-Sync-Key")
+
+
+router = APIRouter(prefix="/sync", tags=["sync"], dependencies=[Depends(verify_sync_key)])
 
 # In-memory sync status for background tasks
 _sync_status = {}

@@ -132,6 +132,14 @@ class Settings(BaseSettings):
     app_base_url: str = ""  # Set via APP_BASE_URL or auto-detected from RENDER_EXTERNAL_URL
     render_external_url: Optional[str] = None  # Auto-set by Render
 
+    # Sync API key — required to call /sync/* endpoints from scripts / worker.
+    # Set SYNC_API_KEY in Render env vars.  If unset, /sync is open (dev default).
+    sync_api_key: Optional[str] = None
+
+    # CORS allowed origins — comma-separated.  Defaults to the Render external URL
+    # when running on Render, plus localhost for dev.  Override with ALLOWED_ORIGINS.
+    allowed_origins: str = ""
+
     @property
     def effective_base_url(self) -> str:
         """Return the best available base URL for email links etc."""
@@ -140,6 +148,18 @@ class Settings(BaseSettings):
         if self.render_external_url:
             return self.render_external_url
         return "http://localhost:8000"
+
+    @property
+    def effective_allowed_origins(self) -> list[str]:
+        """CORS allowed origins — explicit list, never wildcard."""
+        if self.allowed_origins:
+            return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        origins = ["http://localhost:8000", "http://localhost:3000"]
+        if self.render_external_url:
+            origins.append(self.render_external_url)
+        if self.app_base_url:
+            origins.append(self.app_base_url)
+        return list(dict.fromkeys(origins))  # deduplicate, preserve order
 
     # Dashboard Basic Auth (gate for the whole app)
     dash_user: str = ""
