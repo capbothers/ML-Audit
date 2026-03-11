@@ -17,11 +17,19 @@ import psutil
 
 from app.config import get_settings
 from app.utils.logger import log
+from app.services.data_sync_service import SyncResult, update_data_sync_status
 
 SYDNEY_TZ = ZoneInfo("Australia/Sydney")
+DEFAULT_MISFIRE_GRACE_SECONDS = 8 * 60 * 60
 
 settings = get_settings()
-scheduler = AsyncIOScheduler()
+scheduler = AsyncIOScheduler(
+    job_defaults={
+        "coalesce": True,
+        "max_instances": 1,
+        "misfire_grace_time": DEFAULT_MISFIRE_GRACE_SECONDS,
+    }
+)
 _stale_recovery_lock = asyncio.Lock()
 
 # Limit concurrent sync jobs to 1 — strictly sequential to prevent OOM.
@@ -601,6 +609,7 @@ async def sync_google_ads_sheet():
     from app.services.google_ads_sheet_import import GoogleAdsSheetImportService
     from app.utils.cache import clear_for_source
     from app.utils.response_cache import response_cache
+    start = time.time()
     try:
         log.info("Starting Google Ads Sheet import...")
         settings = get_settings()
@@ -621,10 +630,54 @@ async def sync_google_ads_sheet():
             tab_name="Product Data",
         )
 
+        success = campaign_result.get("success", False) and product_result.get("success", False)
+
+        if not success:
+            errors = "; ".join(filter(None, [
+                campaign_result.get("error") if not campaign_result.get("success", False) else None,
+                product_result.get("error") if not product_result.get("success", False) else None,
+            ]))
+            log.error(f"Google Ads Sheet import failed: {errors}")
+            try:
+                update_data_sync_status(SyncResult(
+                    source="google_ads",
+                    sync_type="sheet",
+                    status="failed",
+                    error_message=errors,
+                    started_at=datetime.utcfromtimestamp(start),
+                    completed_at=datetime.utcnow(),
+                    duration_seconds=time.time() - start,
+                ))
+            except Exception:
+                pass
+            return
+
+        try:
+            update_data_sync_status(SyncResult(
+                source="google_ads",
+                sync_type="sheet",
+                status="success",
+                records_created=(
+                    campaign_result.get("rows_created", 0) +
+                    product_result.get("rows_created", 0)
+                ),
+                records_updated=(
+                    campaign_result.get("rows_updated", 0) +
+                    product_result.get("rows_updated", 0)
+                ),
+                started_at=datetime.utcfromtimestamp(start),
+                completed_at=datetime.utcnow(),
+                duration_seconds=time.time() - start,
+            ))
+        except Exception:
+            pass
+
         log.info(
             f"Google Ads Sheet import completed: "
-            f"campaigns={campaign_result.get('rows_imported', 0)}, "
-            f"products={product_result.get('rows_imported', 0)}"
+            f"campaigns={campaign_result.get('rows_created', 0)} created, "
+            f"{campaign_result.get('rows_updated', 0)} updated; "
+            f"products={product_result.get('rows_created', 0)} created, "
+            f"{product_result.get('rows_updated', 0)} updated"
         )
         clear_for_source("google_ads")
         response_cache.invalidate("ads:")
@@ -632,6 +685,18 @@ async def sync_google_ads_sheet():
 
     except Exception as e:
         log.error(f"Google Ads Sheet import error: {str(e)}")
+        try:
+            update_data_sync_status(SyncResult(
+                source="google_ads",
+                sync_type="sheet",
+                status="failed",
+                error_message=str(e),
+                started_at=datetime.utcfromtimestamp(start),
+                completed_at=datetime.utcnow(),
+                duration_seconds=time.time() - start,
+            ))
+        except Exception:
+            pass
 
 
 async def sync_cost_sheet():
@@ -933,6 +998,9 @@ def setup_scheduler():
 
 def start_scheduler():
     """Start the scheduler"""
+    if scheduler.running:
+        log.info("Scheduler already running, skipping start")
+        return
     setup_scheduler()
     scheduler.start()
     log.info("Scheduler started — all syncs overnight only (8pm-8am AEST), no post-boot syncs")
@@ -940,6 +1008,8 @@ def start_scheduler():
 
 def stop_scheduler():
     """Stop the scheduler"""
+    if not scheduler.running:
+        return
     scheduler.shutdown()
     log.info("Scheduler stopped")
 
