@@ -1285,19 +1285,38 @@ def sync_health():
         },
     }
 
-    # Check scheduler state
+    # Scheduler health — read from persisted DB state, not the in-process singleton.
+    # The scheduler runs in a separate worker process; scheduler.running is always
+    # False in the web dyno and cannot be used to assess worker health.
     try:
-        from app.scheduler import scheduler
-        sched_info = {
-            "running": scheduler.running,
-            "jobs": [
-                {
-                    "id": job.id,
-                    "name": job.name,
-                    "next_run": job.next_run_time.isoformat() if job.next_run_time else None,
+        from app.models.data_quality import DataSyncStatus
+        from app.models.base import SessionLocal
+        from app.freshness import get_threshold, is_stale
+        from datetime import timezone
+
+        db = SessionLocal()
+        try:
+            rows = db.query(DataSyncStatus).all()
+            now = datetime.utcnow().replace(tzinfo=timezone.utc)
+            source_freshness = {}
+            for r in rows:
+                last = r.last_successful_sync
+                if last and last.tzinfo is None:
+                    last = last.replace(tzinfo=timezone.utc)
+                lag_h = round((now - last).total_seconds() / 3600, 1) if last else None
+                source_freshness[r.source_name] = {
+                    "last_successful_sync": last.isoformat() if last else None,
+                    "sync_status": r.sync_status,
+                    "lag_hours": lag_h,
+                    "threshold_hours": get_threshold(r.source_name),
+                    "is_stale": is_stale(r.source_name, last),
                 }
-                for job in scheduler.get_jobs()
-            ],
+        finally:
+            db.close()
+
+        sched_info = {
+            "note": "Scheduler runs in dedicated worker process — check worker logs for job status.",
+            "sources": source_freshness,
         }
     except Exception as e:
         sched_info = {"error": str(e)}

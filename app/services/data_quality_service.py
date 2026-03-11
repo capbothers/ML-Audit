@@ -18,6 +18,7 @@ from app.models.data_quality import (
     DataQualityScore, TrackingAlert
 )
 from app.utils.logger import log
+from app.freshness import get_threshold as _freshness_threshold
 
 
 class DataQualityService:
@@ -29,8 +30,6 @@ class DataQualityService:
         # Thresholds (configurable)
         self.discrepancy_warning_threshold = 0.10  # 10%
         self.discrepancy_critical_threshold = 0.20  # 20%
-        self.sync_freshness_warning_hours = 24
-        self.sync_freshness_critical_hours = 48
         self.utm_coverage_minimum = 0.80  # 80%
 
     async def run_full_data_quality_check(self) -> Dict:
@@ -155,26 +154,28 @@ class DataQualityService:
                 'health_score': source.health_score
             }
 
-            # Check freshness
+            # Check freshness using per-source thresholds
             if source.last_successful_sync:
                 hours_since_sync = (now - source.last_successful_sync).total_seconds() / 3600
                 source_data['hours_since_sync'] = round(hours_since_sync, 1)
+                warn_h = _freshness_threshold(source.source_name)
+                crit_h = warn_h * 2
 
-                if hours_since_sync > self.sync_freshness_critical_hours:
+                if hours_since_sync > crit_h:
                     issues.append({
                         'source': source.source_name,
                         'severity': 'critical',
                         'issue': f'No sync in {hours_since_sync:.0f} hours (critical)',
-                        'expected': f'< {self.sync_freshness_critical_hours}h'
+                        'expected': f'< {crit_h}h'
                     })
                     source_data['freshness_status'] = 'critical'
 
-                elif hours_since_sync > self.sync_freshness_warning_hours:
+                elif hours_since_sync > warn_h:
                     issues.append({
                         'source': source.source_name,
                         'severity': 'warning',
                         'issue': f'No sync in {hours_since_sync:.0f} hours',
-                        'expected': f'< {self.sync_freshness_warning_hours}h'
+                        'expected': f'< {warn_h}h'
                     })
                     source_data['freshness_status'] = 'warning'
 

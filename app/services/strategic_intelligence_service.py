@@ -41,13 +41,8 @@ from app.services.llm_service import LLMService
 logger = logging.getLogger(__name__)
 
 # ── Decision-layer constants ─────────────────────────────────
-# Staleness thresholds (hours) per data source
-_STALE_THRESHOLDS = {
-    'shopify': 6, 'ga4': 72, 'search_console': 96,
-    'google_ads': 48, 'merchant_center': 48,
-    'competitive_pricing': 168, 'product_costs': 720,
-    'google_sheets_costs': 720,
-}
+from app.freshness import STALE_THRESHOLDS as _STALE_THRESHOLDS, normalize_key as _normalize_key
+
 # Module → underlying data sources
 _MODULE_DATA_DEPS = {
     'customer': ['shopify'], 'pricing': ['competitive_pricing', 'product_costs'],
@@ -58,11 +53,9 @@ _MODULE_DATA_DEPS = {
     'journey': ['ga4'], 'attribution': ['ga4', 'google_ads'],
     'email': ['shopify'], 'data_quality': [], 'code_health': [],
 }
-# Dep name → DataSyncStatus.source_name (when they differ)
-_DEP_TO_FRESHNESS_KEY = {
-    'product_costs': 'google_sheets_costs',
-    'competitive_pricing': 'google_sheets_costs',
-}
+# Dep name → canonical DataSyncStatus.source_name (via app.freshness)
+def _dep_to_freshness_key(dep: str) -> str:
+    return _normalize_key(dep)
 # Normalize LLM-generated module names to _MODULE_DATA_DEPS keys
 _MODULE_ALIASES = {
     'customer_analytics': 'customer', 'retention': 'customer',
@@ -1913,7 +1906,7 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
                 name = s.source_name
                 last = s.last_successful_sync
                 lag = (now - last).total_seconds() / 3600 if last else None
-                threshold = _STALE_THRESHOLDS.get(name, 48)
+                threshold = _STALE_THRESHOLDS.get(name, 24)
                 freshness[name] = {
                     'last_sync': last.isoformat() if last else None,
                     'lag_hours': round(lag, 1) if lag is not None else None,
@@ -2110,17 +2103,17 @@ RULES: Every recommendation must have specific product names, dollar amounts, an
                     data_as_of = {}
                     for mod in source_mods:
                         for dep in _MODULE_DATA_DEPS.get(mod, []):
-                            fkey = _DEP_TO_FRESHNESS_KEY.get(dep, dep)
+                            fkey = _dep_to_freshness_key(dep)
                             info = freshness.get(fkey, {})
                             if info.get('last_sync'):
                                 data_as_of[dep] = info['last_sync']
 
                     # Confidence from data staleness (Req 2)
                     stale_count = sum(1 for dep in data_as_of
-                                      if freshness.get(_DEP_TO_FRESHNESS_KEY.get(dep, dep), {}).get('is_stale', True))
+                                      if freshness.get(_dep_to_freshness_key(dep), {}).get('is_stale', True))
                     missing_count = sum(1 for mod in source_mods
                                         for dep in _MODULE_DATA_DEPS.get(mod, [])
-                                        if _DEP_TO_FRESHNESS_KEY.get(dep, dep) not in freshness)
+                                        if _dep_to_freshness_key(dep) not in freshness)
                     if missing_count > 0:
                         conf = 0.4
                     elif stale_count > 0:
